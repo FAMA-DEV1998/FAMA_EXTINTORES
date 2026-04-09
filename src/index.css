@@ -5,7 +5,7 @@
   html, body, #root {
     height: 100%;
   }
-  /* Solo bloquear scroll en la app de workers (mobile) */
+  
   body:has(> #root > .app-workers) {
     overflow: hidden;
   }

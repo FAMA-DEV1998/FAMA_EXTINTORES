@@ -2,7 +2,7 @@ import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
-import App from "./App.tsx";
+import App from "./WorkerPage.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import LoginPage from "./LoginPage.tsx";
 
