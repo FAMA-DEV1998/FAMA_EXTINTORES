@@ -6,4 +6,6 @@ export { default as ExtintorModal } from "./ExtintorModal";
 export { default as ObservationModal } from "./ObservationModal";
 export { default as UsersModal } from "./UsersModal";
 export { default as WhatsappModal } from "./WhatsappModal";
+export { default as WeightSortModal } from "./WeightSortModal";
+
 

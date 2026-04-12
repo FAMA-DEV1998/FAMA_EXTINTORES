@@ -5,9 +5,22 @@ import { emptyExtintor, estadoColor, serviceBadge, downloadBase64 } from "./util
 import { useSocket } from "./hooks/useSocket";
 import {
   EmpresaModal, ExtintorModal, ArchivedModal, UsersModal,
-  WhatsappModal, ArchiveModal, DuplicateModal, ObservationModal
+  WhatsappModal, ArchiveModal, DuplicateModal, ObservationModal, WeightSortModal
 } from "./components/modals";
 import { InfoSection, InfoRow, FilterSelect, MetricPanel, ComponentDots } from "./components/ui/DashboardUI";
+
+/* ══════════════════════════════════════════
+   FUNCIONES AUXILIARES
+   ══════════════════════════════════════════ */
+const getWeightInKg = (weightStr: string) => {
+  if (!weightStr || weightStr === "Sin definir") return 999999; // Los vacíos van al final
+  const match = weightStr.match(/([\d.]+)\s*(KG|LBS?)/i);
+  if (!match) return 999999;
+  const val = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  // 1 Libra = 0.453592 Kilogramos
+  return unit.startsWith("LB") ? val * 0.453592 : val;
+};
 
 /* ══════════════════════════════════════════
    COMPONENTE PRINCIPAL
@@ -49,6 +62,18 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const [fEstado, setFEstado] = useState("");
   const [fServicio, setFServicio] = useState("");
   const [fComponente, setFComponente] = useState("");
+  const [fPeso, setFPeso] = useState("");
+  const [weightOrderModal, setWeightOrderModal] = useState(false);
+  const [customWeightOrder, setCustomWeightOrder] = useState<string[]>([]);
+
+  // NUEVOS ESTADOS:
+  const [estadoOrderModal, setEstadoOrderModal] = useState(false);
+  const [customEstadoOrder, setCustomEstadoOrder] = useState<string[]>([]);
+
+  const [agenteOrderModal, setAgenteOrderModal] = useState(false);
+  const [customAgenteOrder, setCustomAgenteOrder] = useState<string[]>([]);
+
+
 
   const [deleteModal, setDeleteModal] = useState(false);
   const [_, setDeleteConfirmText] = useState("");
@@ -142,6 +167,30 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     setExtintores([]);
   };
 
+// Lógica para detectar duplicados de Serie e Interno
+  const serieCounts: Record<string, number> = {};
+  const internoCounts: Record<string, number> = {};
+
+  extintores.forEach((e) => {
+    const sOrig = e.nSerie?.trim() || "";
+    const iOrig = e.nInterno?.trim() || "";
+    const sUpper = sOrig.toUpperCase();
+    const iUpper = iOrig.toUpperCase();
+
+    // Excluimos S/N y vacíos
+    if (sOrig && sUpper !== "S/N" && sUpper !== "—") {
+      serieCounts[sOrig] = (serieCounts[sOrig] || 0) + 1;
+    }
+    // Excluimos S/TAG, S/N y vacíos
+    if (iOrig && iUpper !== "S/TAG" && iUpper !== "S/N" && iUpper !== "—") {
+      internoCounts[iOrig] = (internoCounts[iOrig] || 0) + 1;
+    }
+  });
+
+  // Creamos Sets para una búsqueda ultra rápida al renderizar la tabla
+  const duplicateSeries = new Set(Object.keys(serieCounts).filter(k => serieCounts[k] > 1));
+  const duplicateInternos = new Set(Object.keys(internoCounts).filter(k => internoCounts[k] > 1));
+
   const openArchivedView = () => {
     if (!socket || (user.role !== "boss" && user.role !== "admin")) return;
     setLoadingArchived(true);
@@ -229,7 +278,12 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const exportExcel = () => {
     if (!socket || !selectedEmpresa?.id) return;
     setExporting(true);
-    socket.emit("export:excel", { id: selectedEmpresa.id }, (res: any) => {
+    socket.emit("export:excel", {
+      id: selectedEmpresa.id,
+      weightOrder: customWeightOrder,
+      estadoOrder: customEstadoOrder,
+      agenteOrder: customAgenteOrder
+    }, (res: any) => {
       setExporting(false);
       if (res?.success && res.data) {
         downloadBase64(res.data, res.fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -237,23 +291,18 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     });
   };
 
-  const openWhatsappModal = () => {
-    if (!selectedEmpresa) return;
-    setWhatsappMsg(
-      `Hola ${selectedEmpresa.nombresApellidos || ""},\n` +
-      `Le envío el detalle de servicio de extintores de *${selectedEmpresa.razonSocial}*.\n` +
-      `Adjunto el archivo con el inventario completo.`
-    );
-    setWhatsappFormat("excel");
-    setWhatsappModal(true);
-  };
-
   const executeWhatsapp = () => {
     if (!socket || !selectedEmpresa?.id) return;
     setExporting(true);
 
     if (whatsappFormat === "excel") {
-      socket.emit("export:excel", { id: selectedEmpresa.id }, (res: any) => {
+      // AÑADIDO: Pasamos weightOrder
+      socket.emit("export:excel", {
+        id: selectedEmpresa.id,
+        weightOrder: customWeightOrder,
+        estadoOrder: customEstadoOrder,
+        agenteOrder: customAgenteOrder
+      }, (res: any) => {
         setExporting(false);
         if (res?.success && res.data) {
           downloadBase64(res.data, res.fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -261,7 +310,13 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
         }
       });
     } else {
-      socket.emit("export:pdf", { id: selectedEmpresa.id }, (res: any) => {
+      // AÑADIDO: Pasamos weightOrder
+      socket.emit("export:pdf", {
+        id: selectedEmpresa.id,
+        weightOrder: customWeightOrder,
+        estadoOrder: customEstadoOrder,
+        agenteOrder: customAgenteOrder
+      }, (res: any) => {
         setExporting(false);
         if (!res?.success) {
           alert(res?.error || "Error al generar PDF");
@@ -275,6 +330,18 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       });
     }
   };
+
+  const openWhatsappModal = () => {
+    if (!selectedEmpresa) return;
+    setWhatsappMsg(
+      `Hola ${selectedEmpresa.nombresApellidos || ""},\n` +
+      `Le envío el detalle de servicio de extintores de *${selectedEmpresa.razonSocial}*.\n` +
+      `Adjunto el archivo con el inventario completo.`
+    );
+    setWhatsappFormat("excel");
+    setWhatsappModal(true);
+  };
+
 
   const openWhatsappLink = () => {
     if (!selectedEmpresa?.celular) return;
@@ -342,10 +409,12 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const saveExtintor = () => {
     if (!socket || !selectedEmpresa?.id) return;
     setSaving(true);
+
     const payload = {
       ...extintorForm,
       id: selectedEmpresa.id,
-      nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim()
+      nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim(),
+      nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim()
     };
 
     if (editingRowIndex !== null) {
@@ -468,17 +537,71 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const agenteCounts = count(extintores, "agenteExtintor");
 
   const pesoCounts: Record<string, number> = {};
+  const pesoAgentBreakdown: Record<string, Record<string, number>> = {};
+  const marcaPesoCounts: Record<string, number> = {}; // <--- NUEVO
+
   extintores.forEach((e) => {
     const v = e.peso ? `${e.peso} ${e.unidadPeso}` : "Sin definir";
-    pesoCounts[v] = (pesoCounts[v] || 0) + 1;
-  });
-  const pesoEntries = Object.entries(pesoCounts).sort((a, b) => b[1] - a[1]);
+    const agente = e.agenteExtintor || "Sin definir";
+    const marca = e.marca || "Sin definir"; // <--- NUEVO
 
-  const serviceCounts = { MA: 0, RE: 0, PH: 0 };
+    // Cuenta total por peso
+    pesoCounts[v] = (pesoCounts[v] || 0) + 1;
+
+    // Cuenta desglosada por agente
+    if (!pesoAgentBreakdown[v]) pesoAgentBreakdown[v] = {};
+    pesoAgentBreakdown[v][agente] = (pesoAgentBreakdown[v][agente] || 0) + 1;
+
+    // Cuenta por peso y marca (NUEVO)
+    const mpKey = `${v}|${marca}`;
+    marcaPesoCounts[mpKey] = (marcaPesoCounts[mpKey] || 0) + 1;
+  });
+
+  // NUEVO: Efecto que pre-ordena los pesos de menor a mayor automáticamente
+  useEffect(() => {
+    const availableWeights = Object.keys(pesoCounts);
+    
+    if (availableWeights.length > 0) {
+      setCustomWeightOrder((prev) => {
+        // Detectar si hay pesos nuevos que no estén en nuestro orden actual
+        const missing = availableWeights.filter(w => !prev.includes(w));
+        
+        // Si no hay pesos nuevos, dejamos el estado como está (respeta el orden del usuario)
+        if (missing.length === 0) return prev;
+        
+        // Si hay pesos nuevos (o es la primera carga), ordenamos todo combinando ambos
+        return [...prev, ...missing].sort((a, b) => getWeightInKg(a) - getWeightInKg(b));
+      });
+    }
+  }, [extintores]); // Se ejecuta cada vez que cambia el inventario de extintores
+
+  // Generamos las entradas con el texto detallado para las métricas
+  const pesoEntriesWithAgents = Object.entries(pesoCounts)
+    .sort((a, b) => {
+      // Si no hay orden personalizado, ordenar por cantidad (descendente) como antes
+      if (customWeightOrder.length === 0) return b[1] - a[1];
+
+      const idxA = customWeightOrder.indexOf(a[0]);
+      const idxB = customWeightOrder.indexOf(b[0]);
+
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return b[1] - a[1];
+    })
+    .map(([pesoKey, total]) => {
+      const breakdown = pesoAgentBreakdown[pesoKey];
+      const detailStr = Object.entries(breakdown)
+        .map(([ag, count]) => `${count} ${ag}`)
+        .join(", ");
+      return [`${pesoKey} (${detailStr})`, total] as [string, number];
+    });
+
+  const serviceCounts = { Mantenimiento: 0, Recarga: 0, "Prueba Hidrostatica": 0 };
   extintores.forEach((e) => {
-    if (e.ma === "SI") serviceCounts.MA++;
-    if (e.recarga) serviceCounts.RE++;
-    if (e.ph === "SI") serviceCounts.PH++;
+    if (e.ma === "SI") serviceCounts.Mantenimiento++;
+    if (e.recarga) serviceCounts.Recarga++;
+    if (e.ph === "SI") serviceCounts["Prueba Hidrostatica"]++;
   });
 
   const compCounts = { valvula: 0, manguera: 0, manometro: 0, tobera: 0 };
@@ -493,11 +616,71 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     if (fMarca && (e.marca || "Sin definir") !== fMarca) return false;
     if (fAgente && (e.agenteExtintor || "Sin definir") !== fAgente) return false;
     if (fEstado && (e.estadoExtintor || "Sin definir") !== fEstado) return false;
-    if (fServicio === "MA" && e.ma !== "SI") return false;
-    if (fServicio === "PH" && e.ph !== "SI") return false;
-    if (fServicio === "RE" && !e.recarga) return false;
+    if (fPeso && (e.peso ? `${e.peso} ${e.unidadPeso}` : "Sin definir") !== fPeso) return false;
+    if (fServicio === "Mantenimiento" && e.ma !== "SI") return false;
+    if (fServicio === "Prueba Hidrostatica" && e.ph !== "SI") return false;
+    if (fServicio === "Recarga" && !e.recarga) return false;
     if (fComponente && (e as any)[fComponente] !== "SI") return false;
     return true;
+  });
+
+  // Lógica de ordenamiento personalizado por peso
+  // Lógica de ordenamiento múltiple (Estado > Agente > Peso)
+  const sortedExt = [...filteredExt].sort((a, b) => {
+    // 1. Condición (Estado)
+    if (customEstadoOrder.length > 0) {
+      const valA = a.estadoExtintor || "Sin definir";
+      const valB = b.estadoExtintor || "Sin definir";
+      const idxA = customEstadoOrder.indexOf(valA);
+      const idxB = customEstadoOrder.indexOf(valB);
+
+      // Si ambos están en la lista pero son DIFERENTES, ordenamos por estado
+      if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
+      if (idxA !== -1 && idxB === -1) return -1;
+      if (idxB !== -1 && idxA === -1) return 1;
+      // Si son iguales (idxA === idxB), dejamos que pase al siguiente criterio (Agente)
+    }
+
+    // 2. Tipo (Agente Extintor)
+    if (customAgenteOrder.length > 0) {
+      const valA = a.agenteExtintor || "Sin definir";
+      const valB = b.agenteExtintor || "Sin definir";
+      const idxA = customAgenteOrder.indexOf(valA);
+      const idxB = customAgenteOrder.indexOf(valB);
+
+      if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
+      if (idxA !== -1 && idxB === -1) return -1;
+      if (idxB !== -1 && idxA === -1) return 1;
+    }
+
+    // 3. Capacidad (Peso)
+    if (customWeightOrder.length > 0) {
+      const valA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
+      const valB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
+      const idxA = customWeightOrder.indexOf(valA);
+      const idxB = customWeightOrder.indexOf(valB);
+
+      if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
+      if (idxA !== -1 && idxB === -1) return -1;
+      if (idxB !== -1 && idxA === -1) return 1;
+    }
+
+    // 4. Marca (Agrupado por cantidad dentro del mismo peso, de menor a mayor)
+    const pA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
+    const mA = a.marca || "Sin definir";
+    const pB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
+    const mB = b.marca || "Sin definir";
+
+    const countA = marcaPesoCounts[`${pA}|${mA}`] || 0;
+    const countB = marcaPesoCounts[`${pB}|${mB}`] || 0;
+
+    // Ordenar por cantidad (ascendente: los de menor cantidad primero)
+    if (countA !== countB) return countA - countB;
+    
+    // Desempate: Si tienen exactamente la misma cantidad, ordenar alfabéticamente
+    if (mA !== mB) return mA.localeCompare(mB);
+
+    return 0; // Si no hay filtros aplicados, mantiene el orden original
   });
 
   const totalExtintores = extintores.length;
@@ -786,7 +969,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
                         <MetricPanel title="Tipo de Agente" data={agenteCounts} total={totalExtintores} />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <MetricPanel title="Capacidad / Peso" data={pesoEntries} total={totalExtintores} />
+                        <MetricPanel title="Capacidad / Peso" data={pesoEntriesWithAgents} total={totalExtintores} />
                         <MetricPanel title="Servicios Aplicados" data={Object.entries(serviceCounts)} total={totalExtintores} />
                         <MetricPanel title="Componentes Reemplazados" data={Object.entries(compCounts).map(([k, v]) => [COMP_LABELS[k] || k, v] as [string, number])} total={totalExtintores} />
                       </div>
@@ -818,7 +1001,13 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
                       <FilterSelect label="Marca" value={fMarca} onChange={setFMarca} options={marcaCounts.map(([v]) => v)} />
                       <FilterSelect label="Agente" value={fAgente} onChange={setFAgente} options={agenteCounts.map(([v]) => v)} />
                       <FilterSelect label="Estado" value={fEstado} onChange={setFEstado} options={estadoCounts.map(([v]) => v)} />
-                      <FilterSelect label="Servicio" value={fServicio} onChange={setFServicio} options={["MA", "RE", "PH"]} />
+                      <FilterSelect
+                        label="Peso"
+                        value={fPeso}
+                        onChange={setFPeso}
+                        options={Object.keys(pesoCounts)}
+                      />
+                      <FilterSelect label="Servicio" value={fServicio} onChange={setFServicio} options={["Mantenimiento", "Recarga", "Prueba Hidrostatica"]} />
                       <FilterSelect label="Comp. Nuevo" value={fComponente} onChange={setFComponente}
                         options={[
                           { value: "valvula", label: "Válvula" },
@@ -828,12 +1017,38 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
                         ]} />
                       {hasFilters && (
                         <button
-                          onClick={() => { setFMarca(""); setFAgente(""); setFEstado(""); setFServicio(""); setFComponente(""); }}
+                          onClick={() => {
+                            setFMarca(""); setFAgente(""); setFEstado("");
+                            setFServicio(""); setFComponente(""); setFPeso("");
+                          }}
                           className="px-3.5 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/20 border border-red-900/30 hover:bg-red-900/40 transition-all ml-auto sm:ml-0"
                         >
                           Limpiar
                         </button>
                       )}
+                      <div className="flex gap-2 ml-auto sm:ml-0 flex-wrap">
+                        <button
+                          onClick={() => setEstadoOrderModal(true)}
+                          className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-all flex items-center gap-1.5"
+                        >
+                          <span className="text-sm">📌</span>
+                          {customEstadoOrder.length > 0 ? `Estado (${customEstadoOrder.length})` : "Ord. Estado"}
+                        </button>
+                        <button
+                          onClick={() => setAgenteOrderModal(true)}
+                          className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-all flex items-center gap-1.5"
+                        >
+                          <span className="text-sm">🧯</span>
+                          {customAgenteOrder.length > 0 ? `Tipo (${customAgenteOrder.length})` : "Ord. Tipo"}
+                        </button>
+                        <button
+                          onClick={() => setWeightOrderModal(true)}
+                          className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-all flex items-center gap-1.5"
+                        >
+                          <span className="text-sm">⚖️</span>
+                          {customWeightOrder.length > 0 ? `Peso (${customWeightOrder.length})` : "Ord. Pesos"}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -869,7 +1084,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800/40">
-                          {filteredExt.map((ext, i) => {
+                          {sortedExt.map((ext, i) => {
                             const badges = serviceBadge(ext.ma, ext.recarga, ext.ph);
                             return (
                               <tr
@@ -879,11 +1094,15 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
                                 <td className="px-5 py-3.5 text-red-500 font-black">
                                   {i + 1}
                                 </td>
-                                <td className="px-5 py-3.5 font-bold text-zinc-100">
-                                  {ext.nSerie || "—"}
+                                <td className={`px-5 py-3.5 transition-colors ${ext.nSerie && duplicateSeries.has(ext.nSerie.trim()) ? "bg-yellow-500/20" : ""}`}>
+                                  <span className={`font-bold ${ext.nSerie && duplicateSeries.has(ext.nSerie.trim()) ? "text-yellow-400" : "text-zinc-100"}`} title={ext.nSerie && duplicateSeries.has(ext.nSerie.trim()) ? "⚠️ Número de Serie duplicado en el inventario" : ""}>
+                                    {ext.nSerie || "—"}
+                                  </span>
                                 </td>
-                                <td className="px-5 py-3.5 font-medium text-zinc-400">
-                                  {ext.nInterno || "—"}
+                                <td className={`px-5 py-3.5 transition-colors ${ext.nInterno && duplicateInternos.has(ext.nInterno.trim()) ? "bg-yellow-500/20" : ""}`}>
+                                  <span className={`font-medium ${ext.nInterno && duplicateInternos.has(ext.nInterno.trim()) ? "text-yellow-400" : "text-zinc-400"}`} title={ext.nInterno && duplicateInternos.has(ext.nInterno.trim()) ? "⚠️ Número Interno duplicado en el inventario" : ""}>
+                                    {ext.nInterno || "—"}
+                                  </span>
                                 </td>
                                 <td className="px-5 py-3.5 font-medium text-zinc-300">
                                   {ext.marca || "—"}
@@ -993,6 +1212,27 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
         )}
         <ArchiveModal isOpen={deleteModal} onClose={() => setDeleteModal(false)} onArchive={handleDeleteEmpresa} saving={saving} />
         <ObservationModal observation={obsModal} onClose={() => setObsModal(null)} />
+        <WeightSortModal
+          isOpen={estadoOrderModal}
+          onClose={() => setEstadoOrderModal(false)}
+          availableWeights={estadoCounts.map(([v]) => v)} // Usamos estadoCounts
+          currentOrder={customEstadoOrder}
+          onSave={(newOrder) => { setCustomEstadoOrder(newOrder); setEstadoOrderModal(false); }}
+        />
+        <WeightSortModal
+          isOpen={agenteOrderModal}
+          onClose={() => setAgenteOrderModal(false)}
+          availableWeights={agenteCounts.map(([v]) => v)} // Usamos agenteCounts
+          currentOrder={customAgenteOrder}
+          onSave={(newOrder) => { setCustomAgenteOrder(newOrder); setAgenteOrderModal(false); }}
+        />
+        <WeightSortModal
+          isOpen={weightOrderModal}
+          onClose={() => setWeightOrderModal(false)}
+          availableWeights={Object.keys(pesoCounts)}
+          currentOrder={customWeightOrder}
+          onSave={(newOrder) => { setCustomWeightOrder(newOrder); setWeightOrderModal(false); }}
+        />
 
       </main>
     </div>
