@@ -811,7 +811,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                         <button
                           type="button"
                           onClick={() => removeEvidencia(idx)}
-                          className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-red-500/90 hover:bg-red-600 text-white shadow-lg flex items-center justify-center text-xs active:scale-95 transition-all opacity-0 group-hover:opacity-100"
+                          className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-lg flex items-center justify-center text-xs active:scale-95 transition-all"
                           title="Eliminar esta foto"
                         >
                           ✕
