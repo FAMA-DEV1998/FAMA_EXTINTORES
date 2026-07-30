@@ -192,7 +192,8 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     const { evidencias, ...formWithoutEvidencias } = form;
     const payload = {
       ...formWithoutEvidencias, id: activeId,
-      nSerie: form.nSerie.trim() === "" ? "S/N" : form.nSerie.trim(),
+      nSerie: form.nSerie.trim() === "" ? "S/N" : form.nSerie.trim().toUpperCase(),
+      nInterno: form.nInterno.trim().toUpperCase(),
       ma: form.ma ? "SI" : "", ph: form.ph ? "SI" : "", servicioExtra: form.servicioExtra, motivoBaja: form.motivoBaja,
       evidencia: JSON.stringify(evidencias || []),
     };
@@ -284,7 +285,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     } catch (err) {
       showToast("Error al procesar la foto", "err");
     } finally {
-       setCompressingPhoto(false);
+      setCompressingPhoto(false);
       // Limpiar el input (cámara o galería, el que se haya usado) para poder elegir otra foto
       e.target.value = "";
     }
@@ -744,10 +745,10 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
             <Card title={`🧯 ${editingRow !== null ? "Editar Extintor" : "Nuevo Extintor"}`}>
               <div className="grid grid-cols-2 md:grid-cols-2 gap-4 md:gap-6">
                 <Field label="N° Serie">
-                  <input className={inputCls} value={form.nSerie} onChange={setF("nSerie")} placeholder="Ej: ABC-12345" />
+                  <input className={inputCls} value={form.nSerie} onChange={(e) => setForm((p) => ({ ...p, nSerie: e.target.value.toUpperCase() }))} placeholder="Ej: ABC-12345" />
                 </Field>
                 <Field label="N° Interno">
-                  <input className={inputCls} value={form.nInterno} onChange={setF("nInterno")} placeholder="Identificador interno" />
+                  <input className={inputCls} value={form.nInterno} onChange={(e) => setForm((p) => ({ ...p, nInterno: e.target.value.toUpperCase() }))} placeholder="Identificador interno" />
                 </Field>
                 <Field label="Marca">
                   <CreatableSelect

@@ -577,8 +577,8 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     const payload = {
       ...formSinFlags,
       id: selectedEmpresa.id,
-      nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim(),
-      nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim()
+      nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim().toUpperCase(),
+      nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase()
     };
 
     if (editingRowIndex !== null) {

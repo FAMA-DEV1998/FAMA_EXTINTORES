@@ -52,8 +52,8 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                     {/* Datos Principales */}
                     <ModalSection title="🧯 Datos Principales">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                            <ModalField label="N° Serie"><input className={modalInput} value={form.nSerie || ""} onChange={(e) => setEF("nSerie", e.target.value)} placeholder="Serie" /></ModalField>
-                            <ModalField label="N° Interno"><input className={modalInput} value={form.nInterno || ""} onChange={(e) => setEF("nInterno", e.target.value)} placeholder="Interno" /></ModalField>
+                             <ModalField label="N° Serie"><input className={modalInput} value={form.nSerie || ""} onChange={(e) => setEF("nSerie", e.target.value.toUpperCase())} placeholder="Serie" /></ModalField>
+                            <ModalField label="N° Interno"><input className={modalInput} value={form.nInterno || ""} onChange={(e) => setEF("nInterno", e.target.value.toUpperCase())} placeholder="Interno" /></ModalField>
                             <CreatableSelect
                                 value={form.marca || ""}
                                 onChange={(v) => setEF("marca", v)}
