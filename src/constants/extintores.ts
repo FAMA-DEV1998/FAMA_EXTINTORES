@@ -1,7 +1,7 @@
-export const ESTADOS = ["Aprobado", "Nuevo", "Garantía", "De Baja"];
+export const ESTADOS = ["Aprobado", "Nuevo - Venta", "Garantía", "De Baja"];
 
 // Secuencia lógica usada para el orden automático (igual sistema que Peso)
-export const ESTADO_ORDEN_DEFAULT = ["Aprobado", "Nuevo", "Garantía", "De Baja"];
+export const ESTADO_ORDEN_DEFAULT = ["Aprobado", "Nuevo - Venta", "Garantía", "De Baja"];
 
 export const PESOS_KG = ["1", "2", "4", "6", "9", "12", "25", "50", "75", "100"] as const;
 export const PESOS_LB = ["5", "10", "15", "20", "25", "30", "125", "145"] as const;
