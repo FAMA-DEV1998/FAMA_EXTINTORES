@@ -1,4 +1,5 @@
 import type { FormData, EmpresaData, Extintor } from "../types";
+import { ESTADO_ORDEN_DEFAULT } from "../constants/extintores";
 
 export const emptyForm = (): FormData => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "",
@@ -133,6 +134,16 @@ export const getWeightInKg = (weightStr: string) => {
     if (unit.startsWith("LB")) return val * 0.453592;
     if (unit === "GAL") return val * 3.785;
     return val;
+};
+
+/**
+ * Devuelve la prioridad de un estado según el orden lógico por defecto
+ * (Aprobado > Nuevo > Garantía > De Baja). Estados no reconocidos van al final.
+ * Es el equivalente de getWeightInKg pero para Estado.
+ */
+export const getEstadoPrioridad = (estado: string) => {
+    const idx = ESTADO_ORDEN_DEFAULT.indexOf(estado);
+    return idx === -1 ? 999 : idx;
 };
 
 /**

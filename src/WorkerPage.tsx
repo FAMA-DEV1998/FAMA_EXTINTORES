@@ -10,6 +10,7 @@ import { MultiSelect } from "./components/ui/MultiSelect";
 const ESTADO_BADGE: Record<string, string> = {
   Nuevo: "bg-emerald-50 text-emerald-700 border-emerald-200",
   Aprobado: "bg-blue-50 text-blue-700 border-blue-200",
+  Garantía: "bg-purple-50 text-purple-700 border-purple-200",
   "De Baja": "bg-red-50 text-red-700 border-red-200",
 };
 
@@ -43,6 +44,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
   // Ref para el input de cámara
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [compressingPhoto, setCompressingPhoto] = useState(false);
   const MAX_EVIDENCIAS = 5;
   const FORM_STORAGE_KEY = "fama_worker_form_backup";
@@ -282,9 +284,9 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     } catch (err) {
       showToast("Error al procesar la foto", "err");
     } finally {
-      setCompressingPhoto(false);
-      // Limpiar el input para poder tomar otra foto
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
+       setCompressingPhoto(false);
+      // Limpiar el input (cámara o galería, el que se haya usado) para poder elegir otra foto
+      e.target.value = "";
     }
   };
 
@@ -434,6 +436,15 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={handleCameraCapture}
+      />
+
+      {/* Input oculto para la galería (sin "capture" para permitir elegir archivos existentes) */}
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={handleCameraCapture}
       />
@@ -841,13 +852,23 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
             <div className="grid grid-cols-2 md:grid-cols-2 gap-6 items-stretch">
               <Card title="🔧 Servicio Realizado">
                 <div className="flex flex-col gap-4 h-full">
-                  <Toggle checked={form.ma} label="MA — Mantenimiento" onChange={() => setForm((p) => ({ ...p, ma: !p.ma }))} />
-                  <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => ({ ...p, ph: !p.ph }))} />
+                  <Toggle checked={form.ma} label="MA — Mantenimiento" onChange={() => setForm((p) => {
+                    const next = !p.ma;
+                    // Mantenimiento es excluyente con PH y con Recarga
+                    return next ? { ...p, ma: true, ph: false, recarga: "" } : { ...p, ma: false };
+                  })} />
+                  <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => {
+                    const next = !p.ph;
+                    return next ? { ...p, ph: true, ma: false } : { ...p, ph: false };
+                  })} />
 
                   <Field label="Recarga (Seleccione una opción)" className="mt-auto pt-2">
                     <div className="flex flex-col gap-2">
                       {recargasPermitidas.map((r) => (
-                        <button key={r} type="button" onClick={() => setForm((p) => ({ ...p, recarga: p.recarga === r ? "" : r }))} className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${form.recarga === r ? "bg-amber-500 border-amber-400 text-white shadow-md" : "bg-white border-zinc-200 text-zinc-500 hover:border-amber-300"}`}>
+                        <button key={r} type="button" onClick={() => setForm((p) => {
+                          const nextRecarga = p.recarga === r ? "" : r;
+                          return nextRecarga ? { ...p, recarga: nextRecarga, ma: false } : { ...p, recarga: "" };
+                        })} className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${form.recarga === r ? "bg-amber-500 border-amber-400 text-white shadow-md" : "bg-white border-zinc-200 text-zinc-500 hover:border-amber-300"}`}>
                           RE — {r}
                         </button>
                       ))}
@@ -947,31 +968,38 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
                 {/* Botón para agregar más fotos */}
                 {form.evidencias.length < MAX_EVIDENCIAS && (
-                  <button
-                    type="button"
-                    onClick={() => { persistFormState(); cameraInputRef.current?.click(); }}
-                    disabled={compressingPhoto}
-                    className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl transition-all active:scale-95 cursor-pointer group ${form.evidencias.length > 0 ? "py-5 border-zinc-200 bg-zinc-50/30 hover:bg-emerald-50/30 hover:border-emerald-300" : "py-10 border-zinc-300 bg-zinc-50/50 hover:bg-red-50/50 hover:border-red-300"}`}
-                  >
-                    {compressingPhoto ? (
-                      <>
-                        <div className="w-10 h-10 border-4 border-zinc-200 border-t-red-500 rounded-full animate-spin" />
-                        <span className="text-sm font-bold text-zinc-500">Procesando imagen...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className={`${form.evidencias.length > 0 ? "text-3xl" : "text-5xl"} group-hover:scale-110 transition-transform`}>📸</span>
-                        <span className="text-sm font-bold text-zinc-600 group-hover:text-red-600 transition-colors">
-                          {form.evidencias.length > 0 ? "Agregar Otra Foto" : "Tomar Foto del Extintor"}
-                        </span>
-                        {form.evidencias.length === 0 && (
-                          <span className="text-[10px] text-zinc-400 font-medium">
-                            Se abrirá la cámara de tu dispositivo
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { persistFormState(); cameraInputRef.current?.click(); }}
+                      disabled={compressingPhoto}
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl transition-all active:scale-95 cursor-pointer group ${form.evidencias.length > 0 ? "py-5 border-zinc-200 bg-zinc-50/30 hover:bg-emerald-50/30 hover:border-emerald-300" : "py-8 border-zinc-300 bg-zinc-50/50 hover:bg-red-50/50 hover:border-red-300"}`}
+                    >
+                      {compressingPhoto ? (
+                        <div className="w-8 h-8 border-4 border-zinc-200 border-t-red-500 rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <span className="text-3xl group-hover:scale-110 transition-transform">📸</span>
+                          <span className="text-sm font-bold text-zinc-600 group-hover:text-red-600 transition-colors">Cámara</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { persistFormState(); galleryInputRef.current?.click(); }}
+                      disabled={compressingPhoto}
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl transition-all active:scale-95 cursor-pointer group ${form.evidencias.length > 0 ? "py-5 border-zinc-200 bg-zinc-50/30 hover:bg-emerald-50/30 hover:border-emerald-300" : "py-8 border-zinc-300 bg-zinc-50/50 hover:bg-red-50/50 hover:border-red-300"}`}
+                    >
+                      {compressingPhoto ? (
+                        <div className="w-8 h-8 border-4 border-zinc-200 border-t-red-500 rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <span className="text-3xl group-hover:scale-110 transition-transform">🖼️</span>
+                          <span className="text-sm font-bold text-zinc-600 group-hover:text-red-600 transition-colors">Galería</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
 
                 {form.evidencias.length >= MAX_EVIDENCIAS && (

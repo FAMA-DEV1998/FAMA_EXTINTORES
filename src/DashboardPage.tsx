@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { COMP_LABELS, MESES } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, DashView } from "./types";
-import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado } from "./utils/helpers";
+import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado, getEstadoPrioridad } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import {
   EmpresaModal, ExtintorModal, ArchivedModal, UsersModal,
@@ -763,6 +763,20 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       });
     }
   }, [extintores]); // Se ejecuta cada vez que cambia el inventario de extintores
+
+  // NUEVO: Efecto que pre-ordena los estados automáticamente según la secuencia lógica
+  // (Aprobado > Nuevo > Garantía > De Baja), igual sistema que el usado en Peso.
+  useEffect(() => {
+    const availableEstados = estadoCounts.map(([v]) => v);
+
+    if (availableEstados.length > 0) {
+      setCustomEstadoOrder((prev) => {
+        const missing = availableEstados.filter(es => !prev.includes(es));
+        if (missing.length === 0) return prev;
+        return [...prev, ...missing].sort((a, b) => getEstadoPrioridad(a) - getEstadoPrioridad(b));
+      });
+    }
+  }, [extintores]);
 
   // Generamos las entradas con el texto detallado para las métricas
   const pesoEntriesWithAgents = Object.entries(pesoCounts)

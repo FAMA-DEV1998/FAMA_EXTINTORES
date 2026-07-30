@@ -135,14 +135,24 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                             <ModalField label="Tipo">
                                 <div className="flex gap-2">
-                                    <button type="button" onClick={() => setEF("ma", form.ma === "SI" ? "" : "SI")} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ma === "SI" ? "bg-red-700 border-red-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Mantenimiento</button>
-                                    <button type="button" onClick={() => setEF("ph", form.ph === "SI" ? "" : "SI")} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ph === "SI" ? "bg-blue-700 border-blue-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Prueba Hidrostatica (P.H)</button>
+                                    <button type="button" onClick={() => setForm((p) => {
+                                        const next = p.ma === "SI" ? "" : "SI";
+                                        // Mantenimiento es excluyente con PH y con Recarga
+                                        return next === "SI" ? { ...p, ma: "SI", ph: "", recarga: "" } : { ...p, ma: "" };
+                                    })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ma === "SI" ? "bg-red-700 border-red-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Mantenimiento</button>
+                                    <button type="button" onClick={() => setForm((p) => {
+                                        const next = p.ph === "SI" ? "" : "SI";
+                                        return next === "SI" ? { ...p, ph: "SI", ma: "" } : { ...p, ph: "" };
+                                    })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ph === "SI" ? "bg-blue-700 border-blue-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Prueba Hidrostatica (P.H)</button>
                                 </div>
                             </ModalField>
                             <ModalField label="Recarga">
                                 <div className="flex flex-col gap-1.5">
                                     {recargasPermitidas.map((r) => (
-                                        <button key={r} type="button" onClick={() => setEF("recarga", form.recarga === r ? "" : r)} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold ${form.recarga === r ? "bg-amber-600 border-amber-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>RE — {r}</button>
+                                        <button key={r} type="button" onClick={() => setForm((p) => {
+                                            const nextRecarga = p.recarga === r ? "" : r;
+                                            return nextRecarga ? { ...p, recarga: nextRecarga, ma: "" } : { ...p, recarga: "" };
+                                        })} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold ${form.recarga === r ? "bg-amber-600 border-amber-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>RE — {r}</button>
                                     ))}
                                 </div>
                             </ModalField>
