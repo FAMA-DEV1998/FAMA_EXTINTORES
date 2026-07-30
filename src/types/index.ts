@@ -23,6 +23,9 @@ export type EmpresaData = {
   nOrdenTrabajo: string;
   fechaRetiro: string;
   fechaEntrega: string;
+  weightOrder?: string[];
+  estadoOrder?: string[];
+  agenteOrder?: string[];
 };
 
 export type Extintor = {

@@ -10,13 +10,14 @@ export const emptyForm = (): FormData => ({
 export const emptyEmpresa = (): EmpresaData => ({
     razonSocial: "", direccion: "", distrito: "", ruc: "", nombresApellidos: "",
     celular: "", nOrdenTrabajo: "", fechaRetiro: "", fechaEntrega: "",
+    weightOrder: [], estadoOrder: [], agenteOrder: [],
 });
 
 export const emptyExtintor = (): Partial<Extintor> => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "",
     realizadoPH: "", vencimPH: "", estadoExtintor: "", agenteExtintor: "",
     peso: "", unidadPeso: "KG", ma: "", recarga: "", ph: "",
-    valvula: "", manguera: "", manometro: "", tobera: "", observaciones: "", servicioExtra: "", motivoBaja: "", 
+    valvula: "", manguera: "", manometro: "", tobera: "", observaciones: "", servicioExtra: "", motivoBaja: "",
     evidencia: "[]"
 });
 
@@ -117,4 +118,112 @@ export const downloadEvidenciaAsPng = (b64Jpeg: string, fileName: string) => {
         }, "image/png");
     };
     img.src = `data:image/jpeg;base64,${b64Jpeg}`;
+};
+
+/**
+ * Convierte un string de peso ("25 KG", "10 LB", etc.) a su equivalente en KG
+ * para poder compararlos numéricamente.
+ */
+export const getWeightInKg = (weightStr: string) => {
+    if (!weightStr || weightStr === "Sin definir") return 999999; // Los vacíos van al final
+    const match = weightStr.match(/([\d.]+)\s*(KG|LBS?|LT|GAL)/i);
+    if (!match) return 999999;
+    const val = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    if (unit.startsWith("LB")) return val * 0.453592;
+    if (unit === "GAL") return val * 3.785;
+    return val;
+};
+
+/**
+ * Ordena una lista de extintores replicando EXACTAMENTE el criterio del Dashboard:
+ * Estado > Agente > Peso > Marca (agrupada por cantidad) > N° Serie > N° Interno.
+ * El Dashboard es la fuente de la verdad: los arreglos weightOrder/estadoOrder/agenteOrder
+ * se guardan en la Empresa y deben aplicarse igual en Workers.
+ *
+ * @param list Lista a ordenar (puede venir ya filtrada por búsqueda)
+ * @param countsSourceList Lista sobre la que se calculan los conteos marca+peso
+ *        (usar SIEMPRE la lista completa de extintores de la empresa, no la filtrada)
+ */
+export const sortExtintoresPersonalizado = (
+    list: Extintor[],
+    weightOrder: string[] = [],
+    estadoOrder: string[] = [],
+    agenteOrder: string[] = [],
+    countsSourceList: Extintor[] = list
+): Extintor[] => {
+    const marcaPesoCounts: Record<string, number> = {};
+    countsSourceList.forEach((e) => {
+        const p = e.peso ? `${e.peso} ${e.unidadPeso}` : "Sin definir";
+        const m = e.marca || "Sin definir";
+        const key = `${p}|${m}`;
+        marcaPesoCounts[key] = (marcaPesoCounts[key] || 0) + 1;
+    });
+
+    return [...list].sort((a, b) => {
+        if (estadoOrder.length > 0) {
+            const valA = a.estadoExtintor || "Sin definir";
+            const valB = b.estadoExtintor || "Sin definir";
+            const idxA = estadoOrder.indexOf(valA);
+            const idxB = estadoOrder.indexOf(valB);
+            if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
+            if (idxA !== -1 && idxB === -1) return -1;
+            if (idxB !== -1 && idxA === -1) return 1;
+        }
+
+        if (agenteOrder.length > 0) {
+            const valA = a.agenteExtintor || "Sin definir";
+            const valB = b.agenteExtintor || "Sin definir";
+            const idxA = agenteOrder.indexOf(valA);
+            const idxB = agenteOrder.indexOf(valB);
+            if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
+            if (idxA !== -1 && idxB === -1) return -1;
+            if (idxB !== -1 && idxA === -1) return 1;
+        }
+
+        if (weightOrder.length > 0) {
+            const valA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
+            const valB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
+            const idxA = weightOrder.indexOf(valA);
+            const idxB = weightOrder.indexOf(valB);
+            if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
+            if (idxA !== -1 && idxB === -1) return -1;
+            if (idxB !== -1 && idxA === -1) return 1;
+        }
+
+        const pA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
+        const mA = a.marca || "Sin definir";
+        const pB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
+        const mB = b.marca || "Sin definir";
+
+        const countA = marcaPesoCounts[`${pA}|${mA}`] || 0;
+        const countB = marcaPesoCounts[`${pB}|${mB}`] || 0;
+        if (countA !== countB) return countA - countB;
+        if (mA !== mB) return mA.localeCompare(mB, "es");
+
+        const serieA = (a.nSerie || "").trim().toUpperCase();
+        const serieB = (b.nSerie || "").trim().toUpperCase();
+        if (serieA !== serieB) return serieA.localeCompare(serieB, "es");
+
+        const internoA = (a.nInterno || "").trim().toUpperCase();
+        const internoB = (b.nInterno || "").trim().toUpperCase();
+        if (internoA !== internoB) return internoA.localeCompare(internoB, "es");
+
+        return 0;
+    });
+};
+
+/**
+ * Devuelve las opciones de Recarga permitidas según el Agente seleccionado:
+ * - Agente = PQS  → solo recargas con porcentaje (ej. "75% NACIONAL", "90% UL")
+ * - Agente ≠ PQS  → solo recargas sin porcentaje (ej. "OTROS")
+ * Se basa en si el valor del catálogo contiene un dígito, para funcionar
+ * dinámicamente sin importar el texto exacto configurado en el catálogo.
+ */
+export const getRecargasPermitidas = (agenteExtintor: string, recargasDisponibles: string[]): string[] => {
+    const esPQS = (agenteExtintor || "").trim().toUpperCase() === "PQS";
+    return recargasDisponibles.filter((r) => {
+        const tienePorcentaje = /\d/.test(r);
+        return esPQS ? tienePorcentaje : !tienePorcentaje;
+    });
 };

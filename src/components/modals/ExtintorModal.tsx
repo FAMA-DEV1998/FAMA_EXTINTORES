@@ -1,6 +1,7 @@
 import type { Extintor } from "../../types";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS } from "../../constants";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
+import { getRecargasPermitidas } from "../../utils/helpers";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import type { Socket } from "socket.io-client";
@@ -29,9 +30,15 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                 const yr = parseInt(v);
                 if (!isNaN(yr) && v.length === 4) next.vencimPH = String(yr + 5);
             }
+            if (k === "agenteExtintor") {
+                const permitidas = getRecargasPermitidas(v, recargas);
+                if (p.recarga && !permitidas.includes(p.recarga)) next.recarga = "";
+            }
             return next;
         });
     };
+
+    const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor || "", recargas);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -134,7 +141,7 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                             </ModalField>
                             <ModalField label="Recarga">
                                 <div className="flex flex-col gap-1.5">
-                                    {recargas.map((r) => (
+                                    {recargasPermitidas.map((r) => (
                                         <button key={r} type="button" onClick={() => setEF("recarga", form.recarga === r ? "" : r)} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold ${form.recarga === r ? "bg-amber-600 border-amber-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>RE — {r}</button>
                                     ))}
                                 </div>

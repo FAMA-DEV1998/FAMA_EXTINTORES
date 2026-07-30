@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS, DISTRITOS_LIMA } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, FormData, WorkerView as View } from "./types";
-import { emptyForm, emptyEmpresa, compressImage } from "./utils/helpers";
+import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import { Card, Field, Toggle, SiNo, inputCls } from "./components/ui/WorkerUI";
 import { CreatableSelect } from "./components/ui/CreatableSelect";
 import { MultiSelect } from "./components/ui/MultiSelect";
+
+const ESTADO_BADGE: Record<string, string> = {
+  Nuevo: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Aprobado: "bg-blue-50 text-blue-700 border-blue-200",
+  "De Baja": "bg-red-50 text-red-700 border-red-200",
+};
 
 export default function App({ user, onLogout }: { user: { id: string; username: string; role: string; displayName: string }; onLogout: () => void }) {
   const { socket, connected, catalogs } = useSocket(user.id, onLogout);
@@ -25,6 +31,12 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
   const [extintores, setExtintores] = useState<Extintor[]>([]);
   const [form, setForm] = useState<FormData>(emptyForm());
   const [editingRow, setEditingRow] = useState<number | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [fMarca, setFMarca] = useState("");
+  const [fAgente, setFAgente] = useState("");
+  const [fPeso, setFPeso] = useState("");
+  const [fEstado, setFEstado] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
@@ -84,8 +96,8 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     } catch {
       clearFormBackup();
     }
-  // Solo al montar el componente
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Solo al montar el componente
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   const showToast = (msg: string, type: "ok" | "err" = "ok") => {
@@ -285,6 +297,51 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
   };
 
   const setF = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  // Extintores que cumplen los filtros activos, excluyendo el propio filtro indicado.
+  // Así cada dropdown muestra solo combinaciones que realmente existen entre sí.
+  const extintoresSegunFiltros = (excluir?: "marca" | "agente" | "peso" | "estado") => {
+    return extintores.filter((e) => {
+      if (excluir !== "marca" && fMarca && (e.marca || "") !== fMarca) return false;
+      if (excluir !== "agente" && fAgente && (e.agenteExtintor || "") !== fAgente) return false;
+      if (excluir !== "peso" && fPeso && (e.peso ? `${e.peso} ${e.unidadPeso}` : "") !== fPeso) return false;
+      if (excluir !== "estado" && fEstado && (e.estadoExtintor || "") !== fEstado) return false;
+      return true;
+    });
+  };
+
+  const marcasDisponibles = [...new Set(extintoresSegunFiltros("marca").map((e) => e.marca).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  const agentesDisponibles = [...new Set(extintoresSegunFiltros("agente").map((e) => e.agenteExtintor).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  const pesosDisponibles = [...new Set(extintoresSegunFiltros("peso").filter((e) => e.peso).map((e) => `${e.peso} ${e.unidadPeso}`))];
+  const estadosDisponibles = [...new Set(extintoresSegunFiltros("estado").map((e) => e.estadoExtintor).filter(Boolean))];
+
+  // Si el inventario cambia y algún filtro seleccionado deja de tener datos, se limpia solo
+  useEffect(() => {
+    if (fMarca && !marcasDisponibles.includes(fMarca)) setFMarca("");
+    if (fAgente && !agentesDisponibles.includes(fAgente)) setFAgente("");
+    if (fPeso && !pesosDisponibles.includes(fPeso)) setFPeso("");
+    if (fEstado && !estadosDisponibles.includes(fEstado)) setFEstado("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extintores]);
+
+  const extintoresFiltrados = extintoresSegunFiltros().filter((ext) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (ext.nSerie || "").toLowerCase().includes(q) || (ext.nInterno || "").toLowerCase().includes(q);
+  });
+
+  // El Dashboard define el orden (empresa.weightOrder/estadoOrder/agenteOrder);
+  // aquí solo lo reflejamos.
+  const extintoresOrdenados = sortExtintoresPersonalizado(
+    extintoresFiltrados,
+    empresa.weightOrder,
+    empresa.estadoOrder,
+    empresa.agenteOrder,
+    extintores
+  );
+
+  // Recargas permitidas según el agente elegido en el formulario
+  const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor, RECARGAS);
 
   return (
     <div className="app-workers flex flex-col h-dvh w-full bg-zinc-50/50 shadow-2xl relative" style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
@@ -521,74 +578,138 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6 mt-2">
-                  {extintores.map((ext, index) => (
-                    <div key={ext.rowIndex} className="bg-white border border-zinc-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col hover:-translate-y-1">
-
-                      {/* Header de Tarjeta */}
-                      <div className="flex items-center justify-between px-5 py-4 bg-zinc-50/80 border-b border-zinc-100">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-700 font-black text-sm shrink-0">
-                            {index + 1}
-                          </span>
-                          <span className="text-base md:text-lg font-black text-zinc-800 truncate">
-                            {ext.nSerie || "S/N"}
-                          </span>
-                        </div>
-                        <div className="flex gap-1.5 shrink-0 ml-2">
-                          {/* Indicador de evidencia */}
-                          {/* Indicador de evidencia */}
-                          {ext.evidencia === "__HAS_EVIDENCIA__" && (
-                            <span className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-sm flex items-center justify-center relative" title={`${ext.evidenciaCount || 1} foto(s)`}>
-                              📷
-                              {(ext.evidenciaCount || 0) > 1 && (
-                                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">{ext.evidenciaCount}</span>
-                              )}
-                            </span>
-                          )}
-                          <button onClick={() => handleEdit(ext)} className="w-9 h-9 rounded-xl bg-white border border-zinc-200 text-sm hover:bg-zinc-100 hover:text-red-600 transition-colors flex items-center justify-center shadow-sm active:scale-95" title="Editar">
-                            ✏️
-                          </button>
-                          <button onClick={() => handleDelete(ext.rowIndex)} className="w-9 h-9 rounded-xl bg-white border border-zinc-200 text-sm hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center shadow-sm active:scale-95" title="Eliminar">
-                            🗑️
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Cuerpo de Tarjeta */}
-                      <div className="px-5 py-5 flex flex-col gap-3 flex-1">
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Marca</span>
-                            <span className="font-bold text-zinc-800 text-sm truncate">{ext.marca || "—"}</span>
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Agente</span>
-                            <span className="font-bold text-zinc-800 text-sm truncate">{ext.agenteExtintor || "—"}</span>
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Peso</span>
-                            <span className="font-black text-zinc-800 text-sm">{ext.peso ? `${ext.peso} ${ext.unidadPeso}` : "—"}</span>
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Estado</span>
-                            <span className="font-bold text-zinc-800 text-sm truncate">{ext.estadoExtintor || "—"}</span>
-                          </div>
-                        </div>
-
-                        <div className="w-full h-px bg-zinc-100 my-1" />
-
-                        {/* Badges de Servicio */}
-                        <div className="flex flex-wrap gap-2 mt-auto">
-                          {ext.ma === "SI" && <span className="bg-red-50 text-red-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-red-100 shadow-sm">MA</span>}
-                          {ext.recarga && <span className="bg-amber-50 text-amber-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-amber-100 shadow-sm">RE: {ext.recarga}</span>}
-                          {ext.ph === "SI" && <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-blue-100 shadow-sm">PH</span>}
-                          {!ext.ma && !ext.recarga && !ext.ph && <span className="text-[10px] font-medium text-zinc-400 italic">Sin servicios registrados</span>}
-                        </div>
-                      </div>
+                <>
+                  {/* Búsqueda y filtros de visualización */}
+                  <div className="flex flex-col gap-3 p-4 bg-white border border-zinc-200/80 rounded-2xl shadow-sm mt-2">
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none">🔎</span>
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Buscar por N° Serie o N° Interno..."
+                        className="w-full border-2 border-zinc-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-bold text-zinc-800 bg-zinc-50 placeholder-zinc-400 focus:outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/10 transition-all"
+                      />
                     </div>
-                  ))}
-                </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <select value={fMarca} onChange={(e) => setFMarca(e.target.value)} className="border-2 border-zinc-200 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 bg-zinc-50 focus:outline-none focus:border-red-600">
+                        <option value="">Marca (todas)</option>
+                        {marcasDisponibles.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <select value={fAgente} onChange={(e) => setFAgente(e.target.value)} className="border-2 border-zinc-200 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 bg-zinc-50 focus:outline-none focus:border-red-600">
+                        <option value="">Agente (todos)</option>
+                        {agentesDisponibles.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      <select value={fPeso} onChange={(e) => setFPeso(e.target.value)} className="border-2 border-zinc-200 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 bg-zinc-50 focus:outline-none focus:border-red-600">
+                        <option value="">Peso (todos)</option>
+                        {pesosDisponibles.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                      <select value={fEstado} onChange={(e) => setFEstado(e.target.value)} className="border-2 border-zinc-200 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 bg-zinc-50 focus:outline-none focus:border-red-600">
+                        <option value="">Estado (todos)</option>
+                        {estadosDisponibles.map((es) => <option key={es} value={es}>{es}</option>)}
+                      </select>
+                      {(fMarca || fAgente || fPeso || fEstado) && (
+                        <button
+                          type="button"
+                          onClick={() => { setFMarca(""); setFAgente(""); setFPeso(""); setFEstado(""); }}
+                          className="col-span-2 md:col-span-4 text-xs font-bold text-red-600 hover:text-red-700 text-left px-1"
+                        >
+                          ✕ Limpiar filtros
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {extintoresOrdenados.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-16 text-zinc-400 bg-white/60 border-2 border-dashed border-zinc-200 rounded-3xl mt-2">
+                      <span className="text-5xl drop-shadow-sm opacity-80">🔍</span>
+                      <p className="text-sm font-bold text-zinc-500">Ningún extintor coincide con los filtros aplicados</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6 mt-2">
+                      {extintoresOrdenados.map((ext, index) => (
+                        <div key={ext.rowIndex} className="bg-white border border-zinc-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col hover:-translate-y-1">
+
+                          {/* Header de Tarjeta */}
+                          <div className="flex items-center justify-between px-5 py-4 bg-zinc-50/80 border-b border-zinc-100">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-700 font-black text-sm shrink-0">
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="block text-base md:text-lg font-black text-zinc-800 truncate">
+                                  {ext.nSerie || "S/N"}
+                                </span>
+                                {ext.nInterno && (
+                                  <span className="block text-[10px] font-bold text-zinc-400 truncate">N° Interno: {ext.nInterno}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0 ml-2">
+                              {ext.evidencia === "__HAS_EVIDENCIA__" && (
+                                <span className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-sm flex items-center justify-center relative" title={`${ext.evidenciaCount || 1} foto(s)`}>
+                                  📷
+                                  {(ext.evidenciaCount || 0) > 1 && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">{ext.evidenciaCount}</span>
+                                  )}
+                                </span>
+                              )}
+                              <button onClick={() => handleEdit(ext)} className="w-9 h-9 rounded-xl bg-white border border-zinc-200 text-sm hover:bg-zinc-100 hover:text-red-600 transition-colors flex items-center justify-center shadow-sm active:scale-95" title="Editar">
+                                ✏️
+                              </button>
+                              <button onClick={() => handleDelete(ext.rowIndex)} className="w-9 h-9 rounded-xl bg-white border border-zinc-200 text-sm hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center shadow-sm active:scale-95" title="Eliminar">
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Cuerpo de Tarjeta */}
+                          <div className="px-5 py-5 flex flex-col gap-3 flex-1">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Marca</span>
+                                <span className="font-bold text-zinc-800 text-sm truncate">{ext.marca || "—"}</span>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Agente</span>
+                                <span className="font-bold text-zinc-800 text-sm truncate">{ext.agenteExtintor || "—"}</span>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Peso</span>
+                                <span className="font-black text-zinc-800 text-sm">{ext.peso ? `${ext.peso} ${ext.unidadPeso}` : "—"}</span>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Estado</span>
+                                <span className={`inline-block w-fit font-black text-[11px] px-2 py-0.5 rounded-md border truncate ${ESTADO_BADGE[ext.estadoExtintor] || "bg-zinc-50 text-zinc-500 border-zinc-200"}`}>
+                                  {ext.estadoExtintor || "—"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Info adicional compacta */}
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-400 font-semibold">
+                              {ext.fechaFabricacion && <span>Fabricación: <b className="text-zinc-600">{ext.fechaFabricacion}</b></span>}
+                              {ext.realizadoPH && <span>PH Realizado: <b className="text-zinc-600">{ext.realizadoPH}</b></span>}
+                              {ext.vencimPH && <span>Vence PH: <b className="text-zinc-600">{ext.vencimPH}</b></span>}
+                            </div>
+
+                            <div className="w-full h-px bg-zinc-100 my-1" />
+
+                            {/* Badges de Servicio */}
+                            <div className="flex flex-wrap gap-2 mt-auto">
+                              {ext.ma === "SI" && <span className="bg-red-50 text-red-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-red-100 shadow-sm">MA</span>}
+                              {ext.recarga && <span className="bg-amber-50 text-amber-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-amber-100 shadow-sm">RE: {ext.recarga}</span>}
+                              {ext.ph === "SI" && <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-blue-100 shadow-sm">PH</span>}
+                              {ext.servicioExtra && ext.servicioExtra.split(",").map(s => s.trim()).filter(Boolean).map((s) => (
+                                <span key={s} className="bg-purple-50 text-purple-700 text-[10px] font-black px-2.5 py-1 rounded-md border border-purple-100 shadow-sm">✨ {s}</span>
+                              ))}
+                              {!ext.ma && !ext.recarga && !ext.ph && !ext.servicioExtra && <span className="text-[10px] font-medium text-zinc-400 italic">Sin servicios registrados</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
               <div className="min-h-28 w-full shrink-0" />
             </div>
@@ -661,7 +782,10 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                       <Field label="Agente">
                         <CreatableSelect
                           value={form.agenteExtintor}
-                          onChange={(v) => setForm((p) => ({ ...p, agenteExtintor: v }))}
+                          onChange={(v) => setForm((p) => {
+                            const permitidas = getRecargasPermitidas(v, RECARGAS);
+                            return { ...p, agenteExtintor: v, recarga: permitidas.includes(p.recarga) ? p.recarga : "" };
+                          })}
                           options={AGENTES}
                           placeholder="Seleccionar..."
                           catalogType="agente"
@@ -722,7 +846,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
                   <Field label="Recarga (Seleccione una opción)" className="mt-auto pt-2">
                     <div className="flex flex-col gap-2">
-                      {RECARGAS.map((r) => (
+                      {recargasPermitidas.map((r) => (
                         <button key={r} type="button" onClick={() => setForm((p) => ({ ...p, recarga: p.recarga === r ? "" : r }))} className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${form.recarga === r ? "bg-amber-500 border-amber-400 text-white shadow-md" : "bg-white border-zinc-200 text-zinc-500 hover:border-amber-300"}`}>
                           RE — {r}
                         </button>

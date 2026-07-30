@@ -1,28 +1,13 @@
 import { useState, useEffect } from "react";
 import { COMP_LABELS, MESES } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, DashView } from "./types";
-import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng } from "./utils/helpers";
+import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import {
   EmpresaModal, ExtintorModal, ArchivedModal, UsersModal,
   WhatsappModal, ArchiveModal, DuplicateModal, ObservationModal, WeightSortModal
 } from "./components/modals";
 import { InfoSection, InfoRow, FilterSelect, MetricPanel, ComponentDots } from "./components/ui/DashboardUI";
-
-/* ══════════════════════════════════════════
-   FUNCIONES AUXILIARES
-   ══════════════════════════════════════════ */
-const getWeightInKg = (weightStr: string) => {
-  if (!weightStr || weightStr === "Sin definir") return 999999; // Los vacíos van al final
-  const match = weightStr.match(/([\d.]+)\s*(KG|LBS?|LT|GAL)/i);
-  if (!match) return 999999;
-  const val = parseFloat(match[1]);
-  const unit = match[2].toUpperCase();
-  // 1 Libra = 0.453592 Kilogramos, 1 Galón ≈ 3.785 Litros
-  if (unit.startsWith("LB")) return val * 0.453592;
-  if (unit === "GAL") return val * 3.785;
-  return val;
-};
 
 /* ══════════════════════════════════════════
    NUEVO COMPONENTE: GESTIÓN DE CATÁLOGOS
@@ -35,12 +20,12 @@ function CatalogModal({ isOpen, onClose, catalogs, socket, userRole }: any) {
   const [archivedItems, setArchivedItems] = useState<any[]>([]);
 
   useEffect(() => {
-  if (isOpen && socket) {
-    socket.emit("catalog:deleted:list", { role: userRole }, (res: any) => {
-      if (res?.success) setArchivedItems(res.list);
-    });
-  }
-}, [isOpen, catalogs, socket, userRole]); // Eliminamos showArchived como disparador
+    if (isOpen && socket) {
+      socket.emit("catalog:deleted:list", { role: userRole }, (res: any) => {
+        if (res?.success) setArchivedItems(res.list);
+      });
+    }
+  }, [isOpen, catalogs, socket, userRole]); // Eliminamos showArchived como disparador
 
   if (!isOpen) return null;
 
@@ -63,7 +48,7 @@ function CatalogModal({ isOpen, onClose, catalogs, socket, userRole }: any) {
       else if (activeTab === "motivo_baja") items = catalogs.motivosBaja || [];
       else if (activeTab === "servicio_extra") items = catalogs.serviciosExtra || [];
     }
-    
+
     return [...items].sort((a, b) => (a.value || "").localeCompare(b.value || "", "es"));
   };
 
@@ -106,14 +91,14 @@ function CatalogModal({ isOpen, onClose, catalogs, socket, userRole }: any) {
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-black text-white flex items-center gap-2">📖 Gestión de Catálogos</h3>
             {/* CAMBIO: Solo se muestra si existen archivados para la categoría activa */}
-{archivedItems.some(i => i.type === activeTab) && (
-  <button 
-    onClick={() => setShowArchived(!showArchived)} 
-    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${showArchived ? "bg-red-950/50 border-red-900/50 text-red-400" : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white"}`}
-  >
-    {showArchived ? "Ocultar Archivados" : "Ver Archivados"}
-  </button>
-)}
+            {archivedItems.some(i => i.type === activeTab) && (
+              <button
+                onClick={() => setShowArchived(!showArchived)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${showArchived ? "bg-red-950/50 border-red-900/50 text-red-400" : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white"}`}
+              >
+                {showArchived ? "Ocultar Archivados" : "Ver Archivados"}
+              </button>
+            )}
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors">✕</button>
         </div>
@@ -206,7 +191,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const [saving, setSaving] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
 
-// Modal evidencia fotográfica (múltiples)
+  // Modal evidencia fotográfica (múltiples)
   const [evidenciaModal, setEvidenciaModal] = useState(false);
   const [evidenciaList, setEvidenciaList] = useState<string[]>([]);
   const [evidenciaLoading, setEvidenciaLoading] = useState(false);
@@ -272,6 +257,10 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     socket.on("empresa:data", (data: EmpresaData) => {
       setSelectedEmpresa(data);
       setLoadingDetail(false);
+      // El Dashboard es la fuente del orden: lo cargamos desde la empresa guardada
+      setCustomWeightOrder(data.weightOrder || []);
+      setCustomEstadoOrder(data.estadoOrder || []);
+      setCustomAgenteOrder(data.agenteOrder || []);
     });
 
     socket.on("empresa:data:updated", (data: EmpresaData) => {
@@ -433,6 +422,17 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     });
   };
 
+  const persistOrders = (overrides: Partial<{ weightOrder: string[]; estadoOrder: string[]; agenteOrder: string[] }>) => {
+    if (!socket || !selectedEmpresa?.id) return;
+    socket.emit("empresa:save", {
+      id: selectedEmpresa.id,
+      weightOrder: customWeightOrder,
+      estadoOrder: customEstadoOrder,
+      agenteOrder: customAgenteOrder,
+      ...overrides,
+    });
+  };
+
   const exportExcel = () => {
     if (!socket || !selectedEmpresa?.id) return;
     setExporting(true);
@@ -568,8 +568,14 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     if (!socket || !selectedEmpresa?.id) return;
     setSaving(true);
 
+    // "evidencia" aquí solo trae el flag "__HAS_EVIDENCIA__" (no las fotos reales)
+    // y "evidenciaCount"/"deletedAt" no deben enviarse en la actualización:
+    // "evidenciaCount" no es una columna real de la entidad y provoca que
+    // TypeORM rechace el UPDATE completo (por eso los cambios no se guardaban).
+    const { evidencia, evidenciaCount, deletedAt, ...formSinFlags } = extintorForm as any;
+
     const payload = {
-      ...extintorForm,
+      ...formSinFlags,
       id: selectedEmpresa.id,
       nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim(),
       nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim()
@@ -579,11 +585,13 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       socket.emit("extintor:update", { ...payload, rowIndex: editingRowIndex }, (res: any) => {
         setSaving(false);
         if (res?.success) setExtintorModal(false);
+        else alert(res?.error || "No se pudo actualizar el extintor");
       });
     } else {
       socket.emit("extintor:add", payload, (res: any) => {
         setSaving(false);
         if (res?.success) setExtintorModal(false);
+        else alert(res?.error || "No se pudo guardar el extintor");
       });
     }
   };
@@ -805,74 +813,13 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     return true;
   });
 
-  // Lógica de ordenamiento personalizado por peso
-  // Lógica de ordenamiento múltiple (Estado > Agente > Peso)
-  const sortedExt = [...filteredExt].sort((a, b) => {
-    // 1. Condición (Estado)
-    if (customEstadoOrder.length > 0) {
-      const valA = a.estadoExtintor || "Sin definir";
-      const valB = b.estadoExtintor || "Sin definir";
-      const idxA = customEstadoOrder.indexOf(valA);
-      const idxB = customEstadoOrder.indexOf(valB);
-
-      // Si ambos están en la lista pero son DIFERENTES, ordenamos por estado
-      if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
-      if (idxA !== -1 && idxB === -1) return -1;
-      if (idxB !== -1 && idxA === -1) return 1;
-      // Si son iguales (idxA === idxB), dejamos que pase al siguiente criterio (Agente)
-    }
-
-    // 2. Tipo (Agente Extintor)
-    if (customAgenteOrder.length > 0) {
-      const valA = a.agenteExtintor || "Sin definir";
-      const valB = b.agenteExtintor || "Sin definir";
-      const idxA = customAgenteOrder.indexOf(valA);
-      const idxB = customAgenteOrder.indexOf(valB);
-
-      if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
-      if (idxA !== -1 && idxB === -1) return -1;
-      if (idxB !== -1 && idxA === -1) return 1;
-    }
-
-    // 3. Capacidad (Peso)
-    if (customWeightOrder.length > 0) {
-      const valA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
-      const valB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
-      const idxA = customWeightOrder.indexOf(valA);
-      const idxB = customWeightOrder.indexOf(valB);
-
-      if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
-      if (idxA !== -1 && idxB === -1) return -1;
-      if (idxB !== -1 && idxA === -1) return 1;
-    }
-
-    // 4. Marca (Agrupado por cantidad dentro del mismo peso, de menor a mayor)
-    const pA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
-    const mA = a.marca || "Sin definir";
-    const pB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
-    const mB = b.marca || "Sin definir";
-
-    const countA = marcaPesoCounts[`${pA}|${mA}`] || 0;
-    const countB = marcaPesoCounts[`${pB}|${mB}`] || 0;
-
-    // Ordenar por cantidad (ascendente: los de menor cantidad primero)
-    if (countA !== countB) return countA - countB;
-
-    // Desempate: Si tienen exactamente la misma cantidad, ordenar alfabéticamente por marca
-    if (mA !== mB) return mA.localeCompare(mB, "es");
-
-    // 5. Último criterio: Alfabetización ascendente por N° Serie
-    const serieA = (a.nSerie || "").trim().toUpperCase();
-    const serieB = (b.nSerie || "").trim().toUpperCase();
-    if (serieA !== serieB) return serieA.localeCompare(serieB, "es");
-
-    // 6. Si la serie es igual, desempatar por N° Interno
-    const internoA = (a.nInterno || "").trim().toUpperCase();
-    const internoB = (b.nInterno || "").trim().toUpperCase();
-    if (internoA !== internoB) return internoA.localeCompare(internoB, "es");
-
-    return 0;
-  });
+  const sortedExt = sortExtintoresPersonalizado(
+    filteredExt,
+    customWeightOrder,
+    customEstadoOrder,
+    customAgenteOrder,
+    extintores // conteos de marca+peso siempre sobre la lista completa, igual que antes
+  );
 
   const totalExtintores = extintores.length;
   const hasFilters = !!(fMarca || fAgente || fEstado || fServicio || fComponente);
@@ -1464,21 +1411,21 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
           onClose={() => setEstadoOrderModal(false)}
           availableWeights={estadoCounts.map(([v]) => v)} // Usamos estadoCounts
           currentOrder={customEstadoOrder}
-          onSave={(newOrder) => { setCustomEstadoOrder(newOrder); setEstadoOrderModal(false); }}
+          onSave={(newOrder) => { setCustomEstadoOrder(newOrder); setEstadoOrderModal(false); persistOrders({ estadoOrder: newOrder }); }}
         />
         <WeightSortModal
           isOpen={agenteOrderModal}
           onClose={() => setAgenteOrderModal(false)}
           availableWeights={agenteCounts.map(([v]) => v)} // Usamos agenteCounts
           currentOrder={customAgenteOrder}
-          onSave={(newOrder) => { setCustomAgenteOrder(newOrder); setAgenteOrderModal(false); }}
+          onSave={(newOrder) => { setCustomAgenteOrder(newOrder); setAgenteOrderModal(false); persistOrders({ agenteOrder: newOrder }); }}
         />
         <WeightSortModal
           isOpen={weightOrderModal}
           onClose={() => setWeightOrderModal(false)}
           availableWeights={Object.keys(pesoCounts)}
           currentOrder={customWeightOrder}
-          onSave={(newOrder) => { setCustomWeightOrder(newOrder); setWeightOrderModal(false); }}
+          onSave={(newOrder) => { setCustomWeightOrder(newOrder); setWeightOrderModal(false); persistOrders({ weightOrder: newOrder }); }}
         />
 
         {/* ════ MODAL: EVIDENCIA FOTOGRÁFICA (MÚLTIPLE) ════ */}
