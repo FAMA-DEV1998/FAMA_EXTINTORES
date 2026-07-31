@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS, DISTRITOS_LIMA } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, FormData, WorkerView as View } from "./types";
-import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio } from "./utils/helpers";
+import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio, getCamposFaltantes } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import { Card, Field, Toggle, SiNo, inputCls } from "./components/ui/WorkerUI";
 import { CreatableSelect } from "./components/ui/CreatableSelect";
@@ -696,8 +696,11 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                           {/* Cuerpo de Tarjeta */}
                           <div className="px-5 py-5 flex flex-col gap-3 flex-1">
                             {esExtintorIncompleto(ext) && (
-                              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold">
-                                ⚠️ Información incompleta
+                              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold">
+                                <span className="shrink-0">⚠️</span>
+                                <span className="leading-snug">
+                                  Falta: {getCamposFaltantes(ext).join(", ")}
+                                </span>
                               </div>
                             )}
                             <div className="grid grid-cols-2 gap-x-4 gap-y-3">

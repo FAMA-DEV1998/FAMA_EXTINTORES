@@ -174,6 +174,26 @@ export const esExtintorIncompleto = (ext: Extintor): boolean => {
 };
 
 /**
+ * Devuelve la lista de campos faltantes de un extintor, para mostrarlos en la
+ * tarjeta (ej.: ["Marca", "Peso"]). Usa la misma regla que esExtintorIncompleto
+ * (Servicio solo se exige si el Estado permite registrar servicios).
+ */
+export const getCamposFaltantes = (ext: Extintor): string[] => {
+    const faltantes: string[] = [];
+
+    if (!ext.marca || !ext.marca.trim()) faltantes.push("Marca");
+    if (!ext.agenteExtintor || !ext.agenteExtintor.trim()) faltantes.push("Agente");
+    if (!ext.peso || !String(ext.peso).trim()) faltantes.push("Peso");
+
+    const serviceRequerido = !estadoBloqueaServicio(ext.estadoExtintor || "");
+    if (serviceRequerido && ext.ma !== "SI" && ext.ph !== "SI" && !ext.recarga) {
+        faltantes.push("Servicio");
+    }
+
+    return faltantes;
+};
+
+/**
  * Ordena una lista de extintores replicando EXACTAMENTE el criterio del Dashboard:
  * Estado > Agente > Peso > Marca (agrupada por cantidad) > N° Serie > N° Interno.
  * El Dashboard es la fuente de la verdad: los arreglos weightOrder/estadoOrder/agenteOrder
