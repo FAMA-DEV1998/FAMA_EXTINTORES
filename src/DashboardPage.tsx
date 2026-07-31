@@ -580,9 +580,10 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       id: selectedEmpresa.id,
       nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim().toUpperCase(),
       nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase(),
-      ma: bloqueado ? "" : extintorForm.ma,
+       ma: bloqueado ? "" : extintorForm.ma,
       ph: bloqueado ? "" : extintorForm.ph,
       recarga: bloqueado ? "" : extintorForm.recarga,
+      servicioExtra: bloqueado ? "" : extintorForm.servicioExtra,
     };
 
     if (editingRowIndex !== null) {

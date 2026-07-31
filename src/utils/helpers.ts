@@ -1,5 +1,5 @@
 import type { FormData, EmpresaData, Extintor } from "../types";
-import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO } from "../constants/extintores";
+import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH } from "../constants/extintores";
 
 export const emptyForm = (): FormData => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "",
@@ -52,11 +52,6 @@ export const downloadBase64 = (b64: string, fileName: string, mimeType: string) 
     URL.revokeObjectURL(url);
 };
 
-/**
- * Comprime una imagen capturada de la cámara a JPEG de baja calidad/tamaño.
- * Devuelve un base64 string (sin el prefijo data:image/...).
- * maxWidth controla la resolución máxima. quality controla la calidad JPEG (0-1).
- */
 export const compressImage = (
     file: File | Blob,
     maxWidth = 800,
@@ -96,9 +91,6 @@ export const compressImage = (
     });
 };
 
-/**
- * Convierte un base64 JPEG comprimido a PNG para descarga de alta calidad.
- */
 export const downloadEvidenciaAsPng = (b64Jpeg: string, fileName: string) => {
     const img = new Image();
     img.onload = () => {
@@ -121,10 +113,6 @@ export const downloadEvidenciaAsPng = (b64Jpeg: string, fileName: string) => {
     img.src = `data:image/jpeg;base64,${b64Jpeg}`;
 };
 
-/**
- * Convierte un string de peso ("25 KG", "10 LB", etc.) a su equivalente en KG
- * para poder compararlos numéricamente.
- */
 export const getWeightInKg = (weightStr: string) => {
     if (!weightStr || weightStr === "Sin definir") return 999999; // Los vacíos van al final
     const match = weightStr.match(/([\d.]+)\s*(KG|LBS?|LT|GAL)/i);
@@ -136,48 +124,35 @@ export const getWeightInKg = (weightStr: string) => {
     return val;
 };
 
-/**
- * Devuelve la prioridad de un estado según el orden lógico por defecto
- * (Aprobado > Nuevo > Garantía > De Baja). Estados no reconocidos van al final.
- * Es el equivalente de getWeightInKg pero para Estado.
- */
 export const getEstadoPrioridad = (estado: string) => {
     const idx = ESTADO_ORDEN_DEFAULT.indexOf(estado);
     return idx === -1 ? 999 : idx;
 };
 
-/**
- * Indica si, dado el Estado del extintor, no se permite registrar ningún servicio
- * (MA, PH o Recarga). La lista de estados restringidos es configurable en
- * constants/extintores.ts (ESTADOS_SIN_SERVICIO).
- */
 export const estadoBloqueaServicio = (estado: string): boolean => {
     return ESTADOS_SIN_SERVICIO.includes(estado);
 };
 
-/**
- * Indica si un extintor tiene información incompleta: sin Marca, sin Agente,
- * sin Peso, o sin ningún Servicio registrado (MA, PH o Recarga).
- */
+export const estadoRequiereDatosPH = (estado: string): boolean => {
+    return ESTADOS_REQUIEREN_DATOS_PH.includes(estado);
+};
+
 export const esExtintorIncompleto = (ext: Extintor): boolean => {
     const sinMarca = !ext.marca || !ext.marca.trim();
     const sinAgente = !ext.agenteExtintor || !ext.agenteExtintor.trim();
     const sinPeso = !ext.peso || !String(ext.peso).trim();
 
-    // El Servicio Realizado solo es obligatorio cuando el Estado permite registrar
-    // servicios. Si el estado está en ESTADOS_SIN_SERVICIO (configurable), no se
-    // exige y no cuenta como información incompleta.
     const serviceRequerido = !estadoBloqueaServicio(ext.estadoExtintor || "");
     const sinServicio = serviceRequerido && ext.ma !== "SI" && ext.ph !== "SI" && !ext.recarga;
 
-    return sinMarca || sinAgente || sinPeso || sinServicio;
+    const datosPHRequeridos = estadoRequiereDatosPH(ext.estadoExtintor || "");
+    const sinFabricacion = datosPHRequeridos && (!ext.fechaFabricacion || !ext.fechaFabricacion.trim());
+    const sinRealizadoPH = datosPHRequeridos && (!ext.realizadoPH || !ext.realizadoPH.trim());
+    const sinVencimPH = datosPHRequeridos && (!ext.vencimPH || !ext.vencimPH.trim());
+
+    return sinMarca || sinAgente || sinPeso || sinServicio || sinFabricacion || sinRealizadoPH || sinVencimPH;
 };
 
-/**
- * Devuelve la lista de campos faltantes de un extintor, para mostrarlos en la
- * tarjeta (ej.: ["Marca", "Peso"]). Usa la misma regla que esExtintorIncompleto
- * (Servicio solo se exige si el Estado permite registrar servicios).
- */
 export const getCamposFaltantes = (ext: Extintor): string[] => {
     const faltantes: string[] = [];
 
@@ -190,19 +165,16 @@ export const getCamposFaltantes = (ext: Extintor): string[] => {
         faltantes.push("Servicio");
     }
 
+    const datosPHRequeridos = estadoRequiereDatosPH(ext.estadoExtintor || "");
+    if (datosPHRequeridos) {
+        if (!ext.fechaFabricacion || !ext.fechaFabricacion.trim()) faltantes.push("Fabricación");
+        if (!ext.realizadoPH || !ext.realizadoPH.trim()) faltantes.push("PH Realizado");
+        if (!ext.vencimPH || !ext.vencimPH.trim()) faltantes.push("Vence PH");
+    }
+
     return faltantes;
 };
 
-/**
- * Ordena una lista de extintores replicando EXACTAMENTE el criterio del Dashboard:
- * Estado > Agente > Peso > Marca (agrupada por cantidad) > N° Serie > N° Interno.
- * El Dashboard es la fuente de la verdad: los arreglos weightOrder/estadoOrder/agenteOrder
- * se guardan en la Empresa y deben aplicarse igual en Workers.
- *
- * @param list Lista a ordenar (puede venir ya filtrada por búsqueda)
- * @param countsSourceList Lista sobre la que se calculan los conteos marca+peso
- *        (usar SIEMPRE la lista completa de extintores de la empresa, no la filtrada)
- */
 export const sortExtintoresPersonalizado = (
     list: Extintor[],
     weightOrder: string[] = [],
@@ -271,13 +243,6 @@ export const sortExtintoresPersonalizado = (
     });
 };
 
-/**
- * Devuelve las opciones de Recarga permitidas según el Agente seleccionado:
- * - Agente = PQS  → solo recargas con porcentaje (ej. "75% NACIONAL", "90% UL")
- * - Agente ≠ PQS  → solo recargas sin porcentaje (ej. "OTROS")
- * Se basa en si el valor del catálogo contiene un dígito, para funcionar
- * dinámicamente sin importar el texto exacto configurado en el catálogo.
- */
 export const getRecargasPermitidas = (agenteExtintor: string, recargasDisponibles: string[]): string[] => {
     const esPQS = (agenteExtintor || "").trim().toUpperCase() === "PQS";
     return recargasDisponibles.filter((r) => {

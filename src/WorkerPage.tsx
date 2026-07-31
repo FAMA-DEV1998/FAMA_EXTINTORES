@@ -199,7 +199,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
       ma: bloqueado ? "" : (form.ma ? "SI" : ""),
       ph: bloqueado ? "" : (form.ph ? "SI" : ""),
       recarga: bloqueado ? "" : form.recarga,
-      servicioExtra: form.servicioExtra, motivoBaja: form.motivoBaja,
+      servicioExtra: bloqueado ? "" : form.servicioExtra, motivoBaja: form.motivoBaja,
       evidencia: JSON.stringify(evidencias || []),
     };
     if (editingRow !== null) {
@@ -631,13 +631,15 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSoloIncompletos((v) => !v)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all active:scale-95 ${soloIncompletos ? "bg-amber-50 border-amber-500 text-amber-700" : "bg-zinc-50 border-zinc-200 text-zinc-400"}`}
-                      >
-                        ⚠️ Solo incompletos{incompletosCount > 0 ? ` (${incompletosCount})` : ""}
-                      </button>
+                      {incompletosCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSoloIncompletos((v) => !v)}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all active:scale-95 ${soloIncompletos ? "bg-amber-50 border-amber-500 text-amber-700" : "bg-zinc-50 border-zinc-200 text-zinc-400"}`}
+                        >
+                          ⚠️ Solo incompletos ({incompletosCount})
+                        </button>
+                      )}
                       {(fMarca || fAgente || fPeso || fEstado || soloIncompletos) && (
                         <button
                           type="button"
@@ -816,7 +818,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                         <select className={inputCls} value={form.estadoExtintor} onChange={(e) => setForm((p) => {
                           const nuevoEstado = e.target.value;
                           if (estadoBloqueaServicio(nuevoEstado)) {
-                            return { ...p, estadoExtintor: nuevoEstado, ma: false, ph: false, recarga: "" };
+                            return { ...p, estadoExtintor: nuevoEstado, ma: false, ph: false, recarga: "", servicioExtra: "" };
                           }
                           return { ...p, estadoExtintor: nuevoEstado };
                         })}>
@@ -920,19 +922,25 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
               <Card title="✨ Servicio Extra">
                 <div className="flex flex-col h-full">
-                  <MultiSelect
-                    selected={form.servicioExtra.split(",").map(v => v.trim()).filter(Boolean)}
-                    onChange={(vals) => {
-                      const extra = vals.map((v) => v.toUpperCase().trim()).join(", ");
-                      setForm((p) => ({ ...p, servicioExtra: extra }));
-                    }}
-                    options={SERVICIOS_EXTRA}
-                    label="Servicios adicionales"
-                    catalogType="servicio_extra"
-                    socket={socket}
-                    userRole={user.role}
-                    className={inputCls}
-                  />
+                  {servicioBloqueado ? (
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-100 border-2 border-zinc-200 text-zinc-500 text-sm font-bold">
+                      🚫 El estado "{form.estadoExtintor}" no permite registrar servicios
+                    </div>
+                  ) : (
+                    <MultiSelect
+                      selected={form.servicioExtra.split(",").map(v => v.trim()).filter(Boolean)}
+                      onChange={(vals) => {
+                        const extra = vals.map((v) => v.toUpperCase().trim()).join(", ");
+                        setForm((p) => ({ ...p, servicioExtra: extra }));
+                      }}
+                      options={SERVICIOS_EXTRA}
+                      label="Servicios adicionales"
+                      catalogType="servicio_extra"
+                      socket={socket}
+                      userRole={user.role}
+                      className={inputCls}
+                    />
+                  )}
                 </div>
               </Card>
             </div>

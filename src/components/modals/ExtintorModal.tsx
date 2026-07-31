@@ -34,8 +34,8 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                 const permitidas = getRecargasPermitidas(v, recargas);
                 if (p.recarga && !permitidas.includes(p.recarga)) next.recarga = "";
             }
-            if (k === "estadoExtintor" && estadoBloqueaServicio(v)) {
-                next.ma = ""; next.ph = ""; next.recarga = "";
+             if (k === "estadoExtintor" && estadoBloqueaServicio(v)) {
+                next.ma = ""; next.ph = ""; next.recarga = ""; next.servicioExtra = "";
             }
             return next;
         });
@@ -174,19 +174,25 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
 
                     {/* Servicio Extra */}
                     <ModalSection title="🔧 Servicio Extra">
-                        <MultiSelect
-                            selected={(form.servicioExtra || "").split(",").map(v => v.trim()).filter(Boolean)}
-                            onChange={(vals) => {
-                                const extra = vals.map((v) => v.toUpperCase().trim()).join(", ");
-                                setForm((p) => ({ ...p, servicioExtra: extra }));
-                            }}
-                            options={serviciosExtra}
-                            label="Servicios adicionales"
-                            catalogType="servicio_extra"
-                            socket={socket}
-                            userRole={userRole}
-                            className={modalInput}
-                        />
+                        {servicioBloqueado ? (
+                            <div className="px-3 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-400 text-sm font-semibold">
+                                🚫 El estado "{form.estadoExtintor}" no permite registrar servicios
+                            </div>
+                        ) : (
+                            <MultiSelect
+                                selected={(form.servicioExtra || "").split(",").map(v => v.trim()).filter(Boolean)}
+                                onChange={(vals) => {
+                                    const extra = vals.map((v) => v.toUpperCase().trim()).join(", ");
+                                    setForm((p) => ({ ...p, servicioExtra: extra }));
+                                }}
+                                options={serviciosExtra}
+                                label="Servicios adicionales"
+                                catalogType="servicio_extra"
+                                socket={socket}
+                                userRole={userRole}
+                                className={modalInput}
+                            />
+                        )}
                     </ModalSection>
 
                     {/* Componentes */}
