@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { COMP_LABELS, MESES } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, DashView } from "./types";
-import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado, getEstadoPrioridad } from "./utils/helpers";
+import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado, getEstadoPrioridad, estadoBloqueaServicio } from "./utils/helpers"; 
 import { useSocket } from "./hooks/useSocket";
 import {
   EmpresaModal, ExtintorModal, ArchivedModal, UsersModal,
@@ -573,12 +573,16 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     // "evidenciaCount" no es una columna real de la entidad y provoca que
     // TypeORM rechace el UPDATE completo (por eso los cambios no se guardaban).
     const { evidencia, evidenciaCount, deletedAt, ...formSinFlags } = extintorForm as any;
+    const bloqueado = estadoBloqueaServicio(extintorForm.estadoExtintor || "");
 
     const payload = {
       ...formSinFlags,
       id: selectedEmpresa.id,
       nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim().toUpperCase(),
-      nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase()
+      nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase(),
+      ma: bloqueado ? "" : extintorForm.ma,
+      ph: bloqueado ? "" : extintorForm.ph,
+      recarga: bloqueado ? "" : extintorForm.recarga,
     };
 
     if (editingRowIndex !== null) {

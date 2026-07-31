@@ -1,7 +1,7 @@
 import type { Extintor } from "../../types";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS } from "../../constants";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
-import { getRecargasPermitidas } from "../../utils/helpers";
+import { getRecargasPermitidas, estadoBloqueaServicio } from "../../utils/helpers";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import type { Socket } from "socket.io-client";
@@ -34,11 +34,15 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                 const permitidas = getRecargasPermitidas(v, recargas);
                 if (p.recarga && !permitidas.includes(p.recarga)) next.recarga = "";
             }
+            if (k === "estadoExtintor" && estadoBloqueaServicio(v)) {
+                next.ma = ""; next.ph = ""; next.recarga = "";
+            }
             return next;
         });
     };
 
     const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor || "", recargas);
+    const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor || "");
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -52,7 +56,7 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                     {/* Datos Principales */}
                     <ModalSection title="🧯 Datos Principales">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                             <ModalField label="N° Serie"><input className={modalInput} value={form.nSerie || ""} onChange={(e) => setEF("nSerie", e.target.value.toUpperCase())} placeholder="Serie" /></ModalField>
+                            <ModalField label="N° Serie"><input className={modalInput} value={form.nSerie || ""} onChange={(e) => setEF("nSerie", e.target.value.toUpperCase())} placeholder="Serie" /></ModalField>
                             <ModalField label="N° Interno"><input className={modalInput} value={form.nInterno || ""} onChange={(e) => setEF("nInterno", e.target.value.toUpperCase())} placeholder="Interno" /></ModalField>
                             <CreatableSelect
                                 value={form.marca || ""}
@@ -133,29 +137,38 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                     {/* Servicio Realizado */}
                     <ModalSection title="🔧 Servicio Realizado">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                            <ModalField label="Tipo">
-                                <div className="flex gap-2">
-                                    <button type="button" onClick={() => setForm((p) => {
-                                        const next = p.ma === "SI" ? "" : "SI";
-                                        // Mantenimiento es excluyente con PH y con Recarga
-                                        return next === "SI" ? { ...p, ma: "SI", ph: "", recarga: "" } : { ...p, ma: "" };
-                                    })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ma === "SI" ? "bg-red-700 border-red-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Mantenimiento</button>
-                                    <button type="button" onClick={() => setForm((p) => {
-                                        const next = p.ph === "SI" ? "" : "SI";
-                                        return next === "SI" ? { ...p, ph: "SI", ma: "" } : { ...p, ph: "" };
-                                    })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ph === "SI" ? "bg-blue-700 border-blue-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Prueba Hidrostatica (P.H)</button>
-                                </div>
-                            </ModalField>
-                            <ModalField label="Recarga">
-                                <div className="flex flex-col gap-1.5">
-                                    {recargasPermitidas.map((r) => (
-                                        <button key={r} type="button" onClick={() => setForm((p) => {
-                                            const nextRecarga = p.recarga === r ? "" : r;
-                                            return nextRecarga ? { ...p, recarga: nextRecarga, ma: "" } : { ...p, recarga: "" };
-                                        })} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold ${form.recarga === r ? "bg-amber-600 border-amber-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>RE — {r}</button>
-                                    ))}
-                                </div>
-                            </ModalField>
+                            {servicioBloqueado ? (
+                                <ModalField label="Servicio">
+                                    <div className="px-3 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-400 text-sm font-semibold">
+                                        🚫 El estado "{form.estadoExtintor}" no permite registrar servicios
+                                    </div>
+                                </ModalField>
+                            ) : (
+                                <>
+                                    <ModalField label="Tipo">
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => setForm((p) => {
+                                                const next = p.ma === "SI" ? "" : "SI";
+                                                return next === "SI" ? { ...p, ma: "SI", ph: "", recarga: "" } : { ...p, ma: "" };
+                                            })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ma === "SI" ? "bg-red-700 border-red-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Mantenimiento</button>
+                                            <button type="button" onClick={() => setForm((p) => {
+                                                const next = p.ph === "SI" ? "" : "SI";
+                                                return next === "SI" ? { ...p, ph: "SI", ma: "" } : { ...p, ph: "" };
+                                            })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ph === "SI" ? "bg-blue-700 border-blue-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Prueba Hidrostatica (P.H)</button>
+                                        </div>
+                                    </ModalField>
+                                    <ModalField label="Recarga">
+                                        <div className="flex flex-col gap-1.5">
+                                            {recargasPermitidas.map((r) => (
+                                                <button key={r} type="button" onClick={() => setForm((p) => {
+                                                    const nextRecarga = p.recarga === r ? "" : r;
+                                                    return nextRecarga ? { ...p, recarga: nextRecarga, ma: "" } : { ...p, recarga: "" };
+                                                })} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold ${form.recarga === r ? "bg-amber-600 border-amber-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>RE — {r}</button>
+                                            ))}
+                                        </div>
+                                    </ModalField>
+                                </>
+                            )}
                         </div>
                     </ModalSection>
 

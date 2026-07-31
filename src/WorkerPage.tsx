@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS, DISTRITOS_LIMA } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, FormData, WorkerView as View } from "./types";
-import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas } from "./utils/helpers";
+import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import { Card, Field, Toggle, SiNo, inputCls } from "./components/ui/WorkerUI";
 import { CreatableSelect } from "./components/ui/CreatableSelect";
@@ -38,6 +38,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
   const [fAgente, setFAgente] = useState("");
   const [fPeso, setFPeso] = useState("");
   const [fEstado, setFEstado] = useState("");
+  const [soloIncompletos, setSoloIncompletos] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
@@ -190,11 +191,15 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     if (!socket || !activeId) return;
     setSaving(true);
     const { evidencias, ...formWithoutEvidencias } = form;
+    const bloqueado = estadoBloqueaServicio(form.estadoExtintor);
     const payload = {
       ...formWithoutEvidencias, id: activeId,
       nSerie: form.nSerie.trim() === "" ? "S/N" : form.nSerie.trim().toUpperCase(),
       nInterno: form.nInterno.trim().toUpperCase(),
-      ma: form.ma ? "SI" : "", ph: form.ph ? "SI" : "", servicioExtra: form.servicioExtra, motivoBaja: form.motivoBaja,
+      ma: bloqueado ? "" : (form.ma ? "SI" : ""),
+      ph: bloqueado ? "" : (form.ph ? "SI" : ""),
+      recarga: bloqueado ? "" : form.recarga,
+      servicioExtra: form.servicioExtra, motivoBaja: form.motivoBaja,
       evidencia: JSON.stringify(evidencias || []),
     };
     if (editingRow !== null) {
@@ -309,9 +314,12 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
       if (excluir !== "agente" && fAgente && (e.agenteExtintor || "") !== fAgente) return false;
       if (excluir !== "peso" && fPeso && (e.peso ? `${e.peso} ${e.unidadPeso}` : "") !== fPeso) return false;
       if (excluir !== "estado" && fEstado && (e.estadoExtintor || "") !== fEstado) return false;
+      if (soloIncompletos && !esExtintorIncompleto(e)) return false;
       return true;
     });
   };
+
+  const incompletosCount = extintores.filter(esExtintorIncompleto).length;
 
   const marcasDisponibles = [...new Set(extintoresSegunFiltros("marca").map((e) => e.marca).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   const agentesDisponibles = [...new Set(extintoresSegunFiltros("agente").map((e) => e.agenteExtintor).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
@@ -345,6 +353,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
   // Recargas permitidas según el agente elegido en el formulario
   const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor, RECARGAS);
+  const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor);
 
   return (
     <div className="app-workers flex flex-col h-dvh w-full bg-zinc-50/50 shadow-2xl relative" style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
@@ -619,11 +628,21 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                         <option value="">Estado (todos)</option>
                         {estadosDisponibles.map((es) => <option key={es} value={es}>{es}</option>)}
                       </select>
-                      {(fMarca || fAgente || fPeso || fEstado) && (
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSoloIncompletos((v) => !v)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all active:scale-95 ${soloIncompletos ? "bg-amber-50 border-amber-500 text-amber-700" : "bg-zinc-50 border-zinc-200 text-zinc-400"}`}
+                      >
+                        ⚠️ Solo incompletos{incompletosCount > 0 ? ` (${incompletosCount})` : ""}
+                      </button>
+                      {(fMarca || fAgente || fPeso || fEstado || soloIncompletos) && (
                         <button
                           type="button"
-                          onClick={() => { setFMarca(""); setFAgente(""); setFPeso(""); setFEstado(""); }}
-                          className="col-span-2 md:col-span-4 text-xs font-bold text-red-600 hover:text-red-700 text-left px-1"
+                          onClick={() => { setFMarca(""); setFAgente(""); setFPeso(""); setFEstado(""); setSoloIncompletos(false); }}
+                          className="text-xs font-bold text-red-600 hover:text-red-700 px-1"
                         >
                           ✕ Limpiar filtros
                         </button>
@@ -676,6 +695,11 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
                           {/* Cuerpo de Tarjeta */}
                           <div className="px-5 py-5 flex flex-col gap-3 flex-1">
+                            {esExtintorIncompleto(ext) && (
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold">
+                                ⚠️ Información incompleta
+                              </div>
+                            )}
                             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                               <div className="flex flex-col gap-0.5">
                                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Marca</span>
@@ -786,7 +810,13 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                   <div className="flex flex-col gap-5">
                     <div className="flex flex-col gap-4">
                       <Field label="Estado">
-                        <select className={inputCls} value={form.estadoExtintor} onChange={setF("estadoExtintor")}>
+                        <select className={inputCls} value={form.estadoExtintor} onChange={(e) => setForm((p) => {
+                          const nuevoEstado = e.target.value;
+                          if (estadoBloqueaServicio(nuevoEstado)) {
+                            return { ...p, estadoExtintor: nuevoEstado, ma: false, ph: false, recarga: "" };
+                          }
+                          return { ...p, estadoExtintor: nuevoEstado };
+                        })}>
                           <option value="">Seleccionar...</option>
                           {ESTADOS.map((o) => <option key={o}>{o}</option>)}
                         </select>
@@ -853,28 +883,35 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
             <div className="grid grid-cols-2 md:grid-cols-2 gap-6 items-stretch">
               <Card title="🔧 Servicio Realizado">
                 <div className="flex flex-col gap-4 h-full">
-                  <Toggle checked={form.ma} label="MA — Mantenimiento" onChange={() => setForm((p) => {
-                    const next = !p.ma;
-                    // Mantenimiento es excluyente con PH y con Recarga
-                    return next ? { ...p, ma: true, ph: false, recarga: "" } : { ...p, ma: false };
-                  })} />
-                  <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => {
-                    const next = !p.ph;
-                    return next ? { ...p, ph: true, ma: false } : { ...p, ph: false };
-                  })} />
-
-                  <Field label="Recarga (Seleccione una opción)" className="mt-auto pt-2">
-                    <div className="flex flex-col gap-2">
-                      {recargasPermitidas.map((r) => (
-                        <button key={r} type="button" onClick={() => setForm((p) => {
-                          const nextRecarga = p.recarga === r ? "" : r;
-                          return nextRecarga ? { ...p, recarga: nextRecarga, ma: false } : { ...p, recarga: "" };
-                        })} className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${form.recarga === r ? "bg-amber-500 border-amber-400 text-white shadow-md" : "bg-white border-zinc-200 text-zinc-500 hover:border-amber-300"}`}>
-                          RE — {r}
-                        </button>
-                      ))}
+                  {servicioBloqueado ? (
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-100 border-2 border-zinc-200 text-zinc-500 text-sm font-bold">
+                      🚫 El estado "{form.estadoExtintor}" no permite registrar servicios
                     </div>
-                  </Field>
+                  ) : (
+                    <>
+                      <Toggle checked={form.ma} label="MA — Mantenimiento" onChange={() => setForm((p) => {
+                        const next = !p.ma;
+                        return next ? { ...p, ma: true, ph: false, recarga: "" } : { ...p, ma: false };
+                      })} />
+                      <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => {
+                        const next = !p.ph;
+                        return next ? { ...p, ph: true, ma: false } : { ...p, ph: false };
+                      })} />
+
+                      <Field label="Recarga (Seleccione una opción)" className="mt-auto pt-2">
+                        <div className="flex flex-col gap-2">
+                          {recargasPermitidas.map((r) => (
+                            <button key={r} type="button" onClick={() => setForm((p) => {
+                              const nextRecarga = p.recarga === r ? "" : r;
+                              return nextRecarga ? { ...p, recarga: nextRecarga, ma: false } : { ...p, recarga: "" };
+                            })} className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${form.recarga === r ? "bg-amber-500 border-amber-400 text-white shadow-md" : "bg-white border-zinc-200 text-zinc-500 hover:border-amber-300"}`}>
+                              RE — {r}
+                            </button>
+                          ))}
+                        </div>
+                      </Field>
+                    </>
+                  )}
                 </div>
               </Card>
 

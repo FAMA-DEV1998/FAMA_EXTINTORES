@@ -1,5 +1,5 @@
 import type { FormData, EmpresaData, Extintor } from "../types";
-import { ESTADO_ORDEN_DEFAULT } from "../constants/extintores";
+import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO } from "../constants/extintores";
 
 export const emptyForm = (): FormData => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "",
@@ -144,6 +144,33 @@ export const getWeightInKg = (weightStr: string) => {
 export const getEstadoPrioridad = (estado: string) => {
     const idx = ESTADO_ORDEN_DEFAULT.indexOf(estado);
     return idx === -1 ? 999 : idx;
+};
+
+/**
+ * Indica si, dado el Estado del extintor, no se permite registrar ningún servicio
+ * (MA, PH o Recarga). La lista de estados restringidos es configurable en
+ * constants/extintores.ts (ESTADOS_SIN_SERVICIO).
+ */
+export const estadoBloqueaServicio = (estado: string): boolean => {
+    return ESTADOS_SIN_SERVICIO.includes(estado);
+};
+
+/**
+ * Indica si un extintor tiene información incompleta: sin Marca, sin Agente,
+ * sin Peso, o sin ningún Servicio registrado (MA, PH o Recarga).
+ */
+export const esExtintorIncompleto = (ext: Extintor): boolean => {
+    const sinMarca = !ext.marca || !ext.marca.trim();
+    const sinAgente = !ext.agenteExtintor || !ext.agenteExtintor.trim();
+    const sinPeso = !ext.peso || !String(ext.peso).trim();
+
+    // El Servicio Realizado solo es obligatorio cuando el Estado permite registrar
+    // servicios. Si el estado está en ESTADOS_SIN_SERVICIO (configurable), no se
+    // exige y no cuenta como información incompleta.
+    const serviceRequerido = !estadoBloqueaServicio(ext.estadoExtintor || "");
+    const sinServicio = serviceRequerido && ext.ma !== "SI" && ext.ph !== "SI" && !ext.recarga;
+
+    return sinMarca || sinAgente || sinPeso || sinServicio;
 };
 
 /**
