@@ -1,5 +1,5 @@
 import type { FormData, EmpresaData, Extintor } from "../types";
-import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH } from "../constants/extintores";
+import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH, ESTADOS_SIN_SERVICIO_EXTRA } from "../constants/extintores";
 
 export const emptyForm = (): FormData => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "",
@@ -131,6 +131,10 @@ export const getEstadoPrioridad = (estado: string) => {
 
 export const estadoBloqueaServicio = (estado: string): boolean => {
     return ESTADOS_SIN_SERVICIO.includes(estado);
+};
+
+export const estadoBloqueaServicioExtra = (estado: string): boolean => {
+    return ESTADOS_SIN_SERVICIO_EXTRA.includes(estado);
 };
 
 export const estadoRequiereDatosPH = (estado: string): boolean => {

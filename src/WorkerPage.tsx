@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS, DISTRITOS_LIMA } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, FormData, WorkerView as View } from "./types";
-import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio, getCamposFaltantes } from "./utils/helpers";
+import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio, getCamposFaltantes, estadoBloqueaServicioExtra } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import { Card, Field, Toggle, SiNo, inputCls } from "./components/ui/WorkerUI";
 import { CreatableSelect } from "./components/ui/CreatableSelect";
@@ -89,7 +89,6 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
         setView("form");
 
-        // Limpiar backup después de restaurar
         clearFormBackup();
 
         showToast("Formulario restaurado ✓");
@@ -99,8 +98,6 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     } catch {
       clearFormBackup();
     }
-    // Solo al montar el componente
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   const showToast = (msg: string, type: "ok" | "err" = "ok") => {
@@ -199,7 +196,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
       ma: bloqueado ? "" : (form.ma ? "SI" : ""),
       ph: bloqueado ? "" : (form.ph ? "SI" : ""),
       recarga: bloqueado ? "" : form.recarga,
-      servicioExtra: bloqueado ? "" : form.servicioExtra, motivoBaja: form.motivoBaja,
+      servicioExtra: estadoBloqueaServicioExtra(form.estadoExtintor) ? "" : form.servicioExtra, motivoBaja: form.motivoBaja,
       evidencia: JSON.stringify(evidencias || []),
     };
     if (editingRow !== null) {
@@ -246,8 +243,6 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
       setView("form");
     };
 
-    // Si tiene evidencia, cargarla del servidor
-    // Si tiene evidencia, cargarla del servidor
     if (ext.evidencia === "__HAS_EVIDENCIA__" && socket) {
       socket.emit("extintor:evidencia:get", { rowIndex: ext.rowIndex }, (res: any) => {
         if (res?.success) {
@@ -306,8 +301,6 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
   const setF = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  // Extintores que cumplen los filtros activos, excluyendo el propio filtro indicado.
-  // Así cada dropdown muestra solo combinaciones que realmente existen entre sí.
   const extintoresSegunFiltros = (excluir?: "marca" | "agente" | "peso" | "estado") => {
     return extintores.filter((e) => {
       if (excluir !== "marca" && fMarca && (e.marca || "") !== fMarca) return false;
@@ -332,7 +325,6 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     if (fAgente && !agentesDisponibles.includes(fAgente)) setFAgente("");
     if (fPeso && !pesosDisponibles.includes(fPeso)) setFPeso("");
     if (fEstado && !estadosDisponibles.includes(fEstado)) setFEstado("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extintores]);
 
   const extintoresFiltrados = extintoresSegunFiltros().filter((ext) => {
@@ -341,8 +333,6 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     return (ext.nSerie || "").toLowerCase().includes(q) || (ext.nInterno || "").toLowerCase().includes(q);
   });
 
-  // El Dashboard define el orden (empresa.weightOrder/estadoOrder/agenteOrder);
-  // aquí solo lo reflejamos.
   const extintoresOrdenados = sortExtintoresPersonalizado(
     extintoresFiltrados,
     empresa.weightOrder,
@@ -354,6 +344,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
   // Recargas permitidas según el agente elegido en el formulario
   const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor, RECARGAS);
   const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor);
+  const servicioExtraBloqueado = estadoBloqueaServicioExtra(form.estadoExtintor);
 
   return (
     <div className="app-workers flex flex-col h-dvh w-full bg-zinc-50/50 shadow-2xl relative" style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
@@ -817,10 +808,14 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                       <Field label="Estado">
                         <select className={inputCls} value={form.estadoExtintor} onChange={(e) => setForm((p) => {
                           const nuevoEstado = e.target.value;
+                          const next = { ...p, estadoExtintor: nuevoEstado };
                           if (estadoBloqueaServicio(nuevoEstado)) {
-                            return { ...p, estadoExtintor: nuevoEstado, ma: false, ph: false, recarga: "", servicioExtra: "" };
+                            next.ma = false; next.ph = false; next.recarga = "";
                           }
-                          return { ...p, estadoExtintor: nuevoEstado };
+                          if (estadoBloqueaServicioExtra(nuevoEstado)) {
+                            next.servicioExtra = "";
+                          }
+                          return next;
                         })}>
                           <option value="">Seleccionar...</option>
                           {ESTADOS.map((o) => <option key={o}>{o}</option>)}
@@ -922,7 +917,7 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
 
               <Card title="✨ Servicio Extra">
                 <div className="flex flex-col h-full">
-                  {servicioBloqueado ? (
+                  {servicioExtraBloqueado ? (
                     <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-100 border-2 border-zinc-200 text-zinc-500 text-sm font-bold">
                       🚫 El estado "{form.estadoExtintor}" no permite registrar servicios
                     </div>

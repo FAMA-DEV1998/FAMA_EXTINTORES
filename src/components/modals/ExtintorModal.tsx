@@ -1,7 +1,7 @@
 import type { Extintor } from "../../types";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS } from "../../constants";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
-import { getRecargasPermitidas, estadoBloqueaServicio } from "../../utils/helpers";
+import { getRecargasPermitidas, estadoBloqueaServicio, estadoBloqueaServicioExtra } from "../../utils/helpers";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import type { Socket } from "socket.io-client";
@@ -34,8 +34,9 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                 const permitidas = getRecargasPermitidas(v, recargas);
                 if (p.recarga && !permitidas.includes(p.recarga)) next.recarga = "";
             }
-             if (k === "estadoExtintor" && estadoBloqueaServicio(v)) {
-                next.ma = ""; next.ph = ""; next.recarga = ""; next.servicioExtra = "";
+            if (k === "estadoExtintor") {
+                if (estadoBloqueaServicio(v)) { next.ma = ""; next.ph = ""; next.recarga = ""; }
+                if (estadoBloqueaServicioExtra(v)) { next.servicioExtra = ""; }
             }
             return next;
         });
@@ -43,6 +44,7 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
 
     const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor || "", recargas);
     const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor || "");
+    const servicioExtraBloqueado = estadoBloqueaServicioExtra(form.estadoExtintor || "");
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -174,7 +176,7 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
 
                     {/* Servicio Extra */}
                     <ModalSection title="🔧 Servicio Extra">
-                        {servicioBloqueado ? (
+                        {servicioExtraBloqueado  ? (
                             <div className="px-3 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-400 text-sm font-semibold">
                                 🚫 El estado "{form.estadoExtintor}" no permite registrar servicios
                             </div>

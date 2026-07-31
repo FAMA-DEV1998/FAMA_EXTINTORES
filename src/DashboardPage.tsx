@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { COMP_LABELS, MESES } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, DashView } from "./types";
-import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado, getEstadoPrioridad, estadoBloqueaServicio } from "./utils/helpers"; 
+import { emptyExtintor, estadoColor, serviceBadge, downloadBase64, downloadEvidenciaAsPng, getWeightInKg, sortExtintoresPersonalizado, getEstadoPrioridad, estadoBloqueaServicio, estadoBloqueaServicioExtra } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import {
   EmpresaModal, ExtintorModal, ArchivedModal, UsersModal,
@@ -580,10 +580,10 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       id: selectedEmpresa.id,
       nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim().toUpperCase(),
       nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase(),
-       ma: bloqueado ? "" : extintorForm.ma,
+      ma: bloqueado ? "" : extintorForm.ma,
       ph: bloqueado ? "" : extintorForm.ph,
       recarga: bloqueado ? "" : extintorForm.recarga,
-      servicioExtra: bloqueado ? "" : extintorForm.servicioExtra,
+      servicioExtra: estadoBloqueaServicioExtra(extintorForm.estadoExtintor || "") ? "" : extintorForm.servicioExtra,
     };
 
     if (editingRowIndex !== null) {
