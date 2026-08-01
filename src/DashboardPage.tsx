@@ -584,7 +584,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       ph: bloqueado ? "" : extintorForm.ph,
       recarga: bloqueado ? "" : extintorForm.recarga,
       servicioExtra: estadoBloqueaServicioExtra(extintorForm.estadoExtintor || "") ? "" : extintorForm.servicioExtra,
-    };
+    }; 
 
     if (editingRowIndex !== null) {
       socket.emit("extintor:update", { ...payload, rowIndex: editingRowIndex }, (res: any) => {

@@ -1,5 +1,5 @@
 import type { FormData, EmpresaData, Extintor } from "../types";
-import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH, ESTADOS_SIN_SERVICIO_EXTRA } from "../constants/extintores";
+import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH, ESTADOS_SIN_SERVICIO_EXTRA, ESTADOS_SOLO_RECARGA } from "../constants/extintores";
 
 export const emptyForm = (): FormData => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "",
@@ -114,7 +114,7 @@ export const downloadEvidenciaAsPng = (b64Jpeg: string, fileName: string) => {
 };
 
 export const getWeightInKg = (weightStr: string) => {
-    if (!weightStr || weightStr === "Sin definir") return 999999; // Los vacíos van al final
+    if (!weightStr || weightStr === "Sin definir") return 999999;
     const match = weightStr.match(/([\d.]+)\s*(KG|LBS?|LT|GAL)/i);
     if (!match) return 999999;
     const val = parseFloat(match[1]);
@@ -131,6 +131,10 @@ export const getEstadoPrioridad = (estado: string) => {
 
 export const estadoBloqueaServicio = (estado: string): boolean => {
     return ESTADOS_SIN_SERVICIO.includes(estado);
+};
+
+export const estadoSoloPermiteRecarga = (estado: string): boolean => {
+    return ESTADOS_SOLO_RECARGA.includes(estado);
 };
 
 export const estadoBloqueaServicioExtra = (estado: string): boolean => {

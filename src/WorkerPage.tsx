@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS, DISTRITOS_LIMA } from "./constants";
 import type { EmpresaItem, EmpresaData, Extintor, FormData, WorkerView as View } from "./types";
-import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio, getCamposFaltantes, estadoBloqueaServicioExtra } from "./utils/helpers";
+import { emptyForm, emptyEmpresa, compressImage, sortExtintoresPersonalizado, getRecargasPermitidas, esExtintorIncompleto, estadoBloqueaServicio, getCamposFaltantes, estadoBloqueaServicioExtra, estadoSoloPermiteRecarga } from "./utils/helpers";
 import { useSocket } from "./hooks/useSocket";
 import { Card, Field, Toggle, SiNo, inputCls } from "./components/ui/WorkerUI";
 import { CreatableSelect } from "./components/ui/CreatableSelect";
@@ -188,13 +188,14 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     if (!socket || !activeId) return;
     setSaving(true);
     const { evidencias, ...formWithoutEvidencias } = form;
-    const bloqueado = estadoBloqueaServicio(form.estadoExtintor);
+    const soloRecargaGuardado = estadoSoloPermiteRecarga(form.estadoExtintor);
+    const bloqueado = estadoBloqueaServicio(form.estadoExtintor) && !soloRecargaGuardado;
     const payload = {
       ...formWithoutEvidencias, id: activeId,
       nSerie: form.nSerie.trim() === "" ? "S/N" : form.nSerie.trim().toUpperCase(),
       nInterno: form.nInterno.trim().toUpperCase(),
-      ma: bloqueado ? "" : (form.ma ? "SI" : ""),
-      ph: bloqueado ? "" : (form.ph ? "SI" : ""),
+      ma: (bloqueado || soloRecargaGuardado) ? "" : (form.ma ? "SI" : ""),
+      ph: (bloqueado || soloRecargaGuardado) ? "" : (form.ph ? "SI" : ""),
       recarga: bloqueado ? "" : form.recarga,
       servicioExtra: estadoBloqueaServicioExtra(form.estadoExtintor) ? "" : form.servicioExtra, motivoBaja: form.motivoBaja,
       evidencia: JSON.stringify(evidencias || []),
@@ -341,9 +342,9 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
     extintores
   );
 
-  // Recargas permitidas según el agente elegido en el formulario
   const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor, RECARGAS);
-  const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor);
+  const soloRecarga = estadoSoloPermiteRecarga(form.estadoExtintor);
+  const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor) && !soloRecarga;
   const servicioExtraBloqueado = estadoBloqueaServicioExtra(form.estadoExtintor);
 
   return (
@@ -625,7 +626,11 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                       {incompletosCount > 0 && (
                         <button
                           type="button"
-                          onClick={() => setSoloIncompletos((v) => !v)}
+                          onClick={() => setSoloIncompletos((v) => {
+                            const next = !v;
+                            if (next) { setFMarca(""); setFAgente(""); setFPeso(""); setFEstado(""); }
+                            return next;
+                          })}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all active:scale-95 ${soloIncompletos ? "bg-amber-50 border-amber-500 text-amber-700" : "bg-zinc-50 border-zinc-200 text-zinc-400"}`}
                         >
                           ⚠️ Solo incompletos ({incompletosCount})
@@ -809,7 +814,9 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                         <select className={inputCls} value={form.estadoExtintor} onChange={(e) => setForm((p) => {
                           const nuevoEstado = e.target.value;
                           const next = { ...p, estadoExtintor: nuevoEstado };
-                          if (estadoBloqueaServicio(nuevoEstado)) {
+                          if (estadoSoloPermiteRecarga(nuevoEstado)) {
+                            next.ma = false; next.ph = false;
+                          } else if (estadoBloqueaServicio(nuevoEstado)) {
                             next.ma = false; next.ph = false; next.recarga = "";
                           }
                           if (estadoBloqueaServicioExtra(nuevoEstado)) {
@@ -889,14 +896,22 @@ export default function App({ user, onLogout }: { user: { id: string; username: 
                     </div>
                   ) : (
                     <>
-                      <Toggle checked={form.ma} label="MA — Mantenimiento" onChange={() => setForm((p) => {
-                        const next = !p.ma;
-                        return next ? { ...p, ma: true, ph: false, recarga: "" } : { ...p, ma: false };
-                      })} />
-                      <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => {
-                        const next = !p.ph;
-                        return next ? { ...p, ph: true, ma: false } : { ...p, ph: false };
-                      })} />
+                      {soloRecarga ? (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-bold">
+                          ℹ️ El estado "{form.estadoExtintor}" solo permite registrar Recarga
+                        </div>
+                      ) : (
+                        <>
+                          <Toggle checked={form.ma} label="MA — Mantenimiento" onChange={() => setForm((p) => {
+                            const next = !p.ma;
+                            return next ? { ...p, ma: true, ph: false, recarga: "" } : { ...p, ma: false };
+                          })} />
+                          <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => {
+                            const next = !p.ph;
+                            return next ? { ...p, ph: true, ma: false } : { ...p, ph: false };
+                          })} />
+                        </>
+                      )}
 
                       <Field label="Recarga (Seleccione una opción)" className="mt-auto pt-2">
                         <div className="flex flex-col gap-2">

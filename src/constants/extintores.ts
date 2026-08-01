@@ -4,6 +4,8 @@ export const ESTADO_ORDEN_DEFAULT = ["Aprobado", "Nuevo - Venta", "Garantía", "
 
 export const ESTADOS_SIN_SERVICIO = ["De Baja", "Garantía", "Nuevo - Venta"];
 
+export const ESTADOS_SOLO_RECARGA = ["Venta"];
+
 export const ESTADOS_SIN_SERVICIO_EXTRA = ["De Baja", "Garantía"];
 
 export const ESTADOS_REQUIEREN_DATOS_PH = ["Aprobado", "Nuevo - Venta", "Garantía"];
