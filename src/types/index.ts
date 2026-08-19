@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 export type EmpresaItem = {
   id: string;
   razonSocial: string;
@@ -10,6 +8,17 @@ export type EmpresaItem = {
   celular?: string;
   fechaRetiro?: string;
   fechaEntrega?: string;
+  slug: string;
+  sedes?: Sede[];
+};
+
+export type Sede = {
+  id: string;
+  empresaId: string;
+  nombre: string;
+  slug: string;
+  direccion?: string;
+  distrito?: string;
 };
 
 export type EmpresaData = {
@@ -26,6 +35,8 @@ export type EmpresaData = {
   weightOrder?: string[];
   estadoOrder?: string[];
   agenteOrder?: string[];
+  slug?: string;
+  sedes?: Sede[];
 };
 
 export type Extintor = {
@@ -53,6 +64,8 @@ export type Extintor = {
   motivoBaja: string;
   evidencia?: string; // JSON array de base64 strings, o flag "__HAS_EVIDENCIA__"
   evidenciaCount?: number; // Cantidad de fotos (enviado por el backend en listados)
+  uid: string;
+  sedeId: string | null;
 };
 
 export type FormData = {
@@ -77,7 +90,9 @@ export type FormData = {
   servicioExtra: string;
   motivoBaja: string;
   evidencias: string[]; // Array de base64 JPEG comprimidos
+  sedeId?: string | null; // Opcional: solo lo usa el Dashboard al asignar sede
 };
+
 
 // Tipos específicos para las vistas
 export type WorkerView = "home" | "empresa" | "lista" | "form";

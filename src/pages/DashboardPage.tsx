@@ -1,0 +1,140 @@
+import { useState } from "react";
+import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
+import { useSocket } from "../hooks/useSocket";
+import { useArchivedManager, useUsersManagement } from "../hooks/dashboard";
+import { UsersModal, ArchivedModal, CatalogModal } from "../components/modals";
+import { SedesView, HistorialView, ExtintoresView, EmpresaLayout, EmpresasListPage } from "./dashboard/";
+
+export default function DashboardPage({ user, onLogout }: { user: { id: string; username: string; role: string; displayName: string }; onLogout: () => void }) {
+  const { socket, connected, catalogs } = useSocket(user.id, onLogout);
+  const location = useLocation();
+
+  const [catalogModal, setCatalogModal] = useState(false);
+
+  // ── Archivados (solo boss/admin) — transversal, no depende de una empresa ──
+  const archived = useArchivedManager(socket, user.role);
+  const {
+    archivedView, setArchivedView, archivedEmpresas, archivedExtintores,
+    archivedTab, setArchivedTab, loadingArchived, expandedArchived, setExpandedArchived,
+    openArchivedView, restoreEmpresa, hardDeleteEmpresa, restoreExtintor, hardDeleteExtintor,
+  } = archived;
+
+  // ── Gestión de usuarios (solo boss) — transversal ──
+  const usersManagement = useUsersManagement(socket, user.role);
+  const {
+    usersModal, setUsersModal, usersList, userForm, setUserForm,
+    editingUserId, setEditingUserId, savingUser, userError,
+    openUsersModal, saveUser, deleteUser,
+  } = usersManagement;
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-red-500/30"
+      style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
+
+      {/* ════ HEADER GLOBAL ════ */}
+      <header className="sticky top-0 z-30 backdrop-blur-2xl bg-zinc-950/80 border-b border-zinc-800/60 shadow-sm">
+        <div className="max-w-480 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          {/* Izquierda: Logo + Back */}
+          <div className="flex items-center gap-4">
+            {location.pathname !== "/dashboard" && (
+              <Link to="/dashboard"
+                className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center transition-all text-zinc-400 hover:text-white shadow-sm hover:shadow-md active:scale-95"
+                title="Volver al directorio">
+                ‹
+              </Link>
+            )}
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-lg sm:text-xl font-black tracking-[3px] text-white leading-none">FAMA</h1>
+                <p className="text-[9px] font-bold tracking-[4px] uppercase text-red-500 mt-0.5">Dashboard</p>
+              </div>
+              <div className="h-7 w-px bg-zinc-800 mx-1 sm:mx-2 hidden sm:block" />
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/50 border border-zinc-800/50">
+                <span className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-zinc-600"}`} />
+                <span className="text-[11px] text-zinc-400 font-semibold tracking-wide">
+                  {connected ? "En línea" : "Desconectado"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Derecha: Usuario + Navegación */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="hidden lg:flex items-center gap-2 mr-2">
+              {user.role === "boss" && (
+                <button onClick={openUsersModal}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all flex items-center gap-2">
+                  👥 Usuarios
+                </button>
+              )}
+
+              {/* NUEVO BOTÓN: Catálogos */}
+              {(user.role === "boss" || user.role === "admin") && (
+                <button onClick={() => setCatalogModal(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all flex items-center gap-2">
+                  📖 Catálogos
+                </button>
+              )}
+
+              {(user.role === "boss" || user.role === "admin") && (
+                <button onClick={openArchivedView}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all flex items-center gap-2">
+                  🗂️ Archivados
+                </button>
+              )}
+              <a href="/app"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-white bg-red-950/20 hover:bg-red-900/40 border border-red-900/30 hover:border-red-800/50 transition-all flex items-center gap-2">
+                🧯 Ir a App Móvil
+              </a>
+            </div>
+
+            <div className="h-7 w-px bg-zinc-800 mx-1 hidden sm:block" />
+
+            <div className="flex items-center gap-3 pl-1 sm:pl-0">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs font-bold text-zinc-200 leading-none">{user.displayName}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest mt-1 leading-none" style={{
+                  color: user.role === "boss" ? "#f87171" : "#fbbf24"
+                }}>{user.role}</p>
+              </div>
+              <button onClick={onLogout}
+                className="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 hover:border-red-900/50 flex items-center justify-center text-zinc-400 hover:text-red-400 transition-all text-sm active:scale-95 shadow-sm"
+                title="Cerrar sesión">
+                ⏻
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-480 mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <Routes>
+          <Route index element={<EmpresasListPage socket={socket} role={user.role} catalogs={catalogs} />} />
+          <Route path=":empresaSlug" element={<EmpresaLayout socket={socket} catalogs={catalogs} user={user} />}>
+            <Route index element={<Navigate to="extintores" replace />} />
+            <Route path="extintores" element={<ExtintoresView />} />
+            <Route path="historial" element={<HistorialView />} />
+            <Route path="sedes" element={<SedesView />} />
+            <Route path=":sedeSlug">
+              <Route index element={<Navigate to="extintores" replace />} />
+              <Route path="extintores" element={<ExtintoresView />} />
+              <Route path="historial" element={<HistorialView />} />
+            </Route>
+          </Route>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+
+        {/* ════ MODALES GLOBALES (no dependen de una empresa específica) ════ */}
+        <UsersModal isOpen={usersModal} onClose={() => setUsersModal(false)} usersList={usersList} userForm={userForm} setUserForm={setUserForm} editingUserId={editingUserId} setEditingUserId={setEditingUserId} savingUser={savingUser} userError={userError} onSave={saveUser} onDelete={deleteUser} />
+        <ArchivedModal isOpen={archivedView} onClose={() => setArchivedView(false)} tab={archivedTab} setTab={setArchivedTab} empresas={archivedEmpresas} extintores={archivedExtintores} loading={loadingArchived} expanded={expandedArchived} setExpanded={setExpandedArchived} onRestoreEmpresa={restoreEmpresa} onHardDeleteEmpresa={hardDeleteEmpresa} onRestoreExtintor={restoreExtintor} onHardDeleteExtintor={hardDeleteExtintor} userRole={user.role} />
+        <CatalogModal
+          isOpen={catalogModal}
+          onClose={() => setCatalogModal(false)}
+          catalogs={catalogs}
+          socket={socket}
+          userRole={user.role}
+        />
+      </main>
+    </div>
+  );
+}

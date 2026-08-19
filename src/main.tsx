@@ -2,9 +2,9 @@ import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
-import App from "./WorkerPage.tsx";
-import DashboardPage from "./DashboardPage.tsx";
-import LoginPage from "./LoginPage.tsx";
+import App from "./pages/WorkerPage.tsx";
+import DashboardPage from "./pages/DashboardPage.tsx";
+import LoginPage from "./pages/LoginPage.tsx";
 
 type UserRole = "worker" | "admin" | "boss";
 type UserData = { id: string; username: string; role: UserRole; displayName: string };
@@ -37,7 +37,7 @@ function Root() {
             : <App user={user} onLogout={handleLogout} />
         } />
         <Route
-          path="/dashboard"
+          path="/dashboard/*"
           element={
             user.role === "admin" || user.role === "boss"
               ? <DashboardPage user={user} onLogout={handleLogout} />
