@@ -7,4 +7,4 @@ export { useExportActions } from "./useExportActions";
 export { useExtintorForm } from "./useExtintorForm";
 export { useUsersManagement } from "./useUsersManagement";
 export { useSedes } from "./useSedes";
-
+export { useServicios } from "./useServicios";

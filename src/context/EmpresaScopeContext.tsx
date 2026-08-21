@@ -3,11 +3,11 @@ import { useParams } from "react-router-dom";
 import type { Socket } from "socket.io-client";
 import {
   useEmpresaSelection, useCustomOrders, useSedes,
-  useExtintorForm, useDashboardFilters, useEmpresaForm,
+  useExtintorForm, useEmpresaForm,
 } from "../hooks/dashboard";
 import { useEvidencia } from "../hooks/useEvidencia";
 import { useCatalogLists } from "../hooks/useCatalogLists";
-import { computeBaseMetrics, getDuplicateSets, getPesoEntriesWithAgents } from "../utils/dashboardMetrics";
+import { computeBaseMetrics } from "../utils/dashboardMetrics";
 import type { Catalogs } from "../hooks/useSocket";
 
 type ScopeValue = ReturnType<typeof useBuildScope>;
@@ -20,13 +20,13 @@ function useBuildScope(socket: Socket | null, role: string, catalogs: Catalogs) 
   const [obsModal, setObsModal] = useState<string | null>(null);
 
   const empresaSelection = useEmpresaSelection(socket, (data) => customOrders.setFromEmpresaData(data));
-  const { empresas, selectedEmpresa, extintores, loadingDetail, openEmpresa, goBack } = empresaSelection;
+  const { empresas, selectedEmpresa, extintores: extintoresRaw, loadingDetail, openEmpresa, goBack } = empresaSelection;
 
-  const metrics = computeBaseMetrics(extintores);
-  const dupes = getDuplicateSets(extintores);
+  const extintores = Array.from(new Map(extintoresRaw.map((e: any) => [e.uid, e])).values()) as typeof extintoresRaw;
 
-  const customOrders = useCustomOrders(socket, selectedEmpresa, extintores, metrics.pesoCounts, metrics.estadoCounts);
-  const pesoEntriesWithAgents = getPesoEntriesWithAgents(metrics.pesoCounts, metrics.pesoAgentBreakdown, customOrders.customWeightOrder);
+  const { pesoCounts, estadoCounts } = computeBaseMetrics(extintores);
+
+  const customOrders = useCustomOrders(socket, selectedEmpresa, extintores, pesoCounts, estadoCounts);
 
   const sedesHook = useSedes(socket, selectedEmpresa?.id);
 
@@ -37,16 +37,11 @@ function useBuildScope(socket: Socket | null, role: string, catalogs: Catalogs) 
   // compartido entre la vista "Extintores" y la vista "Historial")
   const extintorForm = useExtintorForm(socket, role, selectedEmpresa, saving, setSaving);
 
-  // Filtros de la tabla de extintores (reutiliza el mismo hook que ya usaba
-  // el Dashboard monolítico; el listado de empresas no aplica aquí)
-  const filters = useDashboardFilters([], extintores, customOrders.customWeightOrder, customOrders.customEstadoOrder, customOrders.customAgenteOrder);
-
   const evidencia = useEvidencia(socket);
 
   return {
     empresas, selectedEmpresa, extintores, loadingDetail, openEmpresa, goBack,
-    ...metrics, ...dupes, pesoEntriesWithAgents,
-    customOrders, sedes: sedesHook, empresaForm, extintorForm, filters, evidencia,
+    customOrders, sedes: sedesHook, empresaForm, extintorForm, evidencia,
     saving, setSaving, showMetrics, setShowMetrics, obsModal, setObsModal,
     catalogLists, socket, role,
   };

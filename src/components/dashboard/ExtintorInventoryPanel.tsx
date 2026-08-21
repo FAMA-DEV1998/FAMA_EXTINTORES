@@ -1,58 +1,148 @@
+import { useEffect, useState } from "react";
 import { COMP_LABELS } from "../../constants";
-import { estadoColor, serviceBadge } from "../../utils/helpers";
+import { estadoColor, serviceBadge, getEstadoPrioridad, getWeightInKg } from "../../utils/helpers";
+import { computeBaseMetrics, getDuplicateSets, getPesoEntriesWithAgents } from "../../utils/dashboardMetrics";
 import { FilterSelect, MetricPanel, ComponentDots } from "../ui/DashboardUI";
-import { ExtintorModal, ObservationModal, EvidenciaModal, WeightSortModal } from "../modals";
+import { ExtintorModal, ObservationModal, EvidenciaModal, WeightSortModal, HistorialExtintorModal } from "../modals";
 import { useEmpresaScope } from "../../context/EmpresaScopeContext";
+import { useDashboardFilters, useServicios } from "../../hooks/dashboard";
+import type { Extintor } from "../../types";
 
 interface ExtintorInventoryPanelProps {
     variant: "resumen" | "historial";
-    // Solo se usan cuando variant === "historial"
     onExportExcel?: () => void;
     exporting?: boolean;
     onWhatsapp?: () => void;
     hasWhatsapp?: boolean;
+    extintoresOverride?: Extintor[];
 }
 
-export default function ExtintorInventoryPanel({ variant, onExportExcel, exporting, onWhatsapp, hasWhatsapp }: ExtintorInventoryPanelProps) {
+export default function ExtintorInventoryPanel({ variant, onExportExcel, exporting, extintoresOverride }: ExtintorInventoryPanelProps) {
     const scope = useEmpresaScope();
     const {
-        estadoCounts, marcaCounts, agenteCounts, pesoCounts, serviceCounts, compCounts,
-        pesoEntriesWithAgents, duplicateSeries, duplicateInternos,
         showMetrics, setShowMetrics, obsModal, setObsModal, evidencia,
+        activeSede, extintores: scopeExtintores,
     } = scope as any;
+
+    const baseExtintoresRaw: Extintor[] = extintoresOverride ?? scopeExtintores;
+    // Punto 1: los conteos deben ser sobre extintores ÚNICOS. Si el mismo
+    // extintor aparece más de una vez en la lista de entrada (p. ej. por
+    // participar en varios servicios históricos), se cuenta una sola vez.
+    const baseExtintores: Extintor[] = Array.from(
+        new Map(baseExtintoresRaw.map((e) => [e.uid, e])).values()
+    );
+
+    // Historial por extintor (punto 2): reutiliza los mismos servicios que
+    // ya usa el detalle de un registro, para no duplicar la lógica de fetch.
+    const { servicios } = useServicios(scope.socket, scope.selectedEmpresa?.id, activeSede?.id ?? null);
+    const [historialExtintor, setHistorialExtintor] = useState<Extintor | null>(null);
+    const rutaBase = activeSede ? `/dashboard/${scope.selectedEmpresa?.slug}/sedes/${activeSede.slug}` : `/dashboard/${scope.selectedEmpresa?.slug}`;
+
+    const {
+        estadoCounts, marcaCounts, agenteCounts, pesoCounts, pesoAgentBreakdown, serviceCounts, compCounts,
+    } = computeBaseMetrics(baseExtintores);
+    const { duplicateSeries, duplicateInternos } = getDuplicateSets(baseExtintores);
+
+    const sedesList = scope.sedes.sedes as any[];
+    const hasSedes = sedesList.length > 0;
+    // Solo mostramos la columna/métrica/filtro/orden de Sede en el resumen
+    // general de la Empresa (no dentro de una Sede específica, donde sería
+    // redundante).
+    const showSedeExtras = variant === "resumen" && !activeSede && hasSedes;
+    const sedeNameById: Record<string, string> = Object.fromEntries(sedesList.map((s) => [s.id, s.nombre]));
+
+    // Punto 4: dentro de un registro de Historial (extintoresOverride
+    // presente), los botones/modales de ordenamiento (Estado/Tipo/Peso) deben
+    // trabajar SOLO con los extintores de ESE servicio, no con el orden
+    // guardado a nivel Empresa/Sede — por eso usan un estado local propio en
+    // vez del `customOrders` compartido del contexto (que sigue intacto para
+    // "Todos los Extintores"/"Historial" sin acotar).
+    const isScopedToRegistro = !!extintoresOverride;
+    const [localWeightOrder, setLocalWeightOrder] = useState<string[]>([]);
+    const [localEstadoOrder, setLocalEstadoOrder] = useState<string[]>([]);
+    const [localAgenteOrder, setLocalAgenteOrder] = useState<string[]>([]);
+    const [localSedeOrder, setLocalSedeOrder] = useState<string[]>([]);
+    const [localWeightModal, setLocalWeightModal] = useState(false);
+    const [localEstadoModal, setLocalEstadoModal] = useState(false);
+    const [localAgenteModal, setLocalAgenteModal] = useState(false);
+    const [localSedeModal, setLocalSedeModal] = useState(false);
+
+    const customWeightOrder = isScopedToRegistro ? localWeightOrder : scope.customOrders.customWeightOrder;
+    const customEstadoOrder = isScopedToRegistro ? localEstadoOrder : scope.customOrders.customEstadoOrder;
+    const customAgenteOrder = isScopedToRegistro ? localAgenteOrder : scope.customOrders.customAgenteOrder;
+    // Sede no se persiste a nivel Empresa (es exclusivo de "Todos los
+    // Extintores"), así que siempre vive en estado local.
+    const customSedeOrder = localSedeOrder;
+    const setCustomWeightOrder = isScopedToRegistro ? setLocalWeightOrder : scope.customOrders.setCustomWeightOrder;
+    const setCustomEstadoOrder = isScopedToRegistro ? setLocalEstadoOrder : scope.customOrders.setCustomEstadoOrder;
+    const setCustomAgenteOrder = isScopedToRegistro ? setLocalAgenteOrder : scope.customOrders.setCustomAgenteOrder;
+    const weightOrderModal = isScopedToRegistro ? localWeightModal : scope.customOrders.weightOrderModal;
+    const estadoOrderModal = isScopedToRegistro ? localEstadoModal : scope.customOrders.estadoOrderModal;
+    const agenteOrderModal = isScopedToRegistro ? localAgenteModal : scope.customOrders.agenteOrderModal;
+    const setWeightOrderModal = isScopedToRegistro ? setLocalWeightModal : scope.customOrders.setWeightOrderModal;
+    const setEstadoOrderModal = isScopedToRegistro ? setLocalEstadoModal : scope.customOrders.setEstadoOrderModal;
+    const setAgenteOrderModal = isScopedToRegistro ? setLocalAgenteModal : scope.customOrders.setAgenteOrderModal;
+    // Sin concepto de orden persistido por registro: no llamamos a la API.
+    const persistOrders = isScopedToRegistro ? (() => { }) : scope.customOrders.persistOrders;
+
+    useEffect(() => {
+        if (!isScopedToRegistro) return;
+        const availableWeights = Object.keys(pesoCounts);
+        if (availableWeights.length > 0) {
+            setLocalWeightOrder((prev) => {
+                const missing = availableWeights.filter((w) => !prev.includes(w));
+                if (missing.length === 0) return prev;
+                return [...prev, ...missing].sort((a, b) => getWeightInKg(a) - getWeightInKg(b));
+            });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isScopedToRegistro, baseExtintores]);
+
+    useEffect(() => {
+        if (!isScopedToRegistro) return;
+        const availableEstados = estadoCounts.map(([v]) => v);
+        if (availableEstados.length > 0) {
+            setLocalEstadoOrder((prev) => {
+                const missing = availableEstados.filter((es) => !prev.includes(es));
+                if (missing.length === 0) return prev;
+                return [...prev, ...missing].sort((a, b) => getEstadoPrioridad(a) - getEstadoPrioridad(b));
+            });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isScopedToRegistro, baseExtintores]);
+
+    const pesoEntriesWithAgents = getPesoEntriesWithAgents(pesoCounts, pesoAgentBreakdown, customWeightOrder);
+
+    const filters = useDashboardFilters([], baseExtintores, customWeightOrder, customEstadoOrder, customAgenteOrder, customSedeOrder, sedeNameById);
     const {
         fMarca, setFMarca, fAgente, setFAgente, fEstado, setFEstado, fPeso, setFPeso,
-        fServicio, setFServicio, fComponente, setFComponente,
+        fServicio, setFServicio, fComponente, setFComponente, fSede, setFSede,
         filteredExt, sortedExt, totalExtintores, hasFilters,
-    } = scope.filters;
-    const {
-        customEstadoOrder, setEstadoOrderModal, customAgenteOrder, setAgenteOrderModal,
-        customWeightOrder, setWeightOrderModal,
-    } = scope.customOrders;
+    } = filters;
+
     const {
         extintorModal, setExtintorModal, extintorForm, setExtintorForm, editingRowIndex, saving,
         openAddExtintor, openEditExtintor, saveExtintor, deleteExtintor,
     } = scope.extintorForm;
     const { MARCAS, AGENTES, RECARGAS, MOTIVOS_BAJA, SERVICIOS_EXTRA } = scope.catalogLists;
-    const { customWeightOrder: cwOrder, setCustomWeightOrder, persistOrders } = scope.customOrders;
-    const { setCustomEstadoOrder, setCustomAgenteOrder } = scope.customOrders;
-    const { weightOrderModal, estadoOrderModal, agenteOrderModal } = scope.customOrders;
+
+    // Al agregar un extintor nuevo estando dentro de una Sede, se le asigna
+    // automáticamente esa Sede.
+    const handleOpenAddExtintor = () => {
+        openAddExtintor();
+        if (activeSede) setExtintorForm((p: any) => ({ ...p, sedeId: activeSede.id }));
+    };
+
+    const sinSedeCount = scopeExtintores.filter((e: any) => !e.sedeId).length;
+    const sedeDistribution: [string, number][] = showSedeExtras
+        ? [
+            ...sedesList.map((s) => [s.nombre, scopeExtintores.filter((e: any) => e.sedeId === s.id).length] as [string, number]),
+            ...(sinSedeCount > 0 ? [["Sin sede", sinSedeCount] as [string, number]] : []),
+        ]
+        : [];
 
     return (
         <div className="flex flex-col gap-8">
-
-            {variant === "historial" && (
-                <div className="flex flex-wrap items-center gap-2.5 -mb-2">
-                    <button onClick={onExportExcel} disabled={exporting} className="px-4 py-2.5 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 text-sm font-bold text-emerald-400 border border-emerald-800/50 transition-all flex items-center gap-2 disabled:opacity-50 hover:shadow-lg hover:shadow-emerald-900/20 active:scale-95">
-                        {exporting ? "⏳ Generando..." : "📥 Exportar Excel"}
-                    </button>
-                    {hasWhatsapp && (
-                        <button onClick={onWhatsapp} className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm font-bold text-white transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(52,211,153,0.2)] hover:shadow-[0_0_20px_rgba(52,211,153,0.3)] hover:-translate-y-0.5 active:scale-95">
-                            📲 Enviar por WhatsApp
-                        </button>
-                    )}
-                </div>
-            )}
             {/* ── Métricas ── */}
             <div className="flex flex-col gap-4 bg-zinc-900/20 p-5 rounded-3xl border border-zinc-800/40">
                 <div className="flex items-center justify-between px-2">
@@ -76,8 +166,15 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <MetricPanel title="Capacidad / Peso" data={pesoEntriesWithAgents} total={totalExtintores} />
-                            <MetricPanel title="Servicios Aplicados" data={Object.entries(serviceCounts)} total={totalExtintores} />
-                            <MetricPanel title="Componentes Reemplazados" data={Object.entries(compCounts).map(([k, v]) => [COMP_LABELS[k] || k, v] as [string, number])} total={totalExtintores} />
+                            {variant === "historial" && (
+                                <>
+                                    <MetricPanel title="Servicios Aplicados" data={Object.entries(serviceCounts)} total={totalExtintores} />
+                                    <MetricPanel title="Componentes Reemplazados" data={Object.entries(compCounts).map(([k, v]) => [COMP_LABELS[k] || k, v] as [string, number])} total={totalExtintores} />
+                                </>
+                            )}
+                            {showSedeExtras && (
+                                <MetricPanel title="Distribución por Sede" data={sedeDistribution} total={totalExtintores} />
+                            )}
                         </div>
                     </div>
                 )}
@@ -93,38 +190,64 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                 {hasFilters ? `${filteredExt.length} filtrados de ${totalExtintores}` : `Total: ${totalExtintores}`}
                             </span>
                         </h3>
-                        <button
-                            onClick={openAddExtintor}
-                            className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-bold text-white transition-all shadow-[0_0_15px_rgba(220,38,38,0.2)] hover:shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:-translate-y-0.5 active:scale-95 flex items-center gap-2"
-                        >
-                            <span className="text-lg leading-none">+</span> Agregar Extintor
-                        </button>
+                        {variant === "historial" && (
+                            <button
+                                onClick={handleOpenAddExtintor}
+                                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-bold text-white transition-all shadow-[0_0_15px_rgba(220,38,38,0.2)] hover:shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:-translate-y-0.5 active:scale-95 flex items-center gap-2"
+                            >
+                                <span className="text-lg leading-none">+</span> Agregar Extintor
+                            </button>
+                        )}
+                        {variant === "resumen" && onExportExcel && (
+                            <button
+                                onClick={onExportExcel}
+                                disabled={exporting}
+                                className="px-4 py-2.5 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 text-sm font-bold text-emerald-400 border border-emerald-800/50 transition-all flex items-center gap-2 disabled:opacity-50 hover:shadow-lg hover:shadow-emerald-900/20 active:scale-95 self-start sm:self-auto"
+                            >
+                                {exporting ? "⏳ Generando..." : "📥 Exportar Excel"}
+                            </button>
+                        )}
                     </div>
 
                     {/* Filtros */}
                     <div className="flex flex-wrap gap-3 items-center bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800/50">
                         <span className="text-xs font-bold text-zinc-500 ml-1 mr-2 uppercase tracking-wider hidden lg:block">Filtros:</span>
-                        <FilterSelect label="Marca" value={fMarca} onChange={setFMarca} options={marcaCounts.map(([v]: [string]) => v)} />
-                        <FilterSelect label="Agente" value={fAgente} onChange={setFAgente} options={agenteCounts.map(([v]: [string]) => v)} />
-                        <FilterSelect label="Estado" value={fEstado} onChange={setFEstado} options={estadoCounts.map(([v]: [string]) => v)} />
+                        <FilterSelect label="Marca" value={fMarca} onChange={setFMarca} options={marcaCounts.map(([v]) => v)} />
+                        <FilterSelect label="Agente" value={fAgente} onChange={setFAgente} options={agenteCounts.map(([v]) => v)} />
+                        <FilterSelect label="Estado" value={fEstado} onChange={setFEstado} options={estadoCounts.map(([v]) => v)} />
                         <FilterSelect
                             label="Peso"
                             value={fPeso}
                             onChange={setFPeso}
                             options={Object.keys(pesoCounts)}
                         />
-                        <FilterSelect label="Servicio" value={fServicio} onChange={setFServicio} options={["Mantenimiento", "Recarga", "Prueba Hidrostatica"]} />
-                        <FilterSelect label="Comp. Nuevo" value={fComponente} onChange={setFComponente}
-                            options={[
-                                { value: "valvula", label: "Válvula" },
-                                { value: "manguera", label: "Manguera" },
-                                { value: "manometro", label: "Manómetro" },
-                                { value: "tobera", label: "Tobera" },
-                            ]} />
+                        {showSedeExtras && (
+                            <FilterSelect
+                                label="Sede"
+                                value={fSede}
+                                onChange={setFSede}
+                                options={[
+                                    ...sedesList.map((s) => ({ value: s.id, label: s.nombre })),
+                                    { value: "__SIN_SEDE__", label: "Sin sede" },
+                                ]}
+                            />
+                        )}
+                        {variant === "historial" && (
+                            <FilterSelect label="Servicio" value={fServicio} onChange={setFServicio} options={["Mantenimiento", "Recarga", "Prueba Hidrostatica"]} />
+                        )}
+                        {variant === "historial" && (
+                            <FilterSelect label="Comp. Nuevo" value={fComponente} onChange={setFComponente}
+                                options={[
+                                    { value: "valvula", label: "Válvula" },
+                                    { value: "manguera", label: "Manguera" },
+                                    { value: "manometro", label: "Manómetro" },
+                                    { value: "tobera", label: "Tobera" },
+                                ]} />
+                        )}
                         {hasFilters && (
                             <button
                                 onClick={() => {
-                                    setFMarca(""); setFAgente(""); setFEstado("");
+                                    setFMarca(""); setFAgente(""); setFEstado(""); setFSede("");
                                     setFServicio(""); setFComponente(""); setFPeso("");
                                 }}
                                 className="px-3.5 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/20 border border-red-900/30 hover:bg-red-900/40 transition-all ml-auto sm:ml-0"
@@ -133,6 +256,15 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                             </button>
                         )}
                         <div className="flex gap-2 ml-auto sm:ml-0 flex-wrap">
+                            {showSedeExtras && (
+                                <button
+                                    onClick={() => setLocalSedeModal(true)}
+                                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-all flex items-center gap-1.5"
+                                >
+                                    <span className="text-sm">🏬</span>
+                                    {customSedeOrder.length > 0 ? `Sede (${customSedeOrder.length})` : "Ord. Sede"}
+                                </button>
+                            )}
                             <button
                                 onClick={() => setEstadoOrderModal(true)}
                                 className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-all flex items-center gap-1.5"
@@ -162,8 +294,8 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                     <div className="flex flex-col items-center justify-center gap-4 py-20 text-zinc-500 bg-zinc-950/20">
                         <span className="text-6xl drop-shadow-md opacity-80">🧯</span>
                         <p className="text-base font-medium">{hasFilters ? "No hay extintores que coincidan con los filtros aplicados." : "Aún no se han registrado extintores para esta empresa."}</p>
-                        {!hasFilters && (
-                            <button onClick={openAddExtintor} className="mt-2 text-sm font-bold text-red-400 hover:text-red-300 underline decoration-dotted underline-offset-4 transition-colors">
+                        {!hasFilters && variant === "historial" && (
+                            <button onClick={handleOpenAddExtintor} className="mt-2 text-sm font-bold text-red-400 hover:text-red-300 underline decoration-dotted underline-offset-4 transition-colors">
                                 Registrar el primero
                             </button>
                         )}
@@ -180,14 +312,16 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                     <th className="px-5 py-4 border-b border-zinc-800">Agente</th>
                                     <th className="px-5 py-4 border-b border-zinc-800">Peso</th>
                                     <th className="px-5 py-4 border-b border-zinc-800">Estado</th>
+                                    {showSedeExtras && <th className="px-5 py-4 border-b border-zinc-800">Sede</th>}
                                     <th className="px-5 py-4 border-b border-zinc-800">Fab.</th>
                                     <th className="px-5 py-4 border-b border-zinc-800" title="Prueba Hidrostática Realizada">PH Realiz.</th>
                                     <th className="px-5 py-4 border-b border-zinc-800" title="Prueba Hidrostática Vencimiento">PH Venc.</th>
-                                    <th className="px-5 py-4 border-b border-zinc-800">Servicio</th>
-                                    <th className="px-5 py-4 border-b border-zinc-800 min-w-35">Comp. Nuevos</th>
-                                    <th className="px-5 py-4 border-b border-zinc-800">Serv. Extra</th>
+                                    {variant === "historial" && <th className="px-5 py-4 border-b border-zinc-800">Servicio</th>}
+                                    {variant === "historial" && <th className="px-5 py-4 border-b border-zinc-800 min-w-35">Comp. Nuevos</th>}
+                                    {variant === "historial" && <th className="px-5 py-4 border-b border-zinc-800">Serv. Extra</th>}
                                     <th className="px-5 py-4 border-b border-zinc-800">Motivo Baja</th>
                                     <th className="px-5 py-4 border-b border-zinc-800 max-w-50">Observaciones</th>
+                                    {variant === "resumen" && <th className="px-5 py-4 border-b border-zinc-800 text-center">Historial</th>}
                                     <th className="px-5 py-4 border-b border-zinc-800 text-center sticky right-0 bg-zinc-950 backdrop-blur-md">Acciones</th>
                                 </tr>
                             </thead>
@@ -228,6 +362,13 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                                     {ext.estadoExtintor || "—"}
                                                 </span>
                                             </td>
+                                            {showSedeExtras && (
+                                                <td className="px-5 py-3.5">
+                                                    <span className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold ${ext.sedeId ? "bg-zinc-800 text-zinc-300 border border-zinc-700" : "bg-zinc-900 text-zinc-500 border border-dashed border-zinc-700"}`}>
+                                                        {ext.sedeId ? (sedeNameById[ext.sedeId] || "—") : "Sin sede"}
+                                                    </span>
+                                                </td>
+                                            )}
                                             <td className="px-5 py-3.5 font-medium text-zinc-400 text-xs">
                                                 {ext.fechaFabricacion || "—"}
                                             </td>
@@ -237,36 +378,42 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                             <td className="px-5 py-3.5 font-bold text-zinc-300 text-xs">
                                                 {ext.vencimPH || "—"}
                                             </td>
-                                            <td className="px-5 py-3.5">
-                                                <div className="flex gap-1.5 flex-wrap">
-                                                    {badges.length > 0
-                                                        ? badges.map((b) => (
-                                                            <span
-                                                                key={b.label}
-                                                                className={`px-2.5 py-1 rounded-md text-[10px] font-black border shadow-sm ${b.cls}`}
-                                                            >
-                                                                {b.label}
-                                                            </span>
-                                                        ))
-                                                        : <span className="text-zinc-600 font-medium">—</span>}
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <ComponentDots ext={ext} />
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                {ext.servicioExtra ? (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {ext.servicioExtra.split(",").map(s => s.trim()).filter(Boolean).map(s => (
-                                                            <span key={s} className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-900/40 text-amber-400 border border-amber-800 shadow-sm whitespace-nowrap">
-                                                                {s}
-                                                            </span>
-                                                        ))}
+                                            {variant === "historial" && (
+                                                <td className="px-5 py-3.5">
+                                                    <div className="flex gap-1.5 flex-wrap">
+                                                        {badges.length > 0
+                                                            ? badges.map((b) => (
+                                                                <span
+                                                                    key={b.label}
+                                                                    className={`px-2.5 py-1 rounded-md text-[10px] font-black border shadow-sm ${b.cls}`}
+                                                                >
+                                                                    {b.label}
+                                                                </span>
+                                                            ))
+                                                            : <span className="text-zinc-600 font-medium">—</span>}
                                                     </div>
-                                                ) : (
-                                                    <span className="text-zinc-600 font-medium">—</span>
-                                                )}
-                                            </td>
+                                                </td>
+                                            )}
+                                            {variant === "historial" && (
+                                                <td className="px-5 py-3.5">
+                                                    <ComponentDots ext={ext} />
+                                                </td>
+                                            )}
+                                            {variant === "historial" && (
+                                                <td className="px-5 py-3.5">
+                                                    {ext.servicioExtra ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {ext.servicioExtra.split(",").map(s => s.trim()).filter(Boolean).map(s => (
+                                                                <span key={s} className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-900/40 text-amber-400 border border-amber-800 shadow-sm whitespace-nowrap">
+                                                                    {s}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-zinc-600 font-medium">—</span>
+                                                    )}
+                                                </td>
+                                            )}
                                             <td className="px-5 py-3.5">
                                                 {ext.motivoBaja ? (
                                                     <div className="flex flex-wrap gap-1">
@@ -293,6 +440,17 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                                     <span className="text-zinc-600 font-medium">—</span>
                                                 )}
                                             </td>
+                                            {variant === "resumen" && (
+                                                <td className="px-5 py-3.5 text-center">
+                                                    <button
+                                                        onClick={() => setHistorialExtintor(ext)}
+                                                        className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-red-900/60 text-sm flex items-center justify-center border border-zinc-700 hover:border-red-700/60 transition-all mx-auto"
+                                                        title="Ver historial de servicios"
+                                                    >
+                                                        📜
+                                                    </button>
+                                                </td>
+                                            )}
                                             <td className="px-5 py-3.5 sticky right-0 bg-zinc-950/80 backdrop-blur-md group-hover:bg-zinc-800/90 transition-colors border-l border-zinc-800/40">
                                                 <div className="flex items-center justify-end gap-1.5">
                                                     {ext.evidencia === "__HAS_EVIDENCIA__" && (
@@ -307,13 +465,18 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                                             )}
                                                         </button>
                                                     )}
-                                                    <button
-                                                        onClick={() => openEditExtintor(ext)}
-                                                        className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-sm flex items-center justify-center border border-zinc-700 transition-all hover:shadow-md"
-                                                        title="Editar Extintor"
-                                                    >
-                                                        ✏️
-                                                    </button>
+                                                    {/* Punto 3: se oculta visualmente en "Todos los Extintores" (edición
+                                se hace desde Historial), pero se mantiene la funcionalidad y el
+                                botón intacto para variant="historial". */}
+                                                    {variant === "historial" && (
+                                                        <button
+                                                            onClick={() => openEditExtintor(ext)}
+                                                            className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-sm flex items-center justify-center border border-zinc-700 transition-all hover:shadow-md"
+                                                            title="Editar Extintor"
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => deleteExtintor(ext.rowIndex)}
                                                         className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-red-900/80 text-sm flex items-center justify-center border border-zinc-700 hover:border-red-700/80 transition-all hover:shadow-md"
@@ -334,7 +497,7 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
 
             {/* ════ MODALES DEL INVENTARIO ════ */}
             {extintorModal && (
-                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} />
+                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} sedes={sedesList} />
             )}
             <ObservationModal observation={obsModal} onClose={() => setObsModal(null)} />
             <EvidenciaModal
@@ -348,24 +511,48 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
             />
             <WeightSortModal
                 isOpen={estadoOrderModal}
-                onClose={() => scope.customOrders.setEstadoOrderModal(false)}
+                onClose={() => setEstadoOrderModal(false)}
                 availableWeights={estadoCounts.map(([v]: [string, number]) => v)}
                 currentOrder={customEstadoOrder}
-                onSave={(newOrder: string[]) => { setCustomEstadoOrder(newOrder); scope.customOrders.setEstadoOrderModal(false); persistOrders({ estadoOrder: newOrder }); }}
+                title="🔥 Ordenar por Estado"
+                label="Estados Disponibles"
+                onSave={(newOrder: string[]) => { setCustomEstadoOrder(newOrder); setEstadoOrderModal(false); persistOrders({ estadoOrder: newOrder }); }}
             />
             <WeightSortModal
                 isOpen={agenteOrderModal}
-                onClose={() => scope.customOrders.setAgenteOrderModal(false)}
+                onClose={() => setAgenteOrderModal(false)}
                 availableWeights={agenteCounts.map(([v]: [string, number]) => v)}
                 currentOrder={customAgenteOrder}
-                onSave={(newOrder: string[]) => { setCustomAgenteOrder(newOrder); scope.customOrders.setAgenteOrderModal(false); persistOrders({ agenteOrder: newOrder }); }}
+                title="🧯 Ordenar por Tipo"
+                label="Tipos Disponibles"
+                onSave={(newOrder: string[]) => { setCustomAgenteOrder(newOrder); setAgenteOrderModal(false); persistOrders({ agenteOrder: newOrder }); }}
             />
             <WeightSortModal
                 isOpen={weightOrderModal}
-                onClose={() => scope.customOrders.setWeightOrderModal(false)}
+                onClose={() => setWeightOrderModal(false)}
                 availableWeights={Object.keys(pesoCounts)}
-                currentOrder={cwOrder}
-                onSave={(newOrder: string[]) => { setCustomWeightOrder(newOrder); scope.customOrders.setWeightOrderModal(false); persistOrders({ weightOrder: newOrder }); }}
+                currentOrder={customWeightOrder}
+                title="⚖️ Ordenar por Peso"
+                label="Pesos Disponibles"
+                onSave={(newOrder: string[]) => { setCustomWeightOrder(newOrder); setWeightOrderModal(false); persistOrders({ weightOrder: newOrder }); }}
+            />
+            {showSedeExtras && (
+                <WeightSortModal
+                    isOpen={localSedeModal}
+                    onClose={() => setLocalSedeModal(false)}
+                    availableWeights={[...sedesList.map((s) => s.nombre), "Sin sede"]}
+                    currentOrder={customSedeOrder}
+                    title="🏬 Ordenar por Sede"
+                    label="Sedes Disponibles"
+                    onSave={(newOrder: string[]) => { setLocalSedeOrder(newOrder); setLocalSedeModal(false); }}
+                />
+            )}
+            <HistorialExtintorModal
+                isOpen={!!historialExtintor}
+                extintor={historialExtintor}
+                servicios={servicios}
+                rutaBase={rutaBase}
+                onClose={() => setHistorialExtintor(null)}
             />
         </div>
     );

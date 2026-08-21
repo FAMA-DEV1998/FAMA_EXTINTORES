@@ -61,12 +61,6 @@ export default function EmpresaModal({ title, form, setForm, onClose, onSave, sa
                     <ModalField label="N° Orden de Trabajo">
                         <input className={modalInput} value={form.nOrdenTrabajo} onChange={(e) => setF("nOrdenTrabajo", e.target.value)} placeholder="OT-0001" />
                     </ModalField>
-                    <ModalField label="Fecha de Retiro">
-                        <input type="date" className={modalInput} value={form.fechaRetiro} onChange={(e) => setF("fechaRetiro", e.target.value)} />
-                    </ModalField>
-                    <ModalField label="Fecha de Entrega">
-                        <input type="date" className={modalInput} value={form.fechaEntrega} onChange={(e) => setF("fechaEntrega", e.target.value)} />
-                    </ModalField>
                 </div>
 
                 {/* FOOTER FIJO */}

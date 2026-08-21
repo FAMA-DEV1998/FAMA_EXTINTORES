@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { EmpresaItem, EmpresaData, Extintor, DashView } from "../../types";
 
@@ -12,6 +12,11 @@ export function useEmpresaSelection(
   const [selectedEmpresa, setSelectedEmpresa] = useState<EmpresaData | null>(null);
   const [extintores, setExtintores] = useState<Extintor[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const selectedEmpresaIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    selectedEmpresaIdRef.current = selectedEmpresa?.id ?? null;
+  }, [selectedEmpresa?.id]);
 
   useEffect(() => {
     if (!socket) return;
@@ -28,8 +33,8 @@ export function useEmpresaSelection(
       setSelectedEmpresa((prev) => prev && prev.id === data.id ? { ...prev, ...data } : prev);
     });
 
-    socket.on("extintor:updated", ({ rows }: { id: string; rows: Extintor[] }) => {
-      setExtintores(rows);
+    socket.on("extintor:updated", ({ id, rows }: { id: string; rows: Extintor[] }) => {
+      if (id === selectedEmpresaIdRef.current) setExtintores(rows);
     });
 
     return () => {

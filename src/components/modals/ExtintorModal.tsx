@@ -20,9 +20,10 @@ type Props = {
     serviciosExtra: string[];
     socket: Socket | null;
     userRole: string;
+    sedes?: { id: string; nombre: string }[];
 };
 
-export default function ExtintorModal({ form, setForm, isEditing, onClose, onSave, saving, marcas, agentes, recargas, motivosBaja, serviciosExtra, socket, userRole }: Props) {
+export default function ExtintorModal({ form, setForm, isEditing, onClose, onSave, saving, marcas, agentes, recargas, motivosBaja, serviciosExtra, socket, userRole, sedes = [] }: Props) {
     const setEF = (k: string, v: string) => {
         setForm((p) => {
             const next = { ...p, [k]: v };
@@ -102,6 +103,14 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                                     className={modalInput}
                                 />
                             </ModalField>
+                            {sedes.length > 0 && (
+                                <ModalField label="Sede">
+                                    <select className={modalInput} value={form.sedeId || ""} onChange={(e) => setForm((p) => ({ ...p, sedeId: e.target.value || null }))}>
+                                        <option value="">Sin sede</option>
+                                        {sedes.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                                    </select>
+                                </ModalField>
+                            )}
                             <ModalField label="Unidad">
                                 <div className="flex rounded-xl overflow-hidden border border-zinc-700">
                                     {(["KG", "LB", "LT", "GAL"] as const).map((u) => (

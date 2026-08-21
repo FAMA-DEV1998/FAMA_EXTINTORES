@@ -28,7 +28,10 @@ export function useSedes(socket: Socket | null, empresaId: string | undefined) {
     setSavingSede(true);
     socket.emit("sede:save", editingSede, (res: any) => {
       setSavingSede(false);
-      if (res?.success) setSedeModal(false);
+      if (res?.success) {
+        setSedeModal(false);
+        setEditingSede(null); 
+      }
     });
   };
 

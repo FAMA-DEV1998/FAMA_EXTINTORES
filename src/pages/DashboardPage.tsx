@@ -3,8 +3,17 @@ import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { useArchivedManager, useUsersManagement } from "../hooks/dashboard";
 import { UsersModal, ArchivedModal, CatalogModal } from "../components/modals";
-import { SedesView, HistorialView, ExtintoresView, EmpresaLayout, EmpresasListPage } from "./dashboard/";
+import EmpresasListPage from "./dashboard/EmpresasListPage";
+import EmpresaLayout from "./dashboard/EmpresaLayout";
+import ExtintoresView from "./dashboard/ExtintoresView";
+import HistorialMesesView from "./dashboard/HistorialMesesView";
+import HistorialMesRegistrosView from "./dashboard/HistorialMesRegistrosView";
+import HistorialRegistroView from "./dashboard/HistorialRegistroView";
+import SedesView from "./dashboard/SedesView";
 
+/* ══════════════════════════════════════════
+   COMPONENTE PRINCIPAL — shell de router
+   ══════════════════════════════════════════ */
 export default function DashboardPage({ user, onLogout }: { user: { id: string; username: string; role: string; displayName: string }; onLogout: () => void }) {
   const { socket, connected, catalogs } = useSocket(user.id, onLogout);
   const location = useLocation();
@@ -28,7 +37,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   } = usersManagement;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-red-500/30"
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-red-500/30 pb-10"
       style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
 
       {/* ════ HEADER GLOBAL ════ */}
@@ -113,12 +122,16 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
           <Route path=":empresaSlug" element={<EmpresaLayout socket={socket} catalogs={catalogs} user={user} />}>
             <Route index element={<Navigate to="extintores" replace />} />
             <Route path="extintores" element={<ExtintoresView />} />
-            <Route path="historial" element={<HistorialView />} />
+            <Route path="historial" element={<HistorialMesesView />} />
+            <Route path="historial/:anio/:mes" element={<HistorialMesRegistrosView />} />
+            <Route path="historial/:anio/:mes/:registroId" element={<HistorialRegistroView />} />
             <Route path="sedes" element={<SedesView />} />
-            <Route path=":sedeSlug">
+            <Route path="sedes/:sedeSlug">
               <Route index element={<Navigate to="extintores" replace />} />
               <Route path="extintores" element={<ExtintoresView />} />
-              <Route path="historial" element={<HistorialView />} />
+              <Route path="historial" element={<HistorialMesesView />} />
+              <Route path="historial/:anio/:mes" element={<HistorialMesRegistrosView />} />
+              <Route path="historial/:anio/:mes/:registroId" element={<HistorialRegistroView />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

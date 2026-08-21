@@ -5,13 +5,17 @@ export default function WeightSortModal({
   onClose,
   availableWeights,
   currentOrder,
-  onSave
+  onSave,
+  title = "⚖️ Ordenar por Peso",
+  label = "Valores Disponibles",
 }: {
   isOpen: boolean;
   onClose: () => void;
   availableWeights: string[];
   currentOrder: string[];
   onSave: (order: string[]) => void;
+  title?: string;
+  label?: string;
 }) {
   const [order, setOrder] = useState<string[]>([]);
 
@@ -44,17 +48,17 @@ export default function WeightSortModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md max-h-[85vh] shadow-2xl overflow-hidden flex flex-col">
         <div className="px-5 py-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/50">
-          <h3 className="text-lg font-black text-white">⚖️ Ordenar por Peso</h3>
+          <h3 className="text-lg font-black text-white">{title}</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">✕</button>
         </div>
 
         <div className="p-5 flex flex-col gap-6 overflow-y-auto flex-1 min-h-0">
-          {/* Pesos disponibles para añadir */}
+          {/* Valores disponibles para añadir */}
           <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 block">Pesos Disponibles</label>
+            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 block">{label}</label>
             <div className="flex flex-wrap gap-2">
               {unselectedWeights.length === 0 ? (
-                <span className="text-sm text-zinc-600 italic">Todos los pesos ya están en la lista.</span>
+                <span className="text-sm text-zinc-600 italic">Todos los valores ya están en la lista.</span>
               ) : (
                 unselectedWeights.map(w => (
                   <button key={w} onClick={() => handleAdd(w)} className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm font-medium text-zinc-300 transition-colors flex items-center gap-1.5 border border-zinc-700">

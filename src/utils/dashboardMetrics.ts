@@ -147,13 +147,16 @@ export function filterExtintores(
   fEstado: string,
   fPeso: string,
   fServicio: string,
-  fComponente: string
+  fComponente: string,
+  fSede?: string
 ): Extintor[] {
   return extintores.filter((e) => {
     if (fMarca && (e.marca || "Sin definir") !== fMarca) return false;
     if (fAgente && (e.agenteExtintor || "Sin definir") !== fAgente) return false;
     if (fEstado && (e.estadoExtintor || "Sin definir") !== fEstado) return false;
     if (fPeso && (e.peso ? `${e.peso} ${e.unidadPeso}` : "Sin definir") !== fPeso) return false;
+    if (fSede && fSede === "__SIN_SEDE__" && e.sedeId) return false;
+    if (fSede && fSede !== "__SIN_SEDE__" && e.sedeId !== fSede) return false;
     if (fServicio === "Mantenimiento" && e.ma !== "SI") return false;
     if (fServicio === "Prueba Hidrostatica" && e.ph !== "SI") return false;
     if (fServicio === "Recarga" && !e.recarga) return false;

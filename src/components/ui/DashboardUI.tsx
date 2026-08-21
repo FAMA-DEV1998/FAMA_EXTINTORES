@@ -67,6 +67,11 @@ export function MetricPanel({
 }) {
   if (data.length === 0) return null;
 
+  // Detecta la fila "sin definir" para cualquier panel (Estado, Marca,
+  // Agente, Peso, Distribución por Sede, etc.), incluso cuando la etiqueta
+  // trae texto adicional (p. ej. "Sin definir (2 PQS)" en Capacidad/Peso).
+  const esIndefinido = (label: string) => label.startsWith("Sin definir") || label === "Sin sede";
+
   return (
     <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-2xl overflow-hidden shadow-sm">
       <div className={`px-5 py-3.5 border-b border-zinc-800/40 flex items-center justify-between ${accent ? "bg-red-950/30" : "bg-zinc-900/40"}`}>
@@ -82,18 +87,19 @@ export function MetricPanel({
       <div className="divide-y divide-zinc-800/30">
         {data.map(([label, count]) => {
           const pct = total > 0 ? (count / total) * 100 : 0;
+          const indefinido = esIndefinido(label);
           return (
             // CAMBIO UX: Efecto hover sutil (desplazamiento) para invitar a la interacción visual
             <div key={label} className="flex items-center gap-3 px-5 py-3 group hover:bg-zinc-800/40 transition-all hover:pl-6">
-              <span className={`text-sm font-semibold flex-1 truncate flex items-center gap-2 ${label === "Sin definir" ? "text-amber-400" : "text-zinc-200"}`}>
-                {label === "Sin definir" && <span className="text-amber-500 text-xs">⚠️</span>}
+              <span className={`text-sm font-semibold flex-1 truncate flex items-center gap-2 ${indefinido ? "text-amber-400" : "text-zinc-200"}`}>
+                {indefinido && <span className="text-amber-500 text-xs">⚠️</span>}
                 {label}
               </span>
               
               {/* CAMBIO UX: Barras más gruesas (h-2) y un brillo sutil en las barras acentuadas */}
               <div className="w-24 h-2 rounded-full bg-zinc-800/80 overflow-hidden shrink-0 hidden sm:block shadow-inner">
                 <div
-                  className={`h-full rounded-full transition-all duration-700 ease-out ${accent ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : "bg-zinc-400"}`}
+                  className={`h-full rounded-full transition-all duration-700 ease-out ${indefinido ? "bg-amber-500" : accent ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" : "bg-zinc-400"}`}
                   style={{ width: `${pct}%` }}
                 />
               </div>

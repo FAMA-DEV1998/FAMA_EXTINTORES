@@ -8,7 +8,8 @@ export function useEmpresaForm(
   selectedEmpresa: EmpresaData | null,
   goBack: () => void,
   saving: boolean,
-  setSaving: (v: boolean) => void
+  setSaving: (v: boolean) => void,
+  onCreated?: (slug: string) => void
 ) {
 
   // Modal editar empresa
@@ -52,6 +53,7 @@ export function useEmpresaForm(
       if (res?.success) {
         setCreateEmpresaModal(false);
         socket.emit("empresa:list");
+        if (res.slug) onCreated?.(res.slug);
       }
     });
   };

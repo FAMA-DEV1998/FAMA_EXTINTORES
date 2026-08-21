@@ -8,7 +8,11 @@ export function useDashboardFilters(
     extintores: Extintor[],
     customWeightOrder: string[],
     customEstadoOrder: string[],
-    customAgenteOrder: string[]
+    customAgenteOrder: string[],
+    // Punto 9: orden personalizado por Sede (opcional, solo aplica cuando
+    // la Empresa tiene Sedes — ver ExtintorInventoryPanel).
+    customSedeOrder: string[] = [],
+    sedeNameById: Record<string, string> = {}
 ) {
     // Filtros de la lista de empresas
     const [search, setSearch] = useState("");
@@ -22,22 +26,26 @@ export function useDashboardFilters(
     const [fServicio, setFServicio] = useState("");
     const [fComponente, setFComponente] = useState("");
     const [fPeso, setFPeso] = useState("");
+    // Solo aplica cuando la Empresa tiene Sedes (ver ExtintorInventoryPanel)
+    const [fSede, setFSede] = useState("");
 
     const availableYears = getAvailableYears(empresas);
     const filtered = filterEmpresas(empresas, search, fMonth, fYear);
 
-    const filteredExt = filterExtintores(extintores, fMarca, fAgente, fEstado, fPeso, fServicio, fComponente);
+    const filteredExt = filterExtintores(extintores, fMarca, fAgente, fEstado, fPeso, fServicio, fComponente, fSede);
 
     const sortedExt = sortExtintoresPersonalizado(
         filteredExt,
         customWeightOrder,
         customEstadoOrder,
         customAgenteOrder,
-        extintores
+        extintores,
+        customSedeOrder,
+        sedeNameById
     );
 
     const totalExtintores = extintores.length;
-    const hasFilters = !!(fMarca || fAgente || fEstado || fServicio || fComponente);
+    const hasFilters = !!(fMarca || fAgente || fEstado || fServicio || fComponente || fSede);
 
     return {
         search, setSearch,
@@ -51,6 +59,7 @@ export function useDashboardFilters(
         fServicio, setFServicio,
         fComponente, setFComponente,
         fPeso, setFPeso,
+        fSede, setFSede,
         filteredExt,
         sortedExt,
         totalExtintores,

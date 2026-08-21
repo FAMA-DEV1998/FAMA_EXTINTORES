@@ -1,7 +1,6 @@
 export type EmpresaItem = {
   id: string;
   razonSocial: string;
-  // Campos opcionales usados en el Dashboard
   ruc?: string;
   distrito?: string;
   nombresApellidos?: string;
@@ -41,7 +40,7 @@ export type EmpresaData = {
 
 export type Extintor = {
   rowIndex: number;
-  n?: string; // Usado en Worker
+  n?: string;
   nSerie: string;
   nInterno: string;
   marca: string;
@@ -62,8 +61,8 @@ export type Extintor = {
   observaciones: string;
   servicioExtra: string;
   motivoBaja: string;
-  evidencia?: string; // JSON array de base64 strings, o flag "__HAS_EVIDENCIA__"
-  evidenciaCount?: number; // Cantidad de fotos (enviado por el backend en listados)
+  evidencia?: string; 
+  evidenciaCount?: number; 
   uid: string;
   sedeId: string | null;
 };
@@ -89,11 +88,23 @@ export type FormData = {
   observaciones: string;
   servicioExtra: string;
   motivoBaja: string;
-  evidencias: string[]; // Array de base64 JPEG comprimidos
-  sedeId?: string | null; // Opcional: solo lo usa el Dashboard al asignar sede
+  evidencias: string[]; 
+  sedeId?: string | null; 
 };
 
 
 // Tipos específicos para las vistas
 export type WorkerView = "home" | "empresa" | "lista" | "form";
 export type DashView = "list" | "detail";
+
+export type Servicio = {
+  id: string;
+  empresaId: string;
+  sedeId: string | null;
+  fechaRetiro: string;
+  fechaEntrega: string;
+  extintorUids: string[];
+  extintorEstados?: Record<string, Partial<Extintor>>;
+  notas?: string;
+  createdAt?: string;
+};

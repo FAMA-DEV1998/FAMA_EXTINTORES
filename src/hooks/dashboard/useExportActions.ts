@@ -9,7 +9,10 @@ export function useExportActions(
   customWeightOrder: string[],
   customEstadoOrder: string[],
   customAgenteOrder: string[],
-  sedeId?: string | null
+  sedeId?: string | null,
+  mode: "all" | "historial" = "historial",
+  extintorUids?: string[],
+  servicioId?: string
 ) {
   const [exporting, setExporting] = useState(false);
 
@@ -25,11 +28,16 @@ export function useExportActions(
       sedeId,
       weightOrder: customWeightOrder,
       estadoOrder: customEstadoOrder,
-      agenteOrder: customAgenteOrder
+      agenteOrder: customAgenteOrder,
+      mode,
+      extintorUids,
+      servicioId,
     }, (res: any) => {
       setExporting(false);
       if (res?.success && res.data) {
         downloadBase64(res.data, res.fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      } else if (res && !res.success) {
+        alert(res.error || "No se pudo exportar el Excel");
       }
     });
   };
@@ -55,7 +63,10 @@ export function useExportActions(
         sedeId,
         weightOrder: customWeightOrder,
         estadoOrder: customEstadoOrder,
-        agenteOrder: customAgenteOrder
+        agenteOrder: customAgenteOrder,
+        mode,
+        extintorUids,
+        servicioId,
       }, (res: any) => {
         setExporting(false);
         if (res?.success && res.data) {
@@ -69,7 +80,10 @@ export function useExportActions(
         sedeId,
         weightOrder: customWeightOrder,
         estadoOrder: customEstadoOrder,
-        agenteOrder: customAgenteOrder
+        agenteOrder: customAgenteOrder,
+        mode,
+        extintorUids,
+        servicioId,
       }, (res: any) => {
         setExporting(false);
         if (!res?.success) {
