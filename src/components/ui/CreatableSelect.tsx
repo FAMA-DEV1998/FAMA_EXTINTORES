@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Socket } from "socket.io-client";
 
-type CatalogType = "marca" | "agente" | "recarga";
+type CatalogType = "marca" | "agente" | "recarga" | "categoria_inventario" | "capacidad";
 
 export function CreatableSelect({
   value,

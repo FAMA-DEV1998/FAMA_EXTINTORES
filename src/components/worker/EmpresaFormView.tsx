@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { DISTRITOS_LIMA } from "../../constants";
 import type { EmpresaData } from "../../types";
+import { validarRucPorTipo } from "../../utils/helpers";
 import { Card, Field, inputCls } from "../ui/WorkerUI";
 
 interface EmpresaFormViewProps {
@@ -12,6 +13,10 @@ interface EmpresaFormViewProps {
 }
 
 export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave, saving, connected }: EmpresaFormViewProps) {
+  const tipoCliente = empresa.tipoCliente || "";
+  const esPersona = tipoCliente === "persona";
+  const errorRuc = tipoCliente ? validarRucPorTipo(tipoCliente, empresa.ruc) : null;
+
   return (
     <div className="scroll-area h-full overflow-y-auto p-4 md:p-8 flex flex-col gap-6 max-w-4xl mx-auto w-full">
       <Card title="🏢 Datos de la Empresa">
@@ -28,13 +33,22 @@ export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave
               {DISTRITOS_LIMA.map((d) => <option key={d}>{d}</option>)}
             </select>
           </Field>
-          <Field label="RUC">
+          <Field label="Tipo de Cliente">
+            <select className={inputCls} value={tipoCliente} onChange={(e) => setEmpresa((p) => ({ ...p, tipoCliente: e.target.value || null }))}>
+              <option value="">Sin clasificar</option>
+              <option value="persona">Persona (DNI)</option>
+              <option value="ruc10">RUC 10</option>
+              <option value="ruc20">RUC 20</option>
+            </select>
+          </Field>
+          <Field label={esPersona ? "DNI" : "RUC"} className="md:col-span-2">
             <div className="relative">
-              <input className={inputCls} value={empresa.ruc} onChange={(e) => { if (e.target.value.length <= 11) setEmpresa((p) => ({ ...p, ruc: e.target.value })); }} placeholder="20xxxxxxxxx" inputMode="numeric" maxLength={11} />
+              <input className={inputCls} value={empresa.ruc} onChange={(e) => { if (e.target.value.length <= 11) setEmpresa((p) => ({ ...p, ruc: e.target.value })); }} placeholder={esPersona ? "DNI" : "20xxxxxxxxx"} inputMode="numeric" maxLength={11} />
               <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] md:text-xs font-bold ${empresa.ruc.length === 11 ? "text-emerald-500" : "text-zinc-400 bg-zinc-50 px-1"}`}>
                 {empresa.ruc.length}/11 {empresa.ruc.length === 11 && "✓"}
               </span>
             </div>
+            {errorRuc && <p className="text-xs font-bold text-amber-600 mt-1.5">⚠️ {errorRuc}</p>}
           </Field>
         </div>
       </Card>
@@ -49,17 +63,6 @@ export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave
           </Field>
           <Field label="N° Orden de Trabajo">
             <input className={inputCls} value={empresa.nOrdenTrabajo} onChange={(e) => setEmpresa((p) => ({ ...p, nOrdenTrabajo: e.target.value }))} placeholder="Ej: OT-0001" />
-          </Field>
-        </div>
-      </Card>
-
-      <Card title="📅 Fechas de Servicio">
-        <div className="grid grid-cols-2 md:grid-cols-2 gap-4 md:gap-6">
-          <Field label="Fecha de Retiro">
-            <input className={inputCls} type="date" value={empresa.fechaRetiro} onChange={(e) => setEmpresa((p) => ({ ...p, fechaRetiro: e.target.value }))} />
-          </Field>
-          <Field label="Fecha de Entrega (Estimada)">
-            <input className={inputCls} type="date" value={empresa.fechaEntrega} onChange={(e) => setEmpresa((p) => ({ ...p, fechaEntrega: e.target.value }))} />
           </Field>
         </div>
       </Card>

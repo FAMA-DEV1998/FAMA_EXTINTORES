@@ -1,9 +1,14 @@
-import { useState } from "react";
-import type { WorkerView as View } from "../types";
-import { emptyEmpresa, emptyForm } from "../utils/helpers";
+import { useEffect, useState } from "react";
+import type { Extintor, Servicio, WorkerView as View } from "../types";
+import { anioFromFecha, emptyEmpresa, mesFromFecha } from "../utils/helpers";
 import { useSocket, useCatalogLists } from "../hooks";
-import { EmpresaFormView, ExtintoresListaView, ExtintorFormView, HomeView } from "../components/worker";
+import {
+  EmpresaFormView, ExtintoresListaView, ExtintorFormView, HomeView,
+  SedesView, HistorialMesesView, HistorialMesView, ServicioDetailView, EscanearQRModal,
+} from "../components/worker";
 import { useEmpresaWorkerData, useExtintorFilters, useExtintorForm, useFormBackup, usePhotoCapture } from "../hooks/worker";
+import { useSedes, useServicios, useTraslados } from "../hooks/dashboard";
+import { TrasladoSedeModal } from "../components/modals";
 
 export default function WorkerPage({ user, onLogout }: { user: { id: string; username: string; role: string; displayName: string }; onLogout: () => void }) {
   const { socket, connected, catalogs } = useSocket(user.id, onLogout);
@@ -20,8 +25,8 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
 
   const empresaData = useEmpresaWorkerData(socket, setView, showToast, setSaving);
   const {
-    empresas, activeId, activeIdRef, empresa, setEmpresa, extintores,
-    changeActiveId, selectEmpresa, handleEmpresaSave,
+    empresas, activeId, activeIdRef, empresa, setEmpresa, extintores, extintoresGlobal,
+    activeSedeId, changeActiveSede, changeActiveId, selectEmpresa, handleEmpresaSave,
   } = empresaData;
 
   const extintorForm = useExtintorForm(
@@ -31,11 +36,13 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
     setView,
     showToast,
     setSaving,
-    () => formBackup.clearFormBackup()
+    () => formBackup.clearFormBackup(),
+    activeSedeId
   );
   const {
-    form, setForm, editingRow, setEditingRow,
-    handleRealizadoPH, handleExtintorSave, handleEdit, handleDelete, setF,
+    form, setForm, editingRow, setEditingRow, returnView,
+    lastSavedExtintor, clearLastSavedExtintor,
+    handleRealizadoPH, handleExtintorSave, handleEdit, openCrearExtintor, handleDelete, deleteExtintorSilent, setF,
   } = extintorForm;
 
   const formBackup = useFormBackup(
@@ -58,6 +65,103 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
     pesosDisponibles, estadosDisponibles, extintoresOrdenados,
   } = filters;
 
+  const sedesHook = useSedes(socket, activeId);
+  const { sedes, sedeModal, setSedeModal, editingSede, setEditingSede, savingSede, openCreateSede, openEditSede, saveSede } = sedesHook;
+  const hasSedes = sedes.length > 0;
+  const sedeNameById = Object.fromEntries(sedes.map((s) => [s.id, s.nombre]));
+
+  const serviciosHook = useServicios(socket, activeId, activeSedeId ?? undefined);
+  const { servicios, saveServicio, deleteServicio, updateServicioDatos, addExtintorToServicio, removeExtintorDeServicio, setExtintorEstado } = serviciosHook;
+  const serviciosGlobalHook = useServicios(socket, activeId, undefined);
+  const { servicios: serviciosGlobal } = serviciosGlobalHook;
+
+  const [activeAnio, setActiveAnio] = useState(2026);
+  const [activeMes, setActiveMes] = useState<number | null>(null);
+  const [activeServicioId, setActiveServicioId] = useState<string | null>(null);
+  const activeServicio = servicios.find((s) => s.id === activeServicioId) || null;
+
+  const [trasladoExtintor, setTrasladoExtintor] = useState<Extintor | null>(null);
+  const trasladosHook = useTraslados(socket, trasladoExtintor?.uid);
+
+  const [qrModal, setQrModal] = useState(false);
+  const [scanUidParaAsociar, setScanUidParaAsociar] = useState<string | null>(null);
+  const [pendingScan, setPendingScan] = useState<{ empresaId: string; sedeId: string | null; uid: string; action: "asociar" | "crear" | "servicio"; servicioId?: string } | null>(null);
+
+  useEffect(() => {
+    const saved = lastSavedExtintor;
+    if (!saved || !activeServicio || returnView !== "servicio") return;
+    if (saved.isNew && !activeServicio.extintorUids.includes(saved.uid)) {
+      addExtintorToServicio(activeServicio.id, saved.uid);
+    }
+    setExtintorEstado(activeServicio.id, saved.uid, saved.estado);
+    clearLastSavedExtintor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSavedExtintor, activeServicio?.id, returnView]);
+
+  const onSelectMes = (anio: number, mes: number) => {
+    setActiveAnio(anio);
+    setActiveMes(mes);
+    setView("historialMes");
+  };
+
+  const onCrearServicio = (fechaRetiro: string, fechaEntrega: string) => {
+    saveServicio({ fechaRetiro, fechaEntrega, extintorUids: [] }, (ok, id) => {
+      if (ok && id) {
+        setActiveServicioId(id);
+        setView("servicio");
+      }
+    });
+  };
+
+  const iniciarFlujoQR = (r: { extintor: Extintor; empresa: { id: string; razonSocial: string }; sede: { id: string; nombre: string } | null }, accion: "asociar" | "crear") => {
+    setQrModal(false);
+    selectEmpresa(r.empresa.id);
+    changeActiveSede(r.sede?.id ?? null);
+    setPendingScan({ empresaId: r.empresa.id, sedeId: r.sede?.id ?? null, uid: r.extintor.uid, action: accion });
+  };
+
+  const irAlServicioDesdeQR = (r: { empresa: { id: string; razonSocial: string }; sede: { id: string; nombre: string } | null }, servicioId: string) => {
+    setQrModal(false);
+    selectEmpresa(r.empresa.id);
+    changeActiveSede(r.sede?.id ?? null);
+    setPendingScan({ empresaId: r.empresa.id, sedeId: r.sede?.id ?? null, uid: "", action: "servicio", servicioId });
+  };
+
+  useEffect(() => {
+    if (!pendingScan) return;
+    if (activeId !== pendingScan.empresaId || activeSedeId !== pendingScan.sedeId) return;
+    setScanUidParaAsociar(pendingScan.uid);
+    if (pendingScan.action === "servicio" && pendingScan.servicioId) {
+      setActiveServicioId(pendingScan.servicioId);
+      setView("servicio");
+    } else {
+      setView("historial");
+    }
+    setPendingScan(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingScan, activeId, activeSedeId]);
+
+  const irAlServicioDesdeHistorial = (s: Servicio) => {
+    const anio = anioFromFecha(s.fechaRetiro);
+    const mes = mesFromFecha(s.fechaRetiro);
+    if (anio === null || mes === null) return;
+    if (s.sedeId !== activeSedeId) changeActiveSede(s.sedeId);
+    setActiveAnio(anio);
+    setActiveMes(mes);
+    setActiveServicioId(s.id);
+    setView("servicio");
+  };
+
+  const goBack = () => {
+    if (view === "form") { setView(returnView); return; }
+    if (view === "servicio") { setView("historialMes"); return; }
+    if (view === "historialMes") { setView("historial"); return; }
+    if (view === "historial" && activeSedeId) { changeActiveSede(null); setView("todos"); return; }
+    setView("home");
+  };
+
+  const mostrarTabs = activeId && view !== "home" && !["historialMes", "servicio", "form"].includes(view);
+
   return (
     <div className="app-workers flex flex-col h-dvh w-full bg-zinc-50/50 shadow-2xl relative" style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
 
@@ -65,7 +169,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
         <div className="flex items-center justify-start gap-4 z-10 w-1/3">
           {view !== "home" && (
             <button
-              onClick={() => setView(view === "form" ? "lista" : "home")}
+              onClick={goBack}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-red-900/40 hover:bg-red-900/60 text-white transition-all active:scale-95"
             >
               <span className="text-2xl leading-none -mt-1">‹</span>
@@ -107,21 +211,36 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
       </header>
 
       {activeId && view !== "home" && (
+        <div className="px-4 md:px-8 pt-3 flex items-center gap-1.5 text-xs font-bold text-zinc-500 flex-wrap">
+          <button onClick={() => { changeActiveSede(null); setView("todos"); }} className="text-zinc-700 hover:text-red-600 transition-colors">
+            {empresa.razonSocial || activeId}
+          </button>
+          {activeSedeId && <><span className="text-zinc-300">›</span><button onClick={() => setView("sedes")} className="text-red-600 hover:text-red-700 transition-colors">{sedeNameById[activeSedeId] || "Sede"}</button></>}
+          {(view === "historial" || view === "historialMes" || view === "servicio") && <><span className="text-zinc-300">›</span><span className="text-red-600">Historial</span></>}
+          {(view === "historialMes" || view === "servicio") && <><span className="text-zinc-300">›</span><span className="text-red-600">{activeAnio}/{activeMes}</span></>}
+          {view === "servicio" && <><span className="text-zinc-300">›</span><span className="text-red-600">Servicio</span></>}
+        </div>
+      )}
+
+      {mostrarTabs && (
         <nav className="flex items-center gap-2 p-3 md:p-4 bg-white border-b border-zinc-200 shrink-0 shadow-sm z-10 overflow-x-auto scrollbar-hide">
-          {(["empresa", "lista", "form"] as const).map((v) => {
+          {(activeSedeId
+            ? (["todos", "historial"] as const)
+            : hasSedes
+              ? (["empresa", "todos", "sedes"] as const)
+              : (["empresa", "todos", "historial", "sedes"] as const)
+          ).map((v) => {
             const labels = {
-              empresa: "🏢 Empresa",
-              lista: `📋 Lista${extintores.length ? ` (${extintores.length})` : ""}`,
-              form: "➕ Nuevo Extintor",
-            };
+              empresa: "🏢 Datos",
+              todos: `🧯 Todos los Extintores${extintores.length ? ` (${extintores.length})` : ""}`,
+              historial: "📜 Historial",
+              sedes: "🏬 Sedes",
+            } as Record<string, string>;
             const isActive = view === v;
             return (
               <button
                 key={v}
-                onClick={() => {
-                  if (v === "form") { setForm(emptyForm()); setEditingRow(null); clearFormBackup(); }
-                  setView(v);
-                }}
+                onClick={() => setView(v)}
                 className={`flex-1 min-w-fit px-4 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-all active:scale-95 ${isActive ? "bg-red-700 text-white shadow-md shadow-red-900/20" : "bg-zinc-100/80 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800"}`}
               >
                 {labels[v]}
@@ -165,6 +284,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
             connected={connected}
             selectEmpresa={selectEmpresa}
             onCreateNew={() => { setEmpresa(emptyEmpresa()); changeActiveId(""); setView("empresa"); }}
+            onEscanearQR={() => setQrModal(true)}
           />
         )}
 
@@ -178,12 +298,69 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
           />
         )}
 
-        {view === "lista" && (
+        {view === "sedes" && (
+          <SedesView
+            sedes={sedes}
+            sedeModal={sedeModal}
+            setSedeModal={setSedeModal}
+            editingSede={editingSede}
+            setEditingSede={setEditingSede}
+            savingSede={savingSede}
+            openCreateSede={openCreateSede}
+            openEditSede={openEditSede}
+            saveSede={saveSede}
+            activeSedeId={activeSedeId}
+            changeActiveSede={changeActiveSede}
+            setView={setView}
+          />
+        )}
+
+        {view === "historial" && (
+          <HistorialMesesView servicios={servicios} onSelectMes={onSelectMes} />
+        )}
+
+        {view === "historialMes" && activeMes !== null && (
+          <HistorialMesView
+            anio={activeAnio}
+            mes={activeMes}
+            servicios={servicios}
+            savingServicio={serviciosHook.savingServicio}
+            onCrear={onCrearServicio}
+            onSelectServicio={(id) => { setActiveServicioId(id); setView("servicio"); }}
+          />
+        )}
+
+        {view === "servicio" && activeServicio && (
+          <ServicioDetailView
+            servicio={activeServicio}
+            extintores={extintoresGlobal}
+            servicios={servicios}
+            empresa={empresa}
+            activeId={activeId}
+            socket={socket}
+            hasSedes={hasSedes}
+            sedeNameById={sedeNameById}
+            onDelete={() => { deleteServicio(activeServicio.id); setView("historialMes"); }}
+            onGuardarFechas={(fechaRetiro, fechaEntrega, notas) => updateServicioDatos(activeServicio.id, fechaRetiro, fechaEntrega, notas)}
+            addExtintorToServicio={addExtintorToServicio}
+            removeExtintorDeServicio={removeExtintorDeServicio}
+            setExtintorEstado={setExtintorEstado}
+            onNuevoExtintor={() => openCrearExtintor("servicio")}
+            onEditarExtintor={(ext) => handleEdit(ext, "servicio")}
+            deleteExtintorSilent={deleteExtintorSilent}
+            autoAsociarUid={scanUidParaAsociar}
+            onAutoAsociarConsumido={() => setScanUidParaAsociar(null)}
+          />
+        )}
+
+        {view === "todos" && (
           <ExtintoresListaView
             empresa={empresa}
             activeId={activeId}
             setView={setView}
             extintores={extintores}
+            servicios={serviciosGlobal}
+            socket={socket}
             search={search}
             setSearch={setSearch}
             fMarca={fMarca}
@@ -202,10 +379,12 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
             pesosDisponibles={pesosDisponibles}
             estadosDisponibles={estadosDisponibles}
             extintoresOrdenados={extintoresOrdenados}
-            handleEdit={handleEdit}
             handleDelete={handleDelete}
-            setForm={setForm}
-            setEditingRow={setEditingRow}
+            hasSedes={hasSedes}
+            activeSedeId={activeSedeId}
+            sedeNameById={sedeNameById}
+            onTrasladar={setTrasladoExtintor}
+            onIrAlServicio={irAlServicioDesdeHistorial}
           />
         )}
 
@@ -229,6 +408,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
             setView={setView}
             setEditingRow={setEditingRow}
             clearFormBackup={clearFormBackup}
+            onCancel={() => setView(returnView)}
             MAX_EVIDENCIAS={MAX_EVIDENCIAS}
             removeEvidencia={removeEvidencia}
             persistFormState={persistFormState}
@@ -238,6 +418,39 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
           />
         )}
       </main>
+
+      <TrasladoSedeModal
+        isOpen={!!trasladoExtintor}
+        extintorNombre={trasladoExtintor?.nSerie || "S/N"}
+        sedeOrigenNombre={trasladoExtintor?.sedeId ? (sedeNameById[trasladoExtintor.sedeId] || "—") : "Sin sede"}
+        sedesDisponibles={sedes.filter((s) => s.id !== trasladoExtintor?.sedeId)}
+        onClose={() => setTrasladoExtintor(null)}
+        saving={trasladosHook.savingTraslado}
+        onConfirm={(data) => {
+          if (!trasladoExtintor || !activeId) return;
+          trasladosHook.trasladarExtintor({
+            extintorUid: trasladoExtintor.uid,
+            rowIndex: trasladoExtintor.rowIndex,
+            empresaId: activeId,
+            sedeOrigenId: trasladoExtintor.sedeId,
+            sedeDestinoId: data.sedeDestinoId,
+            fecha: data.fecha,
+            motivo: data.motivo,
+          }, (ok, error) => {
+            if (ok) setTrasladoExtintor(null);
+            else if (error) showToast(error, "err");
+          });
+        }}
+      />
+
+      <EscanearQRModal
+        isOpen={qrModal}
+        socket={socket}
+        onClose={() => setQrModal(false)}
+        onAsociar={(r) => iniciarFlujoQR(r, "asociar")}
+        onCrearServicio={(r) => iniciarFlujoQR(r, "crear")}
+        onIrAlServicio={(r, s) => irAlServicioDesdeQR(r, s.id)}
+      />
     </div>
   );
 }

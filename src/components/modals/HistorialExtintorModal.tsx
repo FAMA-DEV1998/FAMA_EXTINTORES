@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Extintor, Servicio } from "../../types";
+import type { Extintor, Servicio, TrasladoSede } from "../../types";
 import { MESES } from "../../constants";
 import { agruparCambios, anioFromFecha, diffSnapshots, estadoColor, mesFromFecha, serviciosDelExtintor } from "../../utils/helpers";
 
@@ -8,16 +8,34 @@ type Props = {
   isOpen: boolean;
   extintor: Extintor | null;
   servicios: Servicio[];
+  traslados: TrasladoSede[];
+  sedeNameById: Record<string, string>;
   rutaBase: string;
   onClose: () => void;
 };
 
-export default function HistorialExtintorModal({ isOpen, extintor, servicios, rutaBase, onClose }: Props) {
+type Evento =
+  | { tipo: "servicio"; fecha: string; servicio: Servicio; anterior: Partial<Extintor> | null }
+  | { tipo: "traslado"; fecha: string; traslado: TrasladoSede };
+
+export default function HistorialExtintorModal({ isOpen, extintor, servicios, traslados, sedeNameById, rutaBase, onClose }: Props) {
   const navigate = useNavigate();
 
   if (!isOpen || !extintor) return null;
 
-  const eventos = serviciosDelExtintor(servicios, extintor.uid);
+  const eventosServicio = serviciosDelExtintor(servicios, extintor.uid);
+  const eventosTraslado = [...traslados].sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""));
+
+  const eventos: Evento[] = [
+    ...eventosServicio.map((s, idx) => ({
+      tipo: "servicio" as const,
+      fecha: s.fechaRetiro,
+      servicio: s,
+      anterior: idx > 0 ? (eventosServicio[idx - 1].extintorEstados?.[extintor.uid] || null) : null,
+    })),
+    ...eventosTraslado.map((t) => ({ tipo: "traslado" as const, fecha: t.fecha, traslado: t })),
+  ].sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""));
+
   const formatFecha = (f: string) => f ? f.split("-").reverse().join("/") : "—";
   const mesLabelDe = (fecha: string) => {
     const mesNum = mesFromFecha(fecha);
@@ -35,31 +53,53 @@ export default function HistorialExtintorModal({ isOpen, extintor, servicios, ru
     navigate(`${rutaBase}/historial/${anio}/${mesLabel}/${s.id}`);
   };
 
+  const sedeLabel = (id: string | null) => id ? (sedeNameById[id] || "—") : "Sin sede";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-lg font-bold text-white">📜 Historial · {extintor.nSerie || "S/N"}</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">{eventos.length} servicio{eventos.length === 1 ? "" : "s"} registrado{eventos.length === 1 ? "" : "s"} · orden cronológico</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{eventos.length} evento{eventos.length === 1 ? "" : "s"} · orden cronológico</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300">✕</button>
         </div>
 
         <div className="px-6 py-5 flex-1 overflow-y-auto">
           {eventos.length === 0 ? (
-            <p className="text-sm text-zinc-500 px-2 py-6 text-center">Este extintor todavía no tiene servicios registrados en Historial.</p>
+            <p className="text-sm text-zinc-500 px-2 py-6 text-center">Este extintor todavía no tiene eventos registrados en Historial.</p>
           ) : (
             <ol className="relative border-l-2 border-zinc-800 ml-3 flex flex-col gap-6">
-              {eventos.map((s, idx) => {
+              {eventos.map((ev, i) => {
+                if (ev.tipo === "traslado") {
+                  const t = ev.traslado;
+                  return (
+                    <li key={`t-${t.id}`} className="ml-5 relative">
+                      <span className="absolute -left-6.75 top-1 w-4 h-4 rounded-full bg-amber-500 border-4 border-zinc-900 shadow-[0_0_0_2px_rgba(245,158,11,0.3)]" />
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-3 py-1 rounded-lg bg-amber-950/40 border border-amber-900/50 text-amber-400 text-xs font-black uppercase tracking-wider">
+                          {mesLabelDe(t.fecha)}
+                        </span>
+                        <span className="text-[11px] font-bold text-zinc-500">Traslado · {formatFecha(t.fecha)}</span>
+                      </div>
+                      <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-800">
+                        <p className="text-sm font-bold text-zinc-200">
+                          🔀 {sedeLabel(t.sedeOrigenId)} → {sedeLabel(t.sedeDestinoId)}
+                        </p>
+                        {t.motivo && <p className="text-xs text-zinc-500 italic mt-1.5">{t.motivo}</p>}
+                      </div>
+                    </li>
+                  );
+                }
+
+                const s = ev.servicio;
                 const snap = s.extintorEstados?.[extintor.uid] || {};
-                const anterior = idx > 0 ? (eventos[idx - 1].extintorEstados?.[extintor.uid] || null) : null;
-                const grupos = agruparCambios(diffSnapshots(anterior, snap));
+                const grupos = agruparCambios(diffSnapshots(ev.anterior, snap));
                 return (
                   <li key={s.id} className="ml-5 relative">
                     <span className="absolute -left-6.75 top-1 w-4 h-4 rounded-full bg-red-600 border-4 border-zinc-900 shadow-[0_0_0_2px_rgba(220,38,38,0.3)]" />
 
-                    {/* Fecha destacada, separada del resto */}
                     <div className="flex items-center gap-2 mb-2">
                       <span className="px-3 py-1 rounded-lg bg-red-950/40 border border-red-900/50 text-red-400 text-xs font-black uppercase tracking-wider">
                         {mesLabelDe(s.fechaRetiro)}
@@ -82,11 +122,10 @@ export default function HistorialExtintorModal({ isOpen, extintor, servicios, ru
                         <span className="text-zinc-500 text-xs font-bold shrink-0 group-hover:text-red-400 transition-colors">Ir al servicio →</span>
                       </button>
 
-                      {/* Cambios respecto al servicio anterior, agrupados por categoría */}
                       {grupos.length > 0 && (
                         <div className="mt-3.5 pt-3.5 border-t border-zinc-800/60 flex flex-col gap-3">
                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                            {idx === 0 ? "Datos registrados en este servicio" : "Qué cambió respecto al servicio anterior"}
+                            {i === 0 ? "Datos registrados en este servicio" : "Qué cambió respecto al servicio anterior"}
                           </span>
                           {grupos.map((g) => (
                             <div key={g.grupo} className="flex flex-col gap-1.5">
@@ -99,7 +138,7 @@ export default function HistorialExtintorModal({ isOpen, extintor, servicios, ru
                                   <Fragment key={c.campo}>
                                     <span className="text-xs font-bold text-zinc-300 self-center">{c.campo}</span>
                                     <span className="text-xs">
-                                      {idx === 0 ? (
+                                      {ev.anterior === null ? (
                                         <span className="text-zinc-400">{c.nuevo}</span>
                                       ) : (
                                         <span className="flex items-center gap-1.5 flex-wrap">

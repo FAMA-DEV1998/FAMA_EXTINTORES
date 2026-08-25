@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { COMP_KEYS, COMP_LABELS } from "../../constants";
 import type { Extintor } from "../../types";
 import { estadoColor, serviceBadge } from "../../utils/helpers";
 
@@ -6,24 +7,20 @@ type Props = {
   isOpen: boolean;
   disponibles: Extintor[];
   onClose: () => void;
-  onConfirm: (uids: string[]) => void;
+  onConfirm: (uid: string) => void;
   saving?: boolean;
 };
 
 export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onConfirm, saving }: Props) {
-  const [seleccionados, setSeleccionados] = useState<string[]>([]);
+  const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
 
   if (!isOpen) return null;
 
-  const toggle = (uid: string) => {
-    setSeleccionados((prev) => prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]);
-  };
-
   const handleConfirm = () => {
-    if (seleccionados.length === 0) return;
-    onConfirm(seleccionados);
-    setSeleccionados([]);
+    if (!seleccionado) return;
+    onConfirm(seleccionado);
+    setSeleccionado(null);
     setBusqueda("");
   };
 
@@ -42,12 +39,11 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-lg font-bold text-white">🔗 Asociar Extintor Existente</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Sin crear un extintor nuevo — la información corresponde a su último estado válido hasta la fecha de este servicio.</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Selecciona un extintor — la información corresponde a su último servicio anterior a la fecha de este registro.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 shrink-0">✕</button>
         </div>
 
-        {/* Búsqueda: identificar rápidamente el extintor correcto */}
         <div className="px-6 pt-4 shrink-0">
           <div className="relative">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">🔎</span>
@@ -68,28 +64,25 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
           ) : (
             <div className="flex flex-col gap-2.5">
               {filtrados.map((ext) => {
-                const deBaja = ext.estadoExtintor === "De Baja";
-                const checked = seleccionados.includes(ext.uid);
+                const checked = seleccionado === ext.uid;
                 const badges = serviceBadge(ext.ma, ext.recarga, ext.ph);
+                const componentesInstalados = COMP_KEYS.filter((k) => ext[k] === "SI");
                 return (
                   <label
                     key={ext.uid}
-                    className={`flex flex-col gap-2.5 p-4 rounded-xl border-2 transition-all ${
-                      deBaja
-                        ? "bg-zinc-950/60 border-zinc-800/60 opacity-50 cursor-not-allowed"
-                        : checked
-                          ? "bg-red-950/20 border-red-700 shadow-[0_0_0_1px_rgba(220,38,38,0.3)] cursor-pointer"
-                          : "bg-zinc-950/40 border-zinc-800 hover:border-zinc-600 cursor-pointer"
+                    className={`flex flex-col gap-2.5 p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                      checked
+                        ? "bg-red-950/20 border-red-700 shadow-[0_0_0_1px_rgba(220,38,38,0.3)]"
+                        : "bg-zinc-950/40 border-zinc-800 hover:border-zinc-600"
                     }`}
                   >
-                    {/* Fila 1: identificador principal (Serie, destacada) + checkbox + estado */}
                     <div className="flex items-center gap-3">
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="asociar-extintor"
                         checked={checked}
-                        disabled={deBaja}
-                        onChange={() => toggle(ext.uid)}
-                        className="accent-red-600 w-4 h-4 shrink-0 disabled:cursor-not-allowed"
+                        onChange={() => setSeleccionado(ext.uid)}
+                        className="accent-red-600 w-4 h-4 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="font-black text-white text-base leading-tight truncate">{ext.nSerie || "S/N"}</p>
@@ -100,11 +93,6 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
                       </span>
                     </div>
 
-                    {deBaja && (
-                      <p className="pl-7 text-[11px] font-bold text-red-400">🚫 No disponible — este extintor está De Baja</p>
-                    )}
-
-                    {/* Fila 2: características físicas */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 pl-7 py-2 border-y border-zinc-800/60 text-[11px]">
                       <div>
                         <span className="text-zinc-500 uppercase tracking-wide block">Marca</span>
@@ -132,8 +120,7 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
                       </div>
                     </div>
 
-                    {/* Fila 3: servicios y detalles extra, con subtítulo, solo si hay algo que mostrar */}
-                    {(badges.length > 0 || ext.servicioExtra || ext.motivoBaja || ext.observaciones) && (
+                    {(badges.length > 0 || componentesInstalados.length > 0 || ext.servicioExtra || ext.motivoBaja || ext.observaciones) && (
                       <div className="pl-7 flex flex-col gap-2">
                         {badges.length > 0 && (
                           <div>
@@ -151,6 +138,16 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
                             <div className="flex flex-wrap items-center gap-1.5">
                               {ext.servicioExtra.split(",").map((s) => s.trim()).filter(Boolean).map((s) => (
                                 <span key={s} className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-900/40 text-amber-400 border border-amber-800">✨ {s}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {componentesInstalados.length > 0 && (
+                          <div>
+                            <span className="text-zinc-500 uppercase tracking-wide text-[11px] block mb-1">Componentes instalados</span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {componentesInstalados.map((k) => (
+                                <span key={k} className="px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-900/40 text-blue-400 border border-blue-800">🔩 {COMP_LABELS[k]}</span>
                               ))}
                             </div>
                           </div>
@@ -176,12 +173,12 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
 
         <div className="px-6 py-4 border-t border-zinc-800 flex items-center gap-3 justify-between shrink-0 bg-zinc-900/50">
           <span className="text-xs font-bold text-zinc-500">
-            {seleccionados.length > 0 ? `${seleccionados.length} seleccionado${seleccionados.length === 1 ? "" : "s"}` : ""}
+            {seleccionado ? "1 seleccionado" : ""}
           </span>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-zinc-700 text-sm font-semibold text-zinc-300 hover:bg-zinc-800">Cancelar</button>
-            <button onClick={handleConfirm} disabled={seleccionados.length === 0 || saving} className="px-6 py-2.5 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50">
-              {saving ? "Asociando..." : `Asociar (${seleccionados.length})`}
+            <button onClick={handleConfirm} disabled={!seleccionado || saving} className="px-6 py-2.5 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50">
+              {saving ? "Asociando..." : "Asociar"}
             </button>
           </div>
         </div>

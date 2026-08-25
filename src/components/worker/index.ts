@@ -2,3 +2,8 @@ export { default as EmpresaFormView } from "./EmpresaFormView";
 export { default as ExtintoresListaView } from "./ExtintoresListaView";
 export { default as ExtintorFormView } from "./ExtintorFormView";
 export { default as HomeView } from "./HomeView";
+export { default as SedesView } from "./SedesView";
+export { default as HistorialMesesView } from "./HistorialMesesView";
+export { default as HistorialMesView } from "./HistorialMesView";
+export { default as ServicioDetailView } from "./ServicioDetailView";
+export { default as EscanearQRModal } from "./EscanearQRModal";

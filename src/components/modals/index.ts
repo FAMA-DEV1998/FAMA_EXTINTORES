@@ -12,3 +12,7 @@ export { default as WhatsappModal } from "./WhatsappModal";
 export { default as WeightSortModal } from "./WeightSortModal";
 export { default as SedeModal } from "./SedeModal";
 export { default as ServicioModal } from "./ServicioModal";
+export { default as TrasladoSedeModal } from "./TrasladoSedeModal";
+export { default as StickersModal } from "./StickersModal";
+export { default as InventarioModal } from "./InventarioModal";
+export { default as CertificadoModal } from "./CertificadoModal";

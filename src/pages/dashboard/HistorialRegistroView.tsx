@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEmpresaScope } from "../../context/EmpresaScopeContext";
-import { useExportActions, useServicios } from "../../hooks/dashboard";
-import { WhatsappModal, AsociarExtintorModal } from "../../components/modals";
+import { useExportActions, useServicios, useCertificado } from "../../hooks/dashboard";
+import { WhatsappModal, AsociarExtintorModal, CertificadoModal } from "../../components/modals";
 import ExtintorInventoryPanel from "../../components/dashboard/ExtintorInventoryPanel";
 import { getSnapshotHastaFecha } from "../../utils/helpers";
 
@@ -62,6 +62,15 @@ export default function HistorialRegistroView() {
     whatsappMsg, setWhatsappMsg, exportExcel, executeWhatsapp, openWhatsappModal,
   } = exportActions;
 
+  const extintoresDelRegistro = extintores
+    .filter((e: any) => (servicio?.extintorUids ?? []).includes(e.uid))
+    .map((e: any) => {
+      const snap = servicio?.extintorEstados?.[e.uid];
+      return snap ? { ...e, ...snap } : e;
+    });
+
+  const certificado = useCertificado(selectedEmpresa, activeSede, servicio, extintoresDelRegistro);
+
   if (!servicio) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20 text-zinc-500 bg-zinc-900/20 rounded-3xl border border-dashed border-zinc-800">
@@ -73,13 +82,6 @@ export default function HistorialRegistroView() {
       </div>
     );
   }
-
-  const extintoresDelRegistro = extintores
-    .filter((e: any) => servicio.extintorUids.includes(e.uid))
-    .map((e: any) => {
-      const snap = servicio.extintorEstados?.[e.uid];
-      return snap ? { ...e, ...snap } : e;
-    });
 
   const extintoresDisponibles = extintores
     .filter((e: any) => !servicio.extintorUids.includes(e.uid))
@@ -131,6 +133,9 @@ export default function HistorialRegistroView() {
           <button onClick={exportExcel} disabled={exporting} className="px-4 py-2 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 text-sm font-bold text-emerald-400 border border-emerald-800/50 transition-all disabled:opacity-50">
             {exporting ? "⏳ Generando..." : "📥 Exportar Excel"}
           </button>
+          <button onClick={certificado.abrir} className="px-4 py-2 rounded-xl bg-sky-950/30 hover:bg-sky-900/40 text-sm font-bold text-sky-400 border border-sky-800/50 transition-all">
+            📄 Descargar Certificados
+          </button>
           <button onClick={() => setAsociarModal(true)} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-300 border border-zinc-700 transition-all">
             🔗 Asociar Extintor Existente
           </button>
@@ -166,6 +171,19 @@ export default function HistorialRegistroView() {
         disponibles={extintoresDisponibles}
         onClose={() => setAsociarModal(false)}
         onConfirm={handleAsociarExtintores}
+      />
+
+      <CertificadoModal
+        isOpen={certificado.modal}
+        onClose={() => certificado.setModal(false)}
+        datos={certificado.datos}
+        onChange={certificado.actualizar}
+        filtroAgente={certificado.filtroAgente}
+        onCambiarFiltroAgente={certificado.cambiarFiltroAgente}
+        onCambiarTipoCertificado={certificado.cambiarTipoCertificado}
+        onCambiarTipoIdentificacion={certificado.cambiarTipoIdentificacion}
+        familiasDisponibles={certificado.familiasDisponibles}
+        nombreArchivo={`Certificado_${selectedEmpresa?.slug || "fama"}_${servicio.fechaRetiro || "servicio"}.pdf`}
       />
     </div>
   );

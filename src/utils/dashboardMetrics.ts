@@ -19,7 +19,14 @@ export function filterEmpresas(
   fYear: string
 ): EmpresaItem[] {
   return empresas.filter((e) => {
-    if (search && !e.razonSocial.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const coincide =
+        e.razonSocial.toLowerCase().includes(q) ||
+        (e.ruc || "").toLowerCase().includes(q) ||
+        (e.nombresApellidos || "").toLowerCase().includes(q);
+      if (!coincide) return false;
+    }
     if (fYear || fMonth) {
       if (!e.fechaEntrega) return false;
       const [y, m] = e.fechaEntrega.split("-");

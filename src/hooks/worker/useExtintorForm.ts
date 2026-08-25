@@ -10,10 +10,14 @@ export function useExtintorForm(
     setView: (v: View) => void,
     showToast: (msg: string, type?: "ok" | "err") => void,
     setSaving: (v: boolean) => void,
-    clearFormBackup: () => void
+    clearFormBackup: () => void,
+    activeSedeId?: string | null
 ) {
     const [form, setForm] = useState<FormData>(emptyForm());
     const [editingRow, setEditingRow] = useState<number | null>(null);
+    const [returnView, setReturnView] = useState<View>("todos");
+    const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any> } | null>(null);
+    const clearLastSavedExtintor = () => setLastSavedExtintor(null);
 
     const handleRealizadoPH = (val: string) => {
         const yr = parseInt(val);
@@ -32,6 +36,7 @@ export function useExtintorForm(
         const bloqueado = estadoBloqueaServicio(form.estadoExtintor) && !soloRecargaGuardado;
         const payload = {
             ...formWithoutEvidencias, id: activeId,
+            sedeId: editingRow !== null ? form.sedeId : (form.sedeId ?? activeSedeId ?? null),
             nSerie: form.nSerie.trim() === "" ? "S/N" : form.nSerie.trim().toUpperCase(),
             nInterno: form.nInterno.trim().toUpperCase(),
             ma: (bloqueado || soloRecargaGuardado) ? "" : (form.ma ? "SI" : ""),
@@ -40,13 +45,31 @@ export function useExtintorForm(
             servicioExtra: estadoBloqueaServicioExtra(form.estadoExtintor) ? "" : form.servicioExtra, motivoBaja: form.motivoBaja,
             evidencia: JSON.stringify(evidencias || []),
         };
+        const estadoSnapshot = {
+            nSerie: payload.nSerie,
+            estadoExtintor: payload.estadoExtintor,
+            realizadoPH: payload.realizadoPH,
+            vencimPH: payload.vencimPH,
+            ma: payload.ma,
+            ph: payload.ph,
+            recarga: payload.recarga,
+            valvula: payload.valvula,
+            manguera: payload.manguera,
+            manometro: payload.manometro,
+            tobera: payload.tobera,
+            observaciones: payload.observaciones,
+            servicioExtra: payload.servicioExtra,
+            motivoBaja: payload.motivoBaja,
+            evidencia: payload.evidencia,
+        };
         if (editingRow !== null) {
             socket.emit("extintor:update", { ...payload, rowIndex: editingRow }, (res: any) => {
                 setSaving(false);
                 if (res?.success) {
                     showToast("Actualizado ✓");
                     clearFormBackup();
-                    setView("lista");
+                    if (form.uid) setLastSavedExtintor({ uid: form.uid, isNew: false, estado: estadoSnapshot });
+                    setView(returnView);
                     setEditingRow(null);
                     setForm(emptyForm());
                 } else showToast(res?.error || "Error", "err");
@@ -58,14 +81,16 @@ export function useExtintorForm(
                 if (res?.success) {
                     showToast("Extintor guardado ✓");
                     clearFormBackup();
-                    setView("lista");
+                    if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot });
+                    setView(returnView);
                     setForm(emptyForm());
                 } else showToast(res?.error || "Error", "err");
             });
         }
     };
 
-    const handleEdit = (ext: Extintor) => {
+    const handleEdit = (ext: Extintor, from: View = "todos") => {
+        setReturnView(from);
         const loadForm = () => {
             setForm({
                 nSerie: ext.nSerie, nInterno: ext.nInterno, marca: ext.marca,
@@ -77,6 +102,8 @@ export function useExtintorForm(
                 valvula: ext.valvula, manguera: ext.manguera, manometro: ext.manometro,
                 tobera: ext.tobera, observaciones: ext.observaciones, servicioExtra: ext.servicioExtra || "",
                 motivoBaja: ext.motivoBaja || "",
+                sedeId: ext.sedeId ?? null,
+                uid: ext.uid,
                 evidencias: [],
             });
             setEditingRow(ext.rowIndex);
@@ -97,13 +124,26 @@ export function useExtintorForm(
         loadForm();
     };
 
-    const handleDelete = (rowIndex: number) => {
-        if (!socket || !confirm("¿Estás seguro de eliminar este extintor?")) return;
+    const openCrearExtintor = (from: View) => {
+        setReturnView(from);
+        setForm(emptyForm());
+        setEditingRow(null);
+        setView("form");
+    };
+
+    const emitDelete = (rowIndex: number, onDone?: (ok: boolean) => void) => {
+        if (!socket) return;
         socket.emit("extintor:delete", { id: activeId, rowIndex, role }, (res: any) => {
             if (res?.success) showToast("Extintor eliminado");
             else showToast("Error al eliminar", "err");
+            onDone?.(!!res?.success);
         }
         );
+    };
+
+    const handleDelete = (rowIndex: number) => {
+        if (!confirm("¿Estás seguro de eliminar este extintor?")) return;
+        emitDelete(rowIndex);
     };
 
     const setF = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -113,10 +153,15 @@ export function useExtintorForm(
         setForm,
         editingRow,
         setEditingRow,
+        returnView,
+        lastSavedExtintor,
+        clearLastSavedExtintor,
         handleRealizadoPH,
         handleExtintorSave,
         handleEdit,
+        openCrearExtintor,
         handleDelete,
+        deleteExtintorSilent: emitDelete,
         setF,
     };
 }

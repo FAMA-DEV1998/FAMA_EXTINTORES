@@ -14,6 +14,9 @@ export function useEmpresaWorkerData(
     const activeIdRef = useRef("");
     const [empresa, setEmpresa] = useState<EmpresaData>(emptyEmpresa());
     const [extintores, setExtintores] = useState<Extintor[]>([]);
+    const [extintoresGlobal, setExtintoresGlobal] = useState<Extintor[]>([]);
+    const [activeSedeId, setActiveSedeId] = useState<string | null>(null);
+    const activeSedeIdRef = useRef<string | null>(null);
 
     const changeActiveId = useCallback((name: string) => {
         activeIdRef.current = name;
@@ -46,19 +49,29 @@ export function useEmpresaWorkerData(
         };
 
         const onExtintorUpdated = ({ id, rows }: { id: string; rows: Extintor[] }) => {
-            if (id === activeIdRef.current) setExtintores(rows);
+            if (id !== activeIdRef.current) return;
+            const scoped = activeSedeIdRef.current
+                ? rows.filter((r) => r.sedeId === activeSedeIdRef.current)
+                : rows;
+            setExtintores(scoped);
+        };
+
+        const onExtintorUpdatedGlobal = ({ id, rows }: { id: string; rows: Extintor[] }) => {
+            if (id === activeIdRef.current) setExtintoresGlobal(rows);
         };
 
         socket.on("empresa:list", onEmpresaList);
         socket.on("empresa:data:updated", onEmpresaDataUpdated);
         socket.on("empresa:data", onEmpresaData);
         socket.on("extintor:updated", onExtintorUpdated);
+        socket.on("extintor:updated:global", onExtintorUpdatedGlobal);
 
         return () => {
             socket.off("empresa:list", onEmpresaList);
             socket.off("empresa:data:updated", onEmpresaDataUpdated);
             socket.off("empresa:data", onEmpresaData);
             socket.off("extintor:updated", onExtintorUpdated);
+            socket.off("extintor:updated:global", onExtintorUpdatedGlobal);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [socket, changeActiveId]);
@@ -66,9 +79,19 @@ export function useEmpresaWorkerData(
     const selectEmpresa = (id: string) => {
         if (!socket) return;
         changeActiveId(id);
+        activeSedeIdRef.current = null;
+        setActiveSedeId(null);
         socket.emit("empresa:get", { id });
         socket.emit("extintor:list", { id });
-        setView("lista");
+        socket.emit("extintor:listGlobal", { id });
+        setView("todos");
+    };
+
+    const changeActiveSede = (sedeId: string | null) => {
+        activeSedeIdRef.current = sedeId;
+        setActiveSedeId(sedeId);
+        if (!socket || !activeIdRef.current) return;
+        socket.emit("extintor:list", sedeId ? { id: activeIdRef.current, sedeId } : { id: activeIdRef.current });
     };
 
     const handleEmpresaSave = () => {
@@ -81,7 +104,8 @@ export function useEmpresaWorkerData(
                 showToast("Empresa guardada ✓");
                 changeActiveId(res.id);
                 socket.emit("extintor:list", { id: res.id });
-                setView("lista");
+                socket.emit("extintor:listGlobal", { id: res.id });
+                setView("todos");
             } else showToast(res?.error || "Error al guardar", "err");
         });
     };
@@ -93,6 +117,9 @@ export function useEmpresaWorkerData(
         empresa,
         setEmpresa,
         extintores,
+        extintoresGlobal,
+        activeSedeId,
+        changeActiveSede,
         changeActiveId,
         selectEmpresa,
         handleEmpresaSave,

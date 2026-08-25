@@ -1,5 +1,6 @@
 import type { EmpresaData } from "../../types";
 import { DISTRITOS_LIMA } from "../../constants";
+import { validarRucPorTipo } from "../../utils/helpers";
 import { ModalField, modalInput } from "../ui/ModalUI";
 
 type Props = {
@@ -13,6 +14,8 @@ type Props = {
 
 export default function EmpresaModal({ title, form, setForm, onClose, onSave, saving }: Props) {
     const setF = (k: keyof EmpresaData, v: string) => setForm((p) => p ? { ...p, [k]: v } : p);
+    const tipoCliente = form.tipoCliente || "";
+    const errorRuc = tipoCliente ? validarRucPorTipo(tipoCliente, form.ruc) : null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -39,18 +42,27 @@ export default function EmpresaModal({ title, form, setForm, onClose, onSave, sa
                             {DISTRITOS_LIMA.map((d) => <option key={d}>{d}</option>)}
                         </select>
                     </ModalField>
-                    <ModalField label="RUC">
+                    <ModalField label="Tipo de Cliente">
+                        <select className={modalInput} value={tipoCliente} onChange={(e) => setF("tipoCliente", e.target.value)}>
+                            <option value="">Sin clasificar</option>
+                            <option value="persona">Persona (DNI)</option>
+                            <option value="ruc10">RUC 10</option>
+                            <option value="ruc20">RUC 20</option>
+                        </select>
+                    </ModalField>
+                    <ModalField label={tipoCliente === "persona" ? "DNI" : "RUC"} full>
                         <div className="relative">
                             <input
                                 className={`${modalInput} ${form.ruc.length > 0 && form.ruc.length !== 11 ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""}`}
                                 value={form.ruc}
                                 onChange={(e) => setF("ruc", e.target.value.replace(/\D/g, "").slice(0, 11))}
-                                placeholder="20xxxxxxxxx" inputMode="numeric" maxLength={11}
+                                placeholder={tipoCliente === "persona" ? "DNI" : "20xxxxxxxxx"} inputMode="numeric" maxLength={11}
                             />
                             <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${form.ruc.length === 11 ? "text-emerald-500 font-bold" : "text-zinc-500"}`}>
                                 {form.ruc.length}/11 {form.ruc.length === 11 && "✓"}
                             </span>
                         </div>
+                        {errorRuc && <p className="text-xs font-bold text-amber-500 mt-1.5">⚠️ {errorRuc}</p>}
                     </ModalField>
                     <ModalField label="Nombres y Apellidos" full>
                         <input className={modalInput} value={form.nombresApellidos} onChange={(e) => setF("nombresApellidos", e.target.value)} placeholder="Nombre completo" />

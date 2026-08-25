@@ -1,25 +1,50 @@
 import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 
+export type ArchivedTab = "empresas" | "extintores" | "inventario" | "cotizaciones";
+
 export function useArchivedManager(socket: Socket | null, role: string) {
   const [archivedView, setArchivedView] = useState(false);
   const [archivedEmpresas, setArchivedEmpresas] = useState<any[]>([]);
   const [archivedExtintores, setArchivedExtintores] = useState<any[]>([]);
-  const [archivedTab, setArchivedTab] = useState<"empresas" | "extintores">("empresas");
+  const [archivedInventario, setArchivedInventario] = useState<any[]>([]);
+  const [archivedCotizaciones, setArchivedCotizaciones] = useState<any[]>([]);
+  const [archivedTab, setArchivedTab] = useState<ArchivedTab>("empresas");
   const [loadingArchived, setLoadingArchived] = useState(false);
   const [expandedArchived, setExpandedArchived] = useState<Record<string, boolean>>({});
+
+  const fetchAll = (onDone?: () => void) => {
+    if (!socket) {
+      onDone?.();
+      return;
+    }
+    let pending = 4;
+    const done = () => {
+      pending -= 1;
+      if (pending === 0) onDone?.();
+    };
+    socket.emit("empresa:deleted:list", { role }, (res: any) => {
+      if (res?.success) setArchivedEmpresas(res.list);
+      done();
+    });
+    socket.emit("extintor:deleted:list", { role }, (res: any) => {
+      if (res?.success) setArchivedExtintores(res.rows);
+      done();
+    });
+    socket.emit("inventario:deleted:list", {}, (res: any) => {
+      if (res?.success) setArchivedInventario(res.rows);
+      done();
+    });
+    socket.emit("cotizacion:deleted:list", {}, (res: any) => {
+      if (res?.success) setArchivedCotizaciones(res.rows);
+      done();
+    });
+  };
 
   useEffect(() => {
     if (!socket) return;
     const handleArchivedChange = () => {
-      if (archivedView) {
-        socket.emit("empresa:deleted:list", { role }, (res: any) => {
-          if (res?.success) setArchivedEmpresas(res.list);
-        });
-        socket.emit("extintor:deleted:list", { role }, (res: any) => {
-          if (res?.success) setArchivedExtintores(res.rows);
-        });
-      }
+      if (archivedView) fetchAll();
     };
     socket.on("extintor:archived:changed", handleArchivedChange);
     return () => {
@@ -31,26 +56,11 @@ export function useArchivedManager(socket: Socket | null, role: string) {
     if (!socket || (role !== "boss" && role !== "admin")) return;
     setLoadingArchived(true);
     setArchivedTab("empresas");
-
-    socket.emit("empresa:deleted:list", { role }, (res: any) => {
-      if (res?.success) setArchivedEmpresas(res.list);
-    });
-    socket.emit("extintor:deleted:list", { role }, (res: any) => {
-      setLoadingArchived(false);
-      if (res?.success) setArchivedExtintores(res.rows);
-    });
+    fetchAll(() => setLoadingArchived(false));
     setArchivedView(true);
   };
 
-  const refreshArchived = () => {
-    if (!socket) return;
-    socket.emit("empresa:deleted:list", { role }, (res: any) => {
-      if (res?.success) setArchivedEmpresas(res.list);
-    });
-    socket.emit("extintor:deleted:list", { role }, (res: any) => {
-      if (res?.success) setArchivedExtintores(res.rows);
-    });
-  };
+  const refreshArchived = () => fetchAll();
 
   const restoreEmpresa = (id: string) => {
     if (!socket) return;
@@ -81,11 +91,43 @@ export function useArchivedManager(socket: Socket | null, role: string) {
     });
   };
 
+  const restoreInventario = (id: string) => {
+    if (!socket) return;
+    socket.emit("inventario:restore", { id }, (res: any) => {
+      if (res?.success) refreshArchived();
+    });
+  };
+
+  const hardDeleteInventario = (id: string) => {
+    if (role !== "boss") return alert("Solo el Boss puede eliminar permanentemente");
+    if (!socket || !confirm("⚠️ ELIMINAR PERMANENTEMENTE este producto? Esta acción NO se puede deshacer.")) return;
+    socket.emit("inventario:hardDelete", { id }, (res: any) => {
+      if (res?.success) refreshArchived();
+    });
+  };
+
+  const restoreCotizacion = (id: string) => {
+    if (!socket) return;
+    socket.emit("cotizacion:restore", { id }, (res: any) => {
+      if (res?.success) refreshArchived();
+    });
+  };
+
+  const hardDeleteCotizacion = (id: string) => {
+    if (role !== "boss") return alert("Solo el Boss puede eliminar permanentemente");
+    if (!socket || !confirm("⚠️ ELIMINAR PERMANENTEMENTE esta cotización? Esta acción NO se puede deshacer.")) return;
+    socket.emit("cotizacion:hardDelete", { id }, (res: any) => {
+      if (res?.success) refreshArchived();
+    });
+  };
+
   return {
     archivedView,
     setArchivedView,
     archivedEmpresas,
     archivedExtintores,
+    archivedInventario,
+    archivedCotizaciones,
     archivedTab,
     setArchivedTab,
     loadingArchived,
@@ -97,5 +139,9 @@ export function useArchivedManager(socket: Socket | null, role: string) {
     hardDeleteEmpresa,
     restoreExtintor,
     hardDeleteExtintor,
+    restoreInventario,
+    hardDeleteInventario,
+    restoreCotizacion,
+    hardDeleteCotizacion,
   };
 }

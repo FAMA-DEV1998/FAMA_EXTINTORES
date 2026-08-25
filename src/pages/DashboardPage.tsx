@@ -10,6 +10,10 @@ import HistorialMesesView from "./dashboard/HistorialMesesView";
 import HistorialMesRegistrosView from "./dashboard/HistorialMesRegistrosView";
 import HistorialRegistroView from "./dashboard/HistorialRegistroView";
 import SedesView from "./dashboard/SedesView";
+import InventarioPage from "./dashboard/InventarioPage";
+import CotizacionesPage from "./dashboard/CotizacionesPage";
+import AlertasPage from "./dashboard/AlertasPage";
+import { useAlertasBadge } from "../hooks/dashboard/useAlertas";
 
 /* ══════════════════════════════════════════
    COMPONENTE PRINCIPAL — shell de router
@@ -19,13 +23,15 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const location = useLocation();
 
   const [catalogModal, setCatalogModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // ── Archivados (solo boss/admin) — transversal, no depende de una empresa ──
   const archived = useArchivedManager(socket, user.role);
   const {
-    archivedView, setArchivedView, archivedEmpresas, archivedExtintores,
+    archivedView, setArchivedView, archivedEmpresas, archivedExtintores, archivedInventario, archivedCotizaciones,
     archivedTab, setArchivedTab, loadingArchived, expandedArchived, setExpandedArchived,
     openArchivedView, restoreEmpresa, hardDeleteEmpresa, restoreExtintor, hardDeleteExtintor,
+    restoreInventario, hardDeleteInventario, restoreCotizacion, hardDeleteCotizacion,
   } = archived;
 
   // ── Gestión de usuarios (solo boss) — transversal ──
@@ -35,6 +41,10 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     editingUserId, setEditingUserId, savingUser, userError,
     openUsersModal, saveUser, deleteUser,
   } = usersManagement;
+
+  const enSeccionAlterna = location.pathname.startsWith("/dashboard/inventario") || location.pathname.startsWith("/dashboard/cotizaciones") || location.pathname.startsWith("/dashboard/alertas");
+
+  const totalAlertas = useAlertasBadge(socket);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-red-500/30 pb-10"
@@ -116,9 +126,55 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
         </div>
       </header>
 
-      <main className="max-w-480 mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="max-w-480 mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col md:flex-row gap-6">
+        <aside className={`shrink-0 flex md:flex-col gap-2 transition-all ${sidebarOpen ? "md:w-56" : "md:w-14"}`}>
+          <button
+            onClick={() => setSidebarOpen((v) => !v)}
+            className="hidden md:flex px-4 py-3 rounded-xl text-sm font-bold text-zinc-500 hover:text-white hover:bg-zinc-900/50 border border-transparent items-center gap-2"
+            title={sidebarOpen ? "Ocultar menú" : "Mostrar menú"}
+          >
+            {sidebarOpen ? "« Ocultar" : "»"}
+          </button>
+          <Link
+            to="/dashboard"
+            title="Registro Extintores"
+            className={`flex-1 md:flex-none px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${!enSeccionAlterna ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
+          >
+            🧯 {sidebarOpen && "Registro Extintores"}
+          </Link>
+          <Link
+            to="/dashboard/inventario"
+            title="Inventario"
+            className={`flex-1 md:flex-none px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${location.pathname.startsWith("/dashboard/inventario") ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
+          >
+            📦 {sidebarOpen && "Inventario"}
+          </Link>
+          <Link
+            to="/dashboard/cotizaciones"
+            title="Cotizaciones"
+            className={`flex-1 md:flex-none px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${location.pathname.startsWith("/dashboard/cotizaciones") ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
+          >
+            🧾 {sidebarOpen && "Cotizaciones"}
+          </Link>
+          <Link
+            to="/dashboard/alertas"
+            title="Alertas de Vencimiento"
+            className={`flex-1 md:flex-none px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${location.pathname.startsWith("/dashboard/alertas") ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
+          >
+            🔔 {sidebarOpen && "Alertas"}
+            {totalAlertas > 0 && (
+              <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center">
+                {totalAlertas > 99 ? "99+" : totalAlertas}
+              </span>
+            )}
+          </Link>
+        </aside>
+        <div className="flex-1 min-w-0">
         <Routes>
           <Route index element={<EmpresasListPage socket={socket} role={user.role} catalogs={catalogs} />} />
+          <Route path="inventario" element={<InventarioPage socket={socket} catalogs={catalogs} userRole={user.role} />} />
+          <Route path="cotizaciones" element={<CotizacionesPage socket={socket} />} />
+          <Route path="alertas" element={<AlertasPage socket={socket} />} />
           <Route path=":empresaSlug" element={<EmpresaLayout socket={socket} catalogs={catalogs} user={user} />}>
             <Route index element={<Navigate to="extintores" replace />} />
             <Route path="extintores" element={<ExtintoresView />} />
@@ -139,7 +195,28 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
 
         {/* ════ MODALES GLOBALES (no dependen de una empresa específica) ════ */}
         <UsersModal isOpen={usersModal} onClose={() => setUsersModal(false)} usersList={usersList} userForm={userForm} setUserForm={setUserForm} editingUserId={editingUserId} setEditingUserId={setEditingUserId} savingUser={savingUser} userError={userError} onSave={saveUser} onDelete={deleteUser} />
-        <ArchivedModal isOpen={archivedView} onClose={() => setArchivedView(false)} tab={archivedTab} setTab={setArchivedTab} empresas={archivedEmpresas} extintores={archivedExtintores} loading={loadingArchived} expanded={expandedArchived} setExpanded={setExpandedArchived} onRestoreEmpresa={restoreEmpresa} onHardDeleteEmpresa={hardDeleteEmpresa} onRestoreExtintor={restoreExtintor} onHardDeleteExtintor={hardDeleteExtintor} userRole={user.role} />
+        <ArchivedModal
+          isOpen={archivedView}
+          onClose={() => setArchivedView(false)}
+          tab={archivedTab}
+          setTab={setArchivedTab}
+          empresas={archivedEmpresas}
+          extintores={archivedExtintores}
+          inventario={archivedInventario}
+          cotizaciones={archivedCotizaciones}
+          loading={loadingArchived}
+          expanded={expandedArchived}
+          setExpanded={setExpandedArchived}
+          onRestoreEmpresa={restoreEmpresa}
+          onHardDeleteEmpresa={hardDeleteEmpresa}
+          onRestoreExtintor={restoreExtintor}
+          onHardDeleteExtintor={hardDeleteExtintor}
+          onRestoreInventario={restoreInventario}
+          onHardDeleteInventario={hardDeleteInventario}
+          onRestoreCotizacion={restoreCotizacion}
+          onHardDeleteCotizacion={hardDeleteCotizacion}
+          userRole={user.role}
+        />
         <CatalogModal
           isOpen={catalogModal}
           onClose={() => setCatalogModal(false)}
@@ -147,6 +224,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
           socket={socket}
           userRole={user.role}
         />
+        </div>
       </main>
     </div>
   );

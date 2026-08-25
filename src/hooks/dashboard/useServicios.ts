@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { Servicio } from "../../types";
 
-export function useServicios(socket: Socket | null, empresaId: string | undefined, sedeId: string | null) {
+export function useServicios(socket: Socket | null, empresaId: string | undefined, sedeId: string | null | undefined) {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [servicioModal, setServicioModal] = useState(false);
   const [savingServicio, setSavingServicio] = useState(false);
@@ -11,7 +11,7 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
     if (!socket || !empresaId) return;
 
     const onList = (payload: { empresaId: string; sedeId: string | null; list: Servicio[] }) => {
-      if (payload.empresaId === empresaId && payload.sedeId === sedeId) setServicios(payload.list);
+      if (payload.empresaId === empresaId && (payload.sedeId ?? null) === (sedeId ?? null)) setServicios(payload.list);
     };
     socket.on("servicio:list", onList);
     socket.emit("servicio:list", { empresaId, sedeId });
@@ -19,13 +19,14 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
     return () => { socket.off("servicio:list", onList); };
   }, [socket, empresaId, sedeId]);
 
-  const saveServicio = (data: { fechaRetiro: string; fechaEntrega: string; extintorUids: string[]; notas?: string }) => {
+  const saveServicio = (data: { fechaRetiro: string; fechaEntrega: string; extintorUids: string[]; notas?: string }, onDone?: (ok: boolean, id?: string, error?: string) => void) => {
     if (!socket || !empresaId) return;
     setSavingServicio(true);
     socket.emit("servicio:save", { empresaId, sedeId, ...data }, (res: any) => {
       setSavingServicio(false);
       if (res?.success) setServicioModal(false);
       else alert(res?.error || "No se pudo registrar el servicio");
+      onDone?.(!!res?.success, res?.id, res?.error);
     });
   };
 
@@ -34,9 +35,21 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
     socket.emit("servicio:delete", { id, empresaId, sedeId });
   };
 
-  const addExtintorToServicio = (servicioId: string, uid: string) => {
+  const updateServicioDatos = (id: string, fechaRetiro: string, fechaEntrega: string, notas?: string) => {
     if (!socket || !empresaId) return;
-    socket.emit("servicio:addExtintor", { id: servicioId, uid, empresaId, sedeId });
+    socket.emit("servicio:updateDatos", { id, fechaRetiro, fechaEntrega, notas, empresaId, sedeId });
+  };
+
+  const addExtintorToServicio = (servicioId: string, uid: string, onDone?: (ok: boolean, error?: string) => void) => {
+    if (!socket || !empresaId) return;
+    socket.emit("servicio:addExtintor", { id: servicioId, uid, empresaId, sedeId }, (res: any) => {
+      onDone?.(!!res?.success, res?.error);
+    });
+  };
+
+  const removeExtintorDeServicio = (servicioId: string, uid: string) => {
+    if (!socket || !empresaId) return;
+    socket.emit("servicio:removeExtintor", { id: servicioId, uid, empresaId, sedeId });
   };
 
   const setExtintorEstado = (servicioId: string, uid: string, estado: Record<string, any>) => {
@@ -44,5 +57,5 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
     socket.emit("servicio:setExtintorEstado", { id: servicioId, uid, estado, empresaId, sedeId });
   };
 
-  return { servicios, servicioModal, setServicioModal, savingServicio, saveServicio, deleteServicio, addExtintorToServicio, setExtintorEstado };
+  return { servicios, servicioModal, setServicioModal, savingServicio, saveServicio, deleteServicio, updateServicioDatos, addExtintorToServicio, removeExtintorDeServicio, setExtintorEstado };
 }

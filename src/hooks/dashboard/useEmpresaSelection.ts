@@ -21,6 +21,8 @@ export function useEmpresaSelection(
   useEffect(() => {
     if (!socket) return;
 
+    socket.emit("empresa:list");
+
     socket.on("empresa:list", (list: EmpresaItem[]) => setEmpresas(list));
 
     socket.on("empresa:data", (data: EmpresaData) => {

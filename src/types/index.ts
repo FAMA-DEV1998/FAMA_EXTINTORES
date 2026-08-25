@@ -9,6 +9,7 @@ export type EmpresaItem = {
   fechaEntrega?: string;
   slug: string;
   sedes?: Sede[];
+  tipoCliente?: string | null;
 };
 
 export type Sede = {
@@ -36,6 +37,7 @@ export type EmpresaData = {
   agenteOrder?: string[];
   slug?: string;
   sedes?: Sede[];
+  tipoCliente?: string | null;
 };
 
 export type Extintor = {
@@ -62,7 +64,7 @@ export type Extintor = {
   servicioExtra: string;
   motivoBaja: string;
   evidencia?: string; 
-  evidenciaCount?: number; 
+  evidenciaCount?: number;
   uid: string;
   sedeId: string | null;
 };
@@ -88,13 +90,12 @@ export type FormData = {
   observaciones: string;
   servicioExtra: string;
   motivoBaja: string;
-  evidencias: string[]; 
-  sedeId?: string | null; 
+  evidencias: string[];
+  sedeId?: string | null;
+  uid?: string;
 };
 
-
-// Tipos específicos para las vistas
-export type WorkerView = "home" | "empresa" | "lista" | "form";
+export type WorkerView = "home" | "empresa" | "todos" | "form" | "sedes" | "historial" | "historialMes" | "servicio";
 export type DashView = "list" | "detail";
 
 export type Servicio = {
@@ -106,5 +107,55 @@ export type Servicio = {
   extintorUids: string[];
   extintorEstados?: Record<string, Partial<Extintor>>;
   notas?: string;
+  secuencia?: number;
+  createdAt?: string;
+};
+
+export type CotizacionItem = {
+  codigo: string;
+  descripcion: string;
+  detalle: string;
+  um: string;
+  cantidad: number;
+  precioUnit: number;
+};
+
+export type Cotizacion = {
+  id: string;
+  numero: string;
+  fecha: string;
+  cliente: string;
+  ruc: string;
+  direccion: string;
+  atencion: string;
+  items: CotizacionItem[];
+  createdAt?: string;
+};
+
+export type InventarioItem = {
+  id: string;
+  codigo: string;
+  nombre: string;
+  categoria: string;
+  operacion?: string | null;
+  precioTotal: number;
+  stock: number;
+  estado: string;
+  marca?: string | null;
+  capacidad?: string | null;
+  agente?: string | null;
+  peso?: string | null;
+  createdAt?: string;
+};
+
+export type TrasladoSede = {
+  id: string;
+  extintorUid: string;
+  empresaId: string;
+  sedeOrigenId: string | null;
+  sedeDestinoId: string | null;
+  fecha: string;
+  motivo?: string;
+  secuencia?: number;
   createdAt?: string;
 };

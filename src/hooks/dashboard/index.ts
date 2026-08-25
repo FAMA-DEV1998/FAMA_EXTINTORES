@@ -8,3 +8,7 @@ export { useExtintorForm } from "./useExtintorForm";
 export { useUsersManagement } from "./useUsersManagement";
 export { useSedes } from "./useSedes";
 export { useServicios } from "./useServicios";
+export { useTraslados } from "./useTraslados";
+export { useInventario } from "./useInventario";
+export { useCotizaciones } from "./useCotizaciones";
+export { useCertificado } from "./useCertificado";

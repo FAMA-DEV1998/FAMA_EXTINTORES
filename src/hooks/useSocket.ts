@@ -10,12 +10,14 @@ export type Catalogs = {
     recargas: { id: number; type: string; value: string }[];
     motivosBaja: { id: number; type: string; value: string }[];
     serviciosExtra: { id: number; type: string; value: string }[];
+    categoriasInventario: { id: number; type: string; value: string }[];
+    capacidades: { id: number; type: string; value: string }[];
 };
 
 export function useSocket(userId: string, onLogout: () => void) {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [connected, setConnected] = useState(false);
-    const [catalogs, setCatalogs] = useState<Catalogs>({ marcas: [], agentes: [], recargas: [], motivosBaja: [], serviciosExtra: [] });
+    const [catalogs, setCatalogs] = useState<Catalogs>({ marcas: [], agentes: [], recargas: [], motivosBaja: [], serviciosExtra: [], categoriasInventario: [], capacidades: [] });
 
     useEffect(() => {
         const s = io(BACKEND);
@@ -25,7 +27,7 @@ export function useSocket(userId: string, onLogout: () => void) {
             setConnected(true);
             s.emit("empresa:list");
             s.emit("catalog:list", {}, (res: any) => {
-                if (res?.success) setCatalogs({ marcas: res.marcas, agentes: res.agentes, recargas: res.recargas, motivosBaja: res.motivosBaja, serviciosExtra: res.serviciosExtra });
+                if (res?.success) setCatalogs({ marcas: res.marcas, agentes: res.agentes, recargas: res.recargas, motivosBaja: res.motivosBaja, serviciosExtra: res.serviciosExtra, categoriasInventario: res.categoriasInventario, capacidades: res.capacidades });
             });
             s.emit("auth:verify", { id: userId }, (res: any) => {
                 if (res && res.valid === false) onLogout();

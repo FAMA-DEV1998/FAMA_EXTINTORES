@@ -5,10 +5,11 @@ import type { FormData, WorkerView as View } from "../../types";
 import {
     estadoBloqueaServicio,
     estadoBloqueaServicioExtra,
+    estadoRequiereDatosPH,
     estadoSoloPermiteRecarga,
     getRecargasPermitidas,
-} from "../../utils/helpers";
-import { Card, Field, SiNo, Toggle, inputCls } from "../ui/WorkerUI";
+    proximoAnioPH,
+} from "../../utils/helpers";import { Card, Field, SiNo, Toggle, inputCls } from "../ui/WorkerUI";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 
@@ -34,6 +35,7 @@ interface ExtintorFormViewProps {
     setView: (v: View) => void;
     setEditingRow: (r: number | null) => void;
     clearFormBackup: () => void;
+    onCancel: () => void;
 
     MAX_EVIDENCIAS: number;
     removeEvidencia: (index: number) => void;
@@ -59,9 +61,9 @@ export default function ExtintorFormView({
     SERVICIOS_EXTRA,
     saving,
     connected,
-    setView,
     setEditingRow,
     clearFormBackup,
+    onCancel,
     MAX_EVIDENCIAS,
     removeEvidencia,
     persistFormState,
@@ -112,6 +114,17 @@ export default function ExtintorFormView({
                         <Field label="Año Vencimiento PH (Automático +5)">
                             <input className={`${inputCls} bg-zinc-100 text-zinc-500 border-dashed cursor-not-allowed`} value={form.vencimPH} readOnly placeholder="Se calcula solo" />
                         </Field>
+                        {estadoRequiereDatosPH(form.estadoExtintor) && proximoAnioPH(form.realizadoPH) !== null && proximoAnioPH(form.realizadoPH)! < new Date().getFullYear() ? (
+                            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
+                                <span className="shrink-0">🔴</span>
+                                <span className="leading-snug">Prueba hidrostática vencida — realizar urgentemente</span>
+                            </div>
+                        ) : estadoRequiereDatosPH(form.estadoExtintor) && proximoAnioPH(form.realizadoPH) === new Date().getFullYear() && (
+                            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold">
+                                <span className="shrink-0">⚠️</span>
+                                <span className="leading-snug">Debe realizarse la prueba hidrostática este año</span>
+                            </div>
+                        )}
                     </div>
                 </Card>
 
@@ -130,6 +143,9 @@ export default function ExtintorFormView({
                                         }
                                         if (estadoBloqueaServicioExtra(nuevoEstado)) {
                                             next.servicioExtra = "";
+                                        }
+                                        if (p.estadoExtintor === "De Baja" && nuevoEstado !== "De Baja") {
+                                            next.motivoBaja = "";
                                         }
                                         return next;
                                     })}>
@@ -372,7 +388,7 @@ export default function ExtintorFormView({
             </Card>
 
             <div className="flex flex-col sm:flex-row gap-4 pt-4 pb-8 border-t border-zinc-200 mt-2">
-                <button onClick={() => { setView("lista"); setEditingRow(null); clearFormBackup(); }} className="order-2 sm:order-1 flex-1 py-4 md:py-5 rounded-2xl border-2 border-zinc-300 text-zinc-600 font-black text-sm md:text-base hover:bg-zinc-100 hover:border-zinc-400 transition-colors active:scale-95">
+                <button onClick={() => { onCancel(); setEditingRow(null); clearFormBackup(); }} className="order-2 sm:order-1 flex-1 py-4 md:py-5 rounded-2xl border-2 border-zinc-300 text-zinc-600 font-black text-sm md:text-base hover:bg-zinc-100 hover:border-zinc-400 transition-colors active:scale-95">
                     Cancelar
                 </button>
                 <button onClick={handleExtintorSave} disabled={saving || !connected} className="order-1 sm:order-2 flex-2 py-4 md:py-5 rounded-2xl bg-red-700 text-white font-black text-sm md:text-base disabled:opacity-50 hover:bg-red-600 shadow-xl shadow-red-900/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2">

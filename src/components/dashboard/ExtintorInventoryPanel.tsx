@@ -3,9 +3,9 @@ import { COMP_LABELS } from "../../constants";
 import { estadoColor, serviceBadge, getEstadoPrioridad, getWeightInKg } from "../../utils/helpers";
 import { computeBaseMetrics, getDuplicateSets, getPesoEntriesWithAgents } from "../../utils/dashboardMetrics";
 import { FilterSelect, MetricPanel, ComponentDots } from "../ui/DashboardUI";
-import { ExtintorModal, ObservationModal, EvidenciaModal, WeightSortModal, HistorialExtintorModal } from "../modals";
+import { ExtintorModal, ObservationModal, EvidenciaModal, WeightSortModal, HistorialExtintorModal, TrasladoSedeModal, StickersModal } from "../modals";
 import { useEmpresaScope } from "../../context/EmpresaScopeContext";
-import { useDashboardFilters, useServicios } from "../../hooks/dashboard";
+import { useDashboardFilters, useServicios, useTraslados } from "../../hooks/dashboard";
 import type { Extintor } from "../../types";
 
 interface ExtintorInventoryPanelProps {
@@ -25,18 +25,18 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
     } = scope as any;
 
     const baseExtintoresRaw: Extintor[] = extintoresOverride ?? scopeExtintores;
-    // Punto 1: los conteos deben ser sobre extintores ÚNICOS. Si el mismo
-    // extintor aparece más de una vez en la lista de entrada (p. ej. por
-    // participar en varios servicios históricos), se cuenta una sola vez.
+
     const baseExtintores: Extintor[] = Array.from(
         new Map(baseExtintoresRaw.map((e) => [e.uid, e])).values()
     );
 
-    // Historial por extintor (punto 2): reutiliza los mismos servicios que
-    // ya usa el detalle de un registro, para no duplicar la lógica de fetch.
     const { servicios } = useServicios(scope.socket, scope.selectedEmpresa?.id, activeSede?.id ?? null);
     const [historialExtintor, setHistorialExtintor] = useState<Extintor | null>(null);
+    const [trasladoExtintor, setTrasladoExtintor] = useState<Extintor | null>(null);
+    const [stickersModal, setStickersModal] = useState(false);
     const rutaBase = activeSede ? `/dashboard/${scope.selectedEmpresa?.slug}/sedes/${activeSede.slug}` : `/dashboard/${scope.selectedEmpresa?.slug}`;
+    const traslados = useTraslados(scope.socket, historialExtintor?.uid);
+    const trasladoDestino = useTraslados(scope.socket, trasladoExtintor?.uid);
 
     const {
         estadoCounts, marcaCounts, agenteCounts, pesoCounts, pesoAgentBreakdown, serviceCounts, compCounts,
@@ -45,18 +45,10 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
 
     const sedesList = scope.sedes.sedes as any[];
     const hasSedes = sedesList.length > 0;
-    // Solo mostramos la columna/métrica/filtro/orden de Sede en el resumen
-    // general de la Empresa (no dentro de una Sede específica, donde sería
-    // redundante).
+
     const showSedeExtras = variant === "resumen" && !activeSede && hasSedes;
     const sedeNameById: Record<string, string> = Object.fromEntries(sedesList.map((s) => [s.id, s.nombre]));
 
-    // Punto 4: dentro de un registro de Historial (extintoresOverride
-    // presente), los botones/modales de ordenamiento (Estado/Tipo/Peso) deben
-    // trabajar SOLO con los extintores de ESE servicio, no con el orden
-    // guardado a nivel Empresa/Sede — por eso usan un estado local propio en
-    // vez del `customOrders` compartido del contexto (que sigue intacto para
-    // "Todos los Extintores"/"Historial" sin acotar).
     const isScopedToRegistro = !!extintoresOverride;
     const [localWeightOrder, setLocalWeightOrder] = useState<string[]>([]);
     const [localEstadoOrder, setLocalEstadoOrder] = useState<string[]>([]);
@@ -70,8 +62,7 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
     const customWeightOrder = isScopedToRegistro ? localWeightOrder : scope.customOrders.customWeightOrder;
     const customEstadoOrder = isScopedToRegistro ? localEstadoOrder : scope.customOrders.customEstadoOrder;
     const customAgenteOrder = isScopedToRegistro ? localAgenteOrder : scope.customOrders.customAgenteOrder;
-    // Sede no se persiste a nivel Empresa (es exclusivo de "Todos los
-    // Extintores"), así que siempre vive en estado local.
+
     const customSedeOrder = localSedeOrder;
     const setCustomWeightOrder = isScopedToRegistro ? setLocalWeightOrder : scope.customOrders.setCustomWeightOrder;
     const setCustomEstadoOrder = isScopedToRegistro ? setLocalEstadoOrder : scope.customOrders.setCustomEstadoOrder;
@@ -82,7 +73,7 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
     const setWeightOrderModal = isScopedToRegistro ? setLocalWeightModal : scope.customOrders.setWeightOrderModal;
     const setEstadoOrderModal = isScopedToRegistro ? setLocalEstadoModal : scope.customOrders.setEstadoOrderModal;
     const setAgenteOrderModal = isScopedToRegistro ? setLocalAgenteModal : scope.customOrders.setAgenteOrderModal;
-    // Sin concepto de orden persistido por registro: no llamamos a la API.
+
     const persistOrders = isScopedToRegistro ? (() => { }) : scope.customOrders.persistOrders;
 
     useEffect(() => {
@@ -126,8 +117,6 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
     } = scope.extintorForm;
     const { MARCAS, AGENTES, RECARGAS, MOTIVOS_BAJA, SERVICIOS_EXTRA } = scope.catalogLists;
 
-    // Al agregar un extintor nuevo estando dentro de una Sede, se le asigna
-    // automáticamente esa Sede.
     const handleOpenAddExtintor = () => {
         openAddExtintor();
         if (activeSede) setExtintorForm((p: any) => ({ ...p, sedeId: activeSede.id }));
@@ -198,15 +187,23 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                 <span className="text-lg leading-none">+</span> Agregar Extintor
                             </button>
                         )}
-                        {variant === "resumen" && onExportExcel && (
+                        <div className="flex items-center gap-2 self-start sm:self-auto sm:ml-auto">
+                            {variant === "resumen" && onExportExcel && (
+                                <button
+                                    onClick={onExportExcel}
+                                    disabled={exporting}
+                                    className="px-4 py-2.5 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 text-sm font-bold text-emerald-400 border border-emerald-800/50 transition-all flex items-center gap-2 disabled:opacity-50 hover:shadow-lg hover:shadow-emerald-900/20 active:scale-95"
+                                >
+                                    {exporting ? "⏳ Generando..." : "📥 Exportar Excel"}
+                                </button>
+                            )}
                             <button
-                                onClick={onExportExcel}
-                                disabled={exporting}
-                                className="px-4 py-2.5 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 text-sm font-bold text-emerald-400 border border-emerald-800/50 transition-all flex items-center gap-2 disabled:opacity-50 hover:shadow-lg hover:shadow-emerald-900/20 active:scale-95 self-start sm:self-auto"
+                                onClick={() => setStickersModal(true)}
+                                className="px-4 py-2.5 rounded-xl bg-zinc-950/30 hover:bg-zinc-800/60 text-sm font-bold text-zinc-300 border border-zinc-700/60 transition-all flex items-center gap-2 hover:shadow-lg active:scale-95"
                             >
-                                {exporting ? "⏳ Generando..." : "📥 Exportar Excel"}
+                                🏷️ Generar Stickers
                             </button>
-                        )}
+                        </div>
                     </div>
 
                     {/* Filtros */}
@@ -442,13 +439,24 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                             </td>
                                             {variant === "resumen" && (
                                                 <td className="px-5 py-3.5 text-center">
-                                                    <button
-                                                        onClick={() => setHistorialExtintor(ext)}
-                                                        className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-red-900/60 text-sm flex items-center justify-center border border-zinc-700 hover:border-red-700/60 transition-all mx-auto"
-                                                        title="Ver historial de servicios"
-                                                    >
-                                                        📜
-                                                    </button>
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <button
+                                                            onClick={() => setHistorialExtintor(ext)}
+                                                            className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-red-900/60 text-sm flex items-center justify-center border border-zinc-700 hover:border-red-700/60 transition-all"
+                                                            title="Ver historial de servicios"
+                                                        >
+                                                            📜
+                                                        </button>
+                                                        {hasSedes && (
+                                                            <button
+                                                                onClick={() => setTrasladoExtintor(ext)}
+                                                                className="w-8 h-8 rounded-xl bg-zinc-800/80 hover:bg-amber-900/60 text-sm flex items-center justify-center border border-zinc-700 hover:border-amber-700/60 transition-all"
+                                                                title="Trasladar de Sede"
+                                                            >
+                                                                🔀
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             )}
                                             <td className="px-5 py-3.5 sticky right-0 bg-zinc-950/80 backdrop-blur-md group-hover:bg-zinc-800/90 transition-colors border-l border-zinc-800/40">
@@ -551,8 +559,38 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                 isOpen={!!historialExtintor}
                 extintor={historialExtintor}
                 servicios={servicios}
+                traslados={traslados.traslados}
+                sedeNameById={sedeNameById}
                 rutaBase={rutaBase}
                 onClose={() => setHistorialExtintor(null)}
+            />
+            <TrasladoSedeModal
+                isOpen={!!trasladoExtintor}
+                extintorNombre={trasladoExtintor?.nSerie || "S/N"}
+                sedeOrigenNombre={trasladoExtintor?.sedeId ? (sedeNameById[trasladoExtintor.sedeId] || "—") : "Sin sede"}
+                sedesDisponibles={sedesList.filter((s) => s.id !== trasladoExtintor?.sedeId)}
+                onClose={() => setTrasladoExtintor(null)}
+                saving={trasladoDestino.savingTraslado}
+                onConfirm={(data: any) => {
+                    if (!trasladoExtintor || !scope.selectedEmpresa?.id) return;
+                    trasladoDestino.trasladarExtintor({
+                        extintorUid: trasladoExtintor.uid,
+                        rowIndex: trasladoExtintor.rowIndex,
+                        empresaId: scope.selectedEmpresa.id,
+                        sedeOrigenId: trasladoExtintor.sedeId,
+                        sedeDestinoId: data.sedeDestinoId,
+                        fecha: data.fecha,
+                        motivo: data.motivo,
+                    }, (ok, error) => {
+                        if (ok) setTrasladoExtintor(null);
+                        else if (error) alert(error);
+                    });
+                }}
+            />
+            <StickersModal
+                isOpen={stickersModal}
+                extintores={sortedExt}
+                onClose={() => setStickersModal(false)}
             />
         </div>
     );

@@ -1,4 +1,4 @@
-import type { FormData, EmpresaData, Extintor, Servicio } from "../types";
+import type { FormData, EmpresaData, Extintor, Servicio, Sede } from "../types";
 import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH, ESTADOS_SIN_SERVICIO_EXTRA, ESTADOS_SOLO_RECARGA } from "../constants/extintores";
 
 export const emptyForm = (): FormData => ({
@@ -145,7 +145,28 @@ export const estadoRequiereDatosPH = (estado: string): boolean => {
     return ESTADOS_REQUIEREN_DATOS_PH.includes(estado);
 };
 
+export const proximoAnioPH = (realizadoPH?: string): number | null => {
+    const anio = parseInt(realizadoPH || "", 10);
+    if (isNaN(anio)) return null;
+    return anio + 5;
+};
+
+export const phVenceEsteAnio = (ext: Extintor): boolean => {
+    if (!estadoRequiereDatosPH(ext.estadoExtintor || "")) return false;
+    const proximo = proximoAnioPH(ext.realizadoPH);
+    if (proximo === null) return false;
+    return proximo === new Date().getFullYear();
+};
+
+export const phVencida = (ext: Extintor): boolean => {
+    if (!estadoRequiereDatosPH(ext.estadoExtintor || "")) return false;
+    const proximo = proximoAnioPH(ext.realizadoPH);
+    if (proximo === null) return false;
+    return proximo < new Date().getFullYear();
+};
+
 export const esExtintorIncompleto = (ext: Extintor): boolean => {
+    const sinEstado = !ext.estadoExtintor || !ext.estadoExtintor.trim();
     const sinMarca = !ext.marca || !ext.marca.trim();
     const sinAgente = !ext.agenteExtintor || !ext.agenteExtintor.trim();
     const sinPeso = !ext.peso || !String(ext.peso).trim();
@@ -158,12 +179,13 @@ export const esExtintorIncompleto = (ext: Extintor): boolean => {
     const sinRealizadoPH = datosPHRequeridos && (!ext.realizadoPH || !ext.realizadoPH.trim());
     const sinVencimPH = datosPHRequeridos && (!ext.vencimPH || !ext.vencimPH.trim());
 
-    return sinMarca || sinAgente || sinPeso || sinServicio || sinFabricacion || sinRealizadoPH || sinVencimPH;
+    return sinEstado || sinMarca || sinAgente || sinPeso || sinServicio || sinFabricacion || sinRealizadoPH || sinVencimPH;
 };
 
 export const getCamposFaltantes = (ext: Extintor): string[] => {
     const faltantes: string[] = [];
 
+    if (!ext.estadoExtintor || !ext.estadoExtintor.trim()) faltantes.push("Estado");
     if (!ext.marca || !ext.marca.trim()) faltantes.push("Marca");
     if (!ext.agenteExtintor || !ext.agenteExtintor.trim()) faltantes.push("Agente");
     if (!ext.peso || !String(ext.peso).trim()) faltantes.push("Peso");
@@ -303,6 +325,58 @@ export const serviciosDelExtintor = (servicios: Servicio[], uid: string): Servic
         .sort((a, b) => (a.fechaRetiro || "").localeCompare(b.fechaRetiro || ""));
 };
 
+export const parseEvidencias = (raw?: string): string[] => {
+    if (!raw) return [];
+    try {
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+    } catch {
+        return [];
+    }
+};
+
+export const TIPO_CLIENTE_LABELS: Record<string, string> = {
+    persona: "Persona (DNI)",
+    ruc10: "RUC 10",
+    ruc20: "RUC 20",
+};
+
+export const TIPO_CLIENTE_ICONS: Record<string, string> = {
+    persona: "👤",
+    ruc10: "🏪",
+    ruc20: "🏢",
+};
+
+export const esMultisede = (e: { sedes?: Sede[] }): boolean => (e.sedes?.length || 0) > 0;
+
+export const iconoEmpresa = (e: { tipoCliente?: string | null; sedes?: Sede[] }): string => {
+    if (esMultisede(e)) return "🏬";
+    if (e.tipoCliente && TIPO_CLIENTE_ICONS[e.tipoCliente]) return TIPO_CLIENTE_ICONS[e.tipoCliente];
+    return "🏢";
+};
+
+export const validarRucPorTipo = (tipoCliente: string, ruc: string): string | null => {
+    if (tipoCliente === "ruc10" || tipoCliente === "ruc20") {
+        if (!/^\d{11}$/.test((ruc || "").trim())) return "El RUC debe tener 11 dígitos";
+        if (tipoCliente === "ruc20" && !ruc.trim().startsWith("20")) return "El RUC 20 debe iniciar en 20";
+    }
+    return null;
+};
+
+const ORDINALES_SERVICIO = ["Primer", "Segundo", "Tercer", "Cuarto", "Quinto", "Sexto", "Séptimo", "Octavo", "Noveno", "Décimo"];
+const ORDINALES_TRASLADO = ["Primero", "Segundo", "Tercer", "Cuarto", "Quinto", "Sexto", "Séptimo", "Octavo", "Noveno", "Décimo"];
+
+export const ordinalServicio = (n: number): string => ORDINALES_SERVICIO[n - 1] || `${n}.º`;
+export const ordinalTraslado = (n: number): string => ORDINALES_TRASLADO[n - 1] || `${n}.º`;
+
+const MESES_LABEL = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+export const mesAnioLabel = (fecha: string): string => {
+    const [anio, mes] = (fecha || "").split("-");
+    const idx = parseInt(mes, 10) - 1;
+    if (!anio || isNaN(idx) || idx < 0 || idx > 11) return "Sin fecha";
+    return `${MESES_LABEL[idx]} ${anio}`;
+};
+
 // Fotografía de un extintor MÁS RECIENTE, considerando únicamente
 // servicios cuya fecha sea <= fechaLimite (si se indica). Sirve tanto para
 // determinar el estado "actual" real (sin límite: el más reciente de
@@ -324,6 +398,7 @@ export const getSnapshotHastaFecha = (
 // extintor, con una etiqueta legible y una categoría (para agruparlos y
 // facilitar el escaneo visual).
 export const CAMPOS_HISTORIAL_EXTINTOR: { key: keyof Extintor; label: string; grupo: string }[] = [
+    { key: "nSerie", label: "N° Serie", grupo: "Identificación" },
     { key: "estadoExtintor", label: "Estado", grupo: "Estado" },
     { key: "ma", label: "Mantenimiento (MA)", grupo: "Servicio" },
     { key: "ph", label: "Prueba Hidrostática (PH)", grupo: "Servicio" },
