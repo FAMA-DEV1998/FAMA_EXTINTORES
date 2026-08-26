@@ -230,6 +230,19 @@ export default function CotizacionTemplate({ cotizacion }: Props) {
 
                 <div className="grid grid-cols-2 gap-6">
                     <ul className="list-none text-slate-700 space-y-2">
+                        {/* <li>
+                            <span className="font-bold text-slate-900 mr-1">
+                                • Tiempo de entrega:
+                            </span>{" "}
+                            48 horas tras confirmación de compra.
+                        </li>
+                        <li>
+                            <span className="font-bold text-slate-900 mr-1">
+                                • Validez de oferta:
+                            </span>{" "}
+                            15 días calendario.
+                        </li> */}
+
                         <li>
                             <span className="font-bold text-slate-900 mr-1">
                                 • Tiempo de entrega:
@@ -242,6 +255,7 @@ export default function CotizacionTemplate({ cotizacion }: Props) {
                             </span>{" "}
                             15 días calendario.
                         </li>
+
                         <li>
                             <span className="font-bold text-slate-900 mr-1">• Respaldo:</span>{" "}
                             +31 años de experiencia, operando con certificaciones
