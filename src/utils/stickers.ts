@@ -54,7 +54,7 @@ export const generarStickerPng = async (uid: string): Promise<Blob> => {
         }
     });
 
-    const svgRoot = doc.documentElement;
+    const svgRoot = doc.documentElement as unknown as SVGSVGElement;
     const svgWidth = parseFloat(svgRoot.getAttribute("width") || "0") || svgRoot.viewBox.baseVal.width || 1000;
     const svgHeight = parseFloat(svgRoot.getAttribute("height") || "0") || svgRoot.viewBox.baseVal.height || 1000;
 

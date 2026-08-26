@@ -3,9 +3,9 @@ import { ModalField, modalInput } from "../ui/ModalUI";
 
 type Props = {
   isOpen: boolean;
-  anio: number;
-  mes: number; 
-  mesLabel: string;
+  anio?: number;
+  mes?: number; 
+  mesLabel?: string;
   onClose: () => void;
   onSave: (data: { fechaRetiro: string; fechaEntrega: string; notas?: string,  }) => void;
   saving: boolean;
@@ -26,7 +26,7 @@ export default function ServicioModal({ isOpen, anio, mes, mesLabel, onClose, on
     return !isNaN(n) && n >= 1 && n <= 31;
   };
 
-  const buildFecha = (dia: string) => diaValido(dia) && dia.trim() !== "" ? `${anio}-${pad2(mes)}-${pad2(parseInt(dia))}` : `${anio}-${pad2(mes)}`;
+  const buildFecha = (dia: string) => diaValido(dia) && dia.trim() !== "" ? `${anio}-${pad2(mes!)}-${pad2(parseInt(dia))}` : `${anio}-${pad2(mes!)}`;
 
   const handleSave = () => {
     onSave({

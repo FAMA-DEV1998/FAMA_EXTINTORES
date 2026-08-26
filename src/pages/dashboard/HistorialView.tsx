@@ -131,7 +131,6 @@ export default function HistorialView() {
       )}
       <ServicioModal
         isOpen={servicioModal}
-        extintores={extintores}
         onClose={() => setServicioModal(false)}
         onSave={saveServicio}
         saving={savingServicio}
