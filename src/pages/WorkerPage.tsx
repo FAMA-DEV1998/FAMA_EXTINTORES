@@ -42,7 +42,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
   const {
     form, setForm, editingRow, setEditingRow, returnView,
     lastSavedExtintor, clearLastSavedExtintor,
-    handleRealizadoPH, handleExtintorSave, handleEdit, openCrearExtintor, handleDelete, deleteExtintorSilent, setF,
+    handleRealizadoPH, handleMesRealizadoPH, handleExtintorSave, handleEdit, openCrearExtintor, handleDelete, deleteExtintorSilent, setF,
   } = extintorForm;
 
   const formBackup = useFormBackup(
@@ -395,6 +395,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
             setForm={setForm}
             setF={setF}
             handleRealizadoPH={handleRealizadoPH}
+            handleMesRealizadoPH={handleMesRealizadoPH}
             handleExtintorSave={handleExtintorSave}
             socket={socket}
             userRole={user.role}

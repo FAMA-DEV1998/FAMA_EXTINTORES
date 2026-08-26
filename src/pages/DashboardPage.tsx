@@ -15,9 +15,6 @@ import CotizacionesPage from "./dashboard/CotizacionesPage";
 import AlertasPage from "./dashboard/AlertasPage";
 import { useAlertasBadge } from "../hooks/dashboard/useAlertas";
 
-/* ══════════════════════════════════════════
-   COMPONENTE PRINCIPAL — shell de router
-   ══════════════════════════════════════════ */
 export default function DashboardPage({ user, onLogout }: { user: { id: string; username: string; role: string; displayName: string }; onLogout: () => void }) {
   const { socket, connected, catalogs } = useSocket(user.id, onLogout);
   const location = useLocation();
@@ -25,7 +22,6 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
   const [catalogModal, setCatalogModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // ── Archivados (solo boss/admin) — transversal, no depende de una empresa ──
   const archived = useArchivedManager(socket, user.role);
   const {
     archivedView, setArchivedView, archivedEmpresas, archivedExtintores, archivedInventario, archivedCotizaciones,
@@ -34,7 +30,6 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     restoreInventario, hardDeleteInventario, restoreCotizacion, hardDeleteCotizacion,
   } = archived;
 
-  // ── Gestión de usuarios (solo boss) — transversal ──
   const usersManagement = useUsersManagement(socket, user.role);
   const {
     usersModal, setUsersModal, usersList, userForm, setUserForm,
@@ -50,10 +45,8 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
     <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-red-500/30 pb-10"
       style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
 
-      {/* ════ HEADER GLOBAL ════ */}
       <header className="sticky top-0 z-30 backdrop-blur-2xl bg-zinc-950/80 border-b border-zinc-800/60 shadow-sm">
         <div className="max-w-480 mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Izquierda: Logo + Back */}
           <div className="flex items-center gap-4">
             {location.pathname !== "/dashboard" && (
               <Link to="/dashboard"
@@ -77,7 +70,6 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
             </div>
           </div>
 
-          {/* Derecha: Usuario + Navegación */}
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden lg:flex items-center gap-2 mr-2">
               {user.role === "boss" && (
@@ -87,7 +79,6 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
                 </button>
               )}
 
-              {/* NUEVO BOTÓN: Catálogos */}
               {(user.role === "boss" || user.role === "admin") && (
                 <button onClick={() => setCatalogModal(true)}
                   className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all flex items-center gap-2">
@@ -127,7 +118,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
       </header>
 
       <main className="max-w-480 mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col md:flex-row gap-6">
-        <aside className={`shrink-0 flex md:flex-col gap-2 transition-all ${sidebarOpen ? "md:w-56" : "md:w-14"}`}>
+        <aside className={`shrink-0 flex md:flex-col gap-2 transition-all md:sticky md:top-24 md:self-start md:max-h-[calc(100vh-7rem)] md:overflow-y-auto ${sidebarOpen ? "md:w-56" : "md:w-14"}`}>
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="hidden md:flex px-4 py-3 rounded-xl text-sm font-bold text-zinc-500 hover:text-white hover:bg-zinc-900/50 border border-transparent items-center gap-2"
@@ -193,7 +184,6 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
 
-        {/* ════ MODALES GLOBALES (no dependen de una empresa específica) ════ */}
         <UsersModal isOpen={usersModal} onClose={() => setUsersModal(false)} usersList={usersList} userForm={userForm} setUserForm={setUserForm} editingUserId={editingUserId} setEditingUserId={setEditingUserId} savingUser={savingUser} userError={userError} onSave={saveUser} onDelete={deleteUser} />
         <ArchivedModal
           isOpen={archivedView}

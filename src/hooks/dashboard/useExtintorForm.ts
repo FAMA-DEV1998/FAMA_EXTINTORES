@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { EmpresaData, Extintor } from "../../types";
-import { emptyExtintor, estadoBloqueaServicio, estadoBloqueaServicioExtra } from "../../utils/helpers";
+import { emptyExtintor, estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes } from "../../utils/helpers";
 
 
 export function useExtintorForm(
@@ -36,6 +36,7 @@ export function useExtintorForm(
 
     const { evidencia, evidenciaCount, deletedAt, ...formSinFlags } = extintorForm as any;
     const bloqueado = estadoBloqueaServicio(extintorForm.estadoExtintor || "");
+    const componentesBloqueados = estadoBloqueaComponentes(extintorForm.estadoExtintor || "");
 
     const payload = {
       ...formSinFlags,
@@ -46,11 +47,16 @@ export function useExtintorForm(
       ph: bloqueado ? "" : extintorForm.ph,
       recarga: bloqueado ? "" : extintorForm.recarga,
       servicioExtra: estadoBloqueaServicioExtra(extintorForm.estadoExtintor || "") ? "" : extintorForm.servicioExtra,
+      valvula: componentesBloqueados ? "" : extintorForm.valvula,
+      manguera: componentesBloqueados ? "" : extintorForm.manguera,
+      manometro: componentesBloqueados ? "" : extintorForm.manometro,
+      tobera: componentesBloqueados ? "" : extintorForm.tobera,
     };
 
     const estadoSnapshot = {
       estadoExtintor: payload.estadoExtintor,
       realizadoPH: payload.realizadoPH,
+      mesRealizadoPH: payload.mesRealizadoPH,
       vencimPH: payload.vencimPH,
       ma: payload.ma,
       ph: payload.ph,

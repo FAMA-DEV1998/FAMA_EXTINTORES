@@ -1,6 +1,6 @@
 import { COMP_KEYS, COMP_LABELS, ESTADO_BADGE } from "../../constants";
 import type { Extintor } from "../../types";
-import { esExtintorIncompleto, estadoRequiereDatosPH, getCamposFaltantes, phVenceEsteAnio, phVencida } from "../../utils/helpers";
+import { esExtintorIncompleto, estadoRequiereDatosPH, getCamposFaltantes, phVenceEsteAnio, phVencida, formatRealizadoPH, formatVencimPH } from "../../utils/helpers";
 
 interface ExtintorCardProps {
     ext: Extintor;
@@ -159,8 +159,8 @@ export default function ExtintorCard({
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-400 font-semibold">
                     {(ext.fechaFabricacion || datosPHRequeridos) && <span>Fab.: <b className="text-zinc-600">{sinDefinir(ext.fechaFabricacion) ? <SinDefinir /> : ext.fechaFabricacion}</b></span>}
-                    {(ext.realizadoPH || datosPHRequeridos) && <span>PH Realiz.: <b className="text-zinc-600">{sinDefinir(ext.realizadoPH) ? <SinDefinir /> : ext.realizadoPH}</b></span>}
-                    {(ext.vencimPH || datosPHRequeridos) && <span>PH Venc.: <b className="text-zinc-600">{sinDefinir(ext.vencimPH) ? <SinDefinir /> : ext.vencimPH}</b></span>}
+                    {(ext.realizadoPH || datosPHRequeridos) && <span>PH Realiz.: <b className="text-zinc-600">{sinDefinir(ext.realizadoPH) ? <SinDefinir /> : formatRealizadoPH(ext.mesRealizadoPH, ext.realizadoPH)}</b></span>}
+                    {(ext.vencimPH || datosPHRequeridos) && <span>PH Venc.: <b className="text-zinc-600">{sinDefinir(ext.vencimPH) ? <SinDefinir /> : formatVencimPH(ext.vencimPH)}</b></span>}
                 </div>
 
                 {ext.observaciones && (

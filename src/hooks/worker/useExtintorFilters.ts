@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { EmpresaData, Extintor } from "../../types";
 import { esExtintorIncompleto, sortExtintoresPersonalizado } from "../../utils/helpers";
 
-export function useExtintorFilters(extintores: Extintor[], empresa: EmpresaData) {
+export function useExtintorFilters(extintores: Extintor[], empresa: EmpresaData, variant: "todos" | "servicio" = "todos") {
     const [search, setSearch] = useState("");
     const [fMarca, setFMarca] = useState("");
     const [fAgente, setFAgente] = useState("");
@@ -41,11 +41,15 @@ export function useExtintorFilters(extintores: Extintor[], empresa: EmpresaData)
         return (ext.nSerie || "").toLowerCase().includes(q) || (ext.nInterno || "").toLowerCase().includes(q);
     });
 
+    const weightOrder = variant === "servicio" ? empresa.servicioWeightOrder : empresa.weightOrder;
+    const estadoOrder = variant === "servicio" ? empresa.servicioEstadoOrder : empresa.estadoOrder;
+    const agenteOrder = variant === "servicio" ? empresa.servicioAgenteOrder : empresa.agenteOrder;
+
     const extintoresOrdenados = sortExtintoresPersonalizado(
         extintoresFiltrados,
-        empresa.weightOrder,
-        empresa.estadoOrder,
-        empresa.agenteOrder,
+        weightOrder,
+        estadoOrder,
+        agenteOrder,
         extintores
     );
 

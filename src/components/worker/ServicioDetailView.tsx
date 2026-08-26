@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { EmpresaData, Extintor, Servicio } from "../../types";
-import { getSnapshotHastaFecha, mesAnioLabel, ordinalServicio, parseEvidencias } from "../../utils/helpers";
+import { getSnapshotHastaFecha, mesAnioLabel, ordinalServicio, parseEvidencias, sortExtintoresPersonalizado } from "../../utils/helpers";
 import { useExtintorFilters } from "../../hooks/worker";
 import { useCertificado } from "../../hooks/dashboard";
 import { AsociarExtintorModal, CertificadoModal } from "../modals";
@@ -119,7 +119,7 @@ export default function ServicioDetailView({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoAsociarUid, servicio.id]);
 
-    const filtros = useExtintorFilters(extintoresDelServicio, empresa);
+    const filtros = useExtintorFilters(extintoresDelServicio, empresa, "servicio");
     const {
         search, setSearch, fMarca, setFMarca, fAgente, setFAgente,
         fPeso, setFPeso, fEstado, setFEstado, soloIncompletos, setSoloIncompletos,
@@ -128,7 +128,14 @@ export default function ServicioDetailView({
     } = filtros;
 
     const activeSedeInfo = servicio.sedeId ? { nombre: sedeNameById[servicio.sedeId] } : null;
-    const certificado = useCertificado(empresa, activeSedeInfo, servicio, extintoresDelServicio);
+    const extintoresDelServicioOrdenados = sortExtintoresPersonalizado(
+        extintoresDelServicio,
+        empresa.servicioWeightOrder,
+        empresa.servicioEstadoOrder,
+        empresa.servicioAgenteOrder,
+        extintores
+    );
+    const certificado = useCertificado(empresa, activeSedeInfo, servicio, extintoresDelServicioOrdenados);
 
     return (
         <div className="scroll-area h-full overflow-y-auto p-4 md:p-8 flex flex-col gap-5 max-w-7xl mx-auto w-full">
@@ -254,7 +261,11 @@ export default function ServicioDetailView({
                 onCambiarTipoCertificado={certificado.cambiarTipoCertificado}
                 onCambiarTipoIdentificacion={certificado.cambiarTipoIdentificacion}
                 familiasDisponibles={certificado.familiasDisponibles}
+                hayPqs={certificado.hayPqs}
+                pqsVariante={certificado.pqsVariante}
+                onCambiarPqsVariante={certificado.cambiarPqsVariante}
                 nombreArchivo={`Certificado_${empresa?.slug || "fama"}_${servicio.fechaRetiro || "servicio"}.pdf`}
+                soloImprimir
             />
         </div>
     );

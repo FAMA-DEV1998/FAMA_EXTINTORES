@@ -1,5 +1,6 @@
 import type { Cotizacion } from "../../types";
 import { montoALetras } from "../../utils/numeroALetras";
+import { MESES } from "../../constants";
 
 const IGV_RATE = 0.18;
 
@@ -64,31 +65,63 @@ export default function CotizacionTemplate({ cotizacion }: Props) {
                     <tbody>
                         <tr>
                             <th className="w-28 font-bold text-slate-900 pb-1.5 align-top">
-                                Empresa:
+                                {cotizacion.tipoDestinatario === "persona" ? "Cliente:" : "Empresa:"}
                             </th>
                             <td className="text-slate-800 uppercase pb-1.5 align-top">
                                 {cotizacion.cliente}
                             </td>
                         </tr>
-                        <tr>
-                            <th className="font-bold text-slate-900 pb-1.5 align-top">
-                                R.U.C.:
-                            </th>
-                            <td className="text-slate-800 pb-1.5 align-top">{cotizacion.ruc}</td>
-                        </tr>
-                        <tr>
-                            <th className="font-bold text-slate-900 pb-1.5 align-top">
-                                Dirección:
-                            </th>
-                            <td className="text-slate-800 uppercase pb-1.5 align-top">
-                                {cotizacion.direccion}
-                            </td>
-                        </tr>
+                        {cotizacion.ruc && (
+                            <tr>
+                                <th className="font-bold text-slate-900 pb-1.5 align-top">
+                                    {cotizacion.tipoDocumento === "dni" ? "D.N.I.:" : "R.U.C.:"}
+                                </th>
+                                <td className="text-slate-800 pb-1.5 align-top">{cotizacion.ruc}</td>
+                            </tr>
+                        )}
+                        {cotizacion.direccion && (
+                            <tr>
+                                <th className="font-bold text-slate-900 pb-1.5 align-top">
+                                    Dirección:
+                                </th>
+                                <td className="text-slate-800 uppercase pb-1.5 align-top">
+                                    {cotizacion.direccion}
+                                </td>
+                            </tr>
+                        )}
+                        {cotizacion.sede && (
+                            <tr>
+                                <th className="font-bold text-slate-900 pb-1.5 align-top">
+                                    Sede:
+                                </th>
+                                <td className="text-slate-800 uppercase pb-1.5 align-top">
+                                    {cotizacion.sede}
+                                </td>
+                            </tr>
+                        )}
+                        {cotizacion.guia && (
+                            <tr>
+                                <th className="font-bold text-slate-900 pb-1.5 align-top">
+                                    Guía:
+                                </th>
+                                <td className="text-slate-800 pb-1.5 align-top">
+                                    {cotizacion.guia}
+                                </td>
+                            </tr>
+                        )}
                         {cotizacion.atencion && (
                             <tr>
                                 <th className="font-bold text-slate-900 align-top">Atención:</th>
                                 <td className="text-slate-800 align-top">
                                     {cotizacion.atencion}
+                                </td>
+                            </tr>
+                        )}
+                        {cotizacion.observacionesMes && (
+                            <tr>
+                                <th className="font-bold text-slate-900 align-top">Observaciones:</th>
+                                <td className="text-slate-800 align-top">
+                                    {MESES.find((m) => m.value === cotizacion.observacionesMes)?.label.toLowerCase()}
                                 </td>
                             </tr>
                         )}
@@ -214,6 +247,12 @@ export default function CotizacionTemplate({ cotizacion }: Props) {
                             +31 años de experiencia, operando con certificaciones
                             organizacionales. (Atención en horario comercial estándar).
                         </li>
+                        <li>
+                            <span className="font-bold text-slate-900 mr-1">• Forma de pago:</span>{" "}
+                            {cotizacion.formaPago === "credito"
+                                ? `Precio de acuerdo a contrato - crédito de ${cotizacion.diasCredito || "30"} días`
+                                : "Contado"}
+                        </li>
                     </ul>
 
                     <div className="border-l border-slate-200 pl-6">
@@ -222,10 +261,10 @@ export default function CotizacionTemplate({ cotizacion }: Props) {
                         </p>
                         <div className="bg-slate-50 border border-slate-200 p-2.5 rounded text-slate-700 font-medium space-y-1">
                             <p className="flex justify-between">
-                                <span>BCP Soles:</span> <span>191-2237068-0-45</span>
+                                <span>BCP Soles:</span> <span>191-0035392-0-94</span>
                             </p>
                             <p className="flex justify-between">
-                                <span>CCI:</span> <span>00219100223706804550</span>
+                                <span>CCI:</span> <span>00219100003539209455</span>
                             </p>
                         </div>
                     </div>

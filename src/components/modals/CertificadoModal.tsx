@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import CertificadoTemplate from "../certificados/CertificadoTemplate";
 import type { CertificadoDatos, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
-import { FAMILIA_FILTRO_LABEL, type FamiliaAgente } from "../../hooks/dashboard/useCertificado";
+import { FAMILIA_FILTRO_LABEL, PQS_TIPO_LABEL, type FamiliaAgente, type PqsVariante } from "../../hooks/dashboard/useCertificado";
 import { MESES } from "../../constants";
 import { exportarElementoPdf } from "../../utils/exportarPdf";
 
@@ -15,7 +16,11 @@ interface Props {
   onCambiarTipoCertificado: (tipo: TipoCertificado) => void;
   onCambiarTipoIdentificacion: (tipo: TipoIdentificacion) => void;
   familiasDisponibles: FamiliaAgente[];
+  hayPqs: boolean;
+  pqsVariante: PqsVariante;
+  onCambiarPqsVariante: (variante: PqsVariante) => void;
   nombreArchivo: string;
+  soloImprimir?: boolean;
 }
 
 const A4_WIDTH_PX = 210 * 3.7795275591;
@@ -31,11 +36,12 @@ const formatPlaca = (raw: string) => {
 
 export default function CertificadoModal({
   isOpen, onClose, datos, onChange, filtroAgente, onCambiarFiltroAgente,
-  onCambiarTipoCertificado, onCambiarTipoIdentificacion, familiasDisponibles, nombreArchivo,
+  onCambiarTipoCertificado, onCambiarTipoIdentificacion, familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante, nombreArchivo, soloImprimir,
 }: Props) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [baseScale, setBaseScale] = useState(0.4);
   const [descargando, setDescargando] = useState(false);
+  const [vistaMovil, setVistaMovil] = useState<"datos" | "preview">("datos");
 
   useEffect(() => {
     if (!previewRef.current || !isOpen) return;
@@ -47,6 +53,10 @@ export default function CertificadoModal({
     const obs = new ResizeObserver(medir);
     obs.observe(previewRef.current);
     return () => obs.disconnect();
+  }, [isOpen, vistaMovil]);
+
+  useEffect(() => {
+    if (isOpen) setVistaMovil("datos");
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -60,6 +70,17 @@ export default function CertificadoModal({
     } finally {
       setDescargando(false);
     }
+  };
+
+  const handleImprimir = () => {
+    const tituloOriginal = document.title;
+    document.title = nombreArchivo.replace(/\.pdf$/i, "");
+    const restaurar = () => {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurar);
+    };
+    window.addEventListener("afterprint", restaurar);
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
   };
 
   const esPlaca = datos.tipoIdentificacion === "placa";
@@ -78,19 +99,27 @@ export default function CertificadoModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <style>{"@media print { body * { visibility: hidden; } #certificado-print, #certificado-print * { visibility: visible; } #certificado-print { position: fixed; left: 0; top: 0; width: 210mm; } }"}</style>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-400 max-h-[92vh] flex flex-col shadow-2xl">
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div>
-            <h3 className="text-lg font-bold text-white">📄 Descargar Certificado</h3>
+            <h3 className="text-lg font-bold text-white">📄 {soloImprimir ? "Imprimir Certificado" : "Descargar Certificado"}</h3>
             <p className="text-xs font-medium text-zinc-500 mt-0.5">Edita los datos y previsualiza el resultado final</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">✕</button>
         </div>
 
+        <div className="lg:hidden flex border-b border-zinc-800 shrink-0">
+          <button onClick={() => setVistaMovil("datos")} className={`flex-1 py-3 text-sm font-bold transition-colors ${vistaMovil === "datos" ? "text-red-400 border-b-2 border-red-500 bg-red-950/10" : "text-zinc-500"}`}>
+            📝 Datos
+          </button>
+          <button onClick={() => setVistaMovil("preview")} className={`flex-1 py-3 text-sm font-bold transition-colors ${vistaMovil === "preview" ? "text-red-400 border-b-2 border-red-500 bg-red-950/10" : "text-zinc-500"}`}>
+            👁️ Vista previa
+          </button>
+        </div>
+
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[440px_1fr]">
-          <div className="overflow-y-auto p-6 flex flex-col gap-5 border-b lg:border-b-0 lg:border-r border-zinc-800/60">
+          <div className={`${vistaMovil === "datos" ? "flex" : "hidden"} lg:flex overflow-y-auto p-6 flex-col gap-5 border-b lg:border-b-0 lg:border-r border-zinc-800/60`}>
             <div className="flex flex-col gap-1.5">
               <label className={labelCls}>Tipo de certificado</label>
               <select value={datos.tipoCertificado} onChange={(e) => onCambiarTipoCertificado(e.target.value as TipoCertificado)} className={inputCls}>
@@ -108,6 +137,16 @@ export default function CertificadoModal({
                 ))}
               </select>
             </div>
+
+            {hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Tipo de PQS</label>
+                <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={inputCls}>
+                  <option value="75">{PQS_TIPO_LABEL["75"]}</option>
+                  <option value="90">{PQS_TIPO_LABEL["90"]}</option>
+                </select>
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <label className={labelCls}>Nombre / Razón Social</label>
@@ -187,16 +226,18 @@ export default function CertificadoModal({
             </div>
 
             <div className="mt-auto flex gap-2">
-              <button onClick={() => window.print()} className="flex-1 px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 transition-all">
+              <button onClick={handleImprimir} className="flex-1 px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 transition-all">
                 🖨️ Imprimir
               </button>
-              <button onClick={handleDescargar} disabled={descargando} className="flex-1 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50 transition-all">
-                {descargando ? "Generando..." : "📥 Descargar"}
-              </button>
+              {!soloImprimir && (
+                <button onClick={handleDescargar} disabled={descargando} className="flex-1 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50 transition-all">
+                  {descargando ? "Generando..." : "📥 Descargar"}
+                </button>
+              )}
             </div>
           </div>
 
-          <div ref={previewRef} className="overflow-auto bg-zinc-950 p-4">
+          <div ref={previewRef} className={`${vistaMovil === "preview" ? "block" : "hidden"} lg:block overflow-auto bg-zinc-950 p-4`}>
             <div style={{ width: A4_WIDTH_PX * baseScale, height: A4_HEIGHT_PX * baseScale, margin: "0 auto" }}>
               <div style={{ width: "210mm", transform: `scale(${baseScale})`, transformOrigin: "top left" }}>
                 <CertificadoTemplate datos={datos} />
@@ -206,9 +247,13 @@ export default function CertificadoModal({
         </div>
       </div>
 
-      <div id="certificado-print" className="fixed -left-2500 top-0">
-        <CertificadoTemplate datos={datos} />
-      </div>
+      {createPortal(
+        <div id="certificado-print" className="fixed -left-750 top-0">
+          <CertificadoTemplate datos={datos} />
+        </div>,
+        document.body
+      )}
+      <style>{"@media print { #root { display: none !important; } #certificado-print { position: static !important; left: auto !important; top: auto !important; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
     </div>
   );
 }

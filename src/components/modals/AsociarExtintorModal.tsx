@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { COMP_KEYS, COMP_LABELS } from "../../constants";
 import type { Extintor } from "../../types";
-import { estadoColor, serviceBadge } from "../../utils/helpers";
+import { estadoColor, serviceBadge, formatRealizadoPH, formatVencimPH } from "../../utils/helpers";
 
 type Props = {
   isOpen: boolean;
@@ -112,11 +112,11 @@ export default function AsociarExtintorModal({ isOpen, disponibles, onClose, onC
                       </div>
                       <div>
                         <span className="text-zinc-500 uppercase tracking-wide block">PH Realizado</span>
-                        <span className="font-bold text-zinc-300">{ext.realizadoPH || "—"}</span>
+                        <span className="font-bold text-zinc-300">{formatRealizadoPH(ext.mesRealizadoPH, ext.realizadoPH) || "—"}</span>
                       </div>
                       <div>
                         <span className="text-zinc-500 uppercase tracking-wide block">Vencimiento PH</span>
-                        <span className="font-bold text-zinc-300">{ext.vencimPH || "—"}</span>
+                        <span className="font-bold text-zinc-300">{formatVencimPH(ext.vencimPH) || "—"}</span>
                       </div>
                     </div>
 

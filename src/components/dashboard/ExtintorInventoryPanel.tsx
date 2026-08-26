@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { COMP_LABELS } from "../../constants";
-import { estadoColor, serviceBadge, getEstadoPrioridad, getWeightInKg } from "../../utils/helpers";
+import { estadoColor, serviceBadge, formatRealizadoPH, formatVencimPH } from "../../utils/helpers";
 import { computeBaseMetrics, getDuplicateSets, getPesoEntriesWithAgents } from "../../utils/dashboardMetrics";
 import { FilterSelect, MetricPanel, ComponentDots } from "../ui/DashboardUI";
 import { ExtintorModal, ObservationModal, EvidenciaModal, WeightSortModal, HistorialExtintorModal, TrasladoSedeModal, StickersModal } from "../modals";
@@ -49,58 +49,13 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
     const showSedeExtras = variant === "resumen" && !activeSede && hasSedes;
     const sedeNameById: Record<string, string> = Object.fromEntries(sedesList.map((s) => [s.id, s.nombre]));
 
-    const isScopedToRegistro = !!extintoresOverride;
-    const [localWeightOrder, setLocalWeightOrder] = useState<string[]>([]);
-    const [localEstadoOrder, setLocalEstadoOrder] = useState<string[]>([]);
-    const [localAgenteOrder, setLocalAgenteOrder] = useState<string[]>([]);
     const [localSedeOrder, setLocalSedeOrder] = useState<string[]>([]);
-    const [localWeightModal, setLocalWeightModal] = useState(false);
-    const [localEstadoModal, setLocalEstadoModal] = useState(false);
-    const [localAgenteModal, setLocalAgenteModal] = useState(false);
     const [localSedeModal, setLocalSedeModal] = useState(false);
 
-    const customWeightOrder = isScopedToRegistro ? localWeightOrder : scope.customOrders.customWeightOrder;
-    const customEstadoOrder = isScopedToRegistro ? localEstadoOrder : scope.customOrders.customEstadoOrder;
-    const customAgenteOrder = isScopedToRegistro ? localAgenteOrder : scope.customOrders.customAgenteOrder;
+    const isScopedToRegistro = !!extintoresOverride;
+    const { customWeightOrder, customEstadoOrder, customAgenteOrder, setCustomWeightOrder, setCustomEstadoOrder, setCustomAgenteOrder, weightOrderModal, setWeightOrderModal, estadoOrderModal, setEstadoOrderModal, agenteOrderModal, setAgenteOrderModal, persistOrders } = isScopedToRegistro ? scope.customOrdersServicio : scope.customOrders;
 
     const customSedeOrder = localSedeOrder;
-    const setCustomWeightOrder = isScopedToRegistro ? setLocalWeightOrder : scope.customOrders.setCustomWeightOrder;
-    const setCustomEstadoOrder = isScopedToRegistro ? setLocalEstadoOrder : scope.customOrders.setCustomEstadoOrder;
-    const setCustomAgenteOrder = isScopedToRegistro ? setLocalAgenteOrder : scope.customOrders.setCustomAgenteOrder;
-    const weightOrderModal = isScopedToRegistro ? localWeightModal : scope.customOrders.weightOrderModal;
-    const estadoOrderModal = isScopedToRegistro ? localEstadoModal : scope.customOrders.estadoOrderModal;
-    const agenteOrderModal = isScopedToRegistro ? localAgenteModal : scope.customOrders.agenteOrderModal;
-    const setWeightOrderModal = isScopedToRegistro ? setLocalWeightModal : scope.customOrders.setWeightOrderModal;
-    const setEstadoOrderModal = isScopedToRegistro ? setLocalEstadoModal : scope.customOrders.setEstadoOrderModal;
-    const setAgenteOrderModal = isScopedToRegistro ? setLocalAgenteModal : scope.customOrders.setAgenteOrderModal;
-
-    const persistOrders = isScopedToRegistro ? (() => { }) : scope.customOrders.persistOrders;
-
-    useEffect(() => {
-        if (!isScopedToRegistro) return;
-        const availableWeights = Object.keys(pesoCounts);
-        if (availableWeights.length > 0) {
-            setLocalWeightOrder((prev) => {
-                const missing = availableWeights.filter((w) => !prev.includes(w));
-                if (missing.length === 0) return prev;
-                return [...prev, ...missing].sort((a, b) => getWeightInKg(a) - getWeightInKg(b));
-            });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isScopedToRegistro, baseExtintores]);
-
-    useEffect(() => {
-        if (!isScopedToRegistro) return;
-        const availableEstados = estadoCounts.map(([v]) => v);
-        if (availableEstados.length > 0) {
-            setLocalEstadoOrder((prev) => {
-                const missing = availableEstados.filter((es) => !prev.includes(es));
-                if (missing.length === 0) return prev;
-                return [...prev, ...missing].sort((a, b) => getEstadoPrioridad(a) - getEstadoPrioridad(b));
-            });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isScopedToRegistro, baseExtintores]);
 
     const pesoEntriesWithAgents = getPesoEntriesWithAgents(pesoCounts, pesoAgentBreakdown, customWeightOrder);
 
@@ -370,10 +325,10 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                                 {ext.fechaFabricacion || "—"}
                                             </td>
                                             <td className="px-5 py-3.5 font-medium text-zinc-400 text-xs">
-                                                {ext.realizadoPH || "—"}
+                                                {formatRealizadoPH(ext.mesRealizadoPH, ext.realizadoPH) || "—"}
                                             </td>
                                             <td className="px-5 py-3.5 font-bold text-zinc-300 text-xs">
-                                                {ext.vencimPH || "—"}
+                                                {formatVencimPH(ext.vencimPH) || "—"}
                                             </td>
                                             {variant === "historial" && (
                                                 <td className="px-5 py-3.5">
@@ -505,7 +460,7 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
 
             {/* ════ MODALES DEL INVENTARIO ════ */}
             {extintorModal && (
-                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} sedes={sedesList} />
+                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} />
             )}
             <ObservationModal observation={obsModal} onClose={() => setObsModal(null)} />
             <EvidenciaModal

@@ -4,7 +4,7 @@ import { useEmpresaScope } from "../../context/EmpresaScopeContext";
 import { useExportActions, useServicios, useCertificado } from "../../hooks/dashboard";
 import { WhatsappModal, AsociarExtintorModal, CertificadoModal } from "../../components/modals";
 import ExtintorInventoryPanel from "../../components/dashboard/ExtintorInventoryPanel";
-import { getSnapshotHastaFecha } from "../../utils/helpers";
+import { getSnapshotHastaFecha, mesAnioLabel, ordinalServicio, sortExtintoresPersonalizado } from "../../utils/helpers";
 
 export default function HistorialRegistroView() {
   const { mes, registroId } = useParams<{ mes: string; registroId: string }>();
@@ -62,12 +62,18 @@ export default function HistorialRegistroView() {
     whatsappMsg, setWhatsappMsg, exportExcel, executeWhatsapp, openWhatsappModal,
   } = exportActions;
 
-  const extintoresDelRegistro = extintores
-    .filter((e: any) => (servicio?.extintorUids ?? []).includes(e.uid))
-    .map((e: any) => {
-      const snap = servicio?.extintorEstados?.[e.uid];
-      return snap ? { ...e, ...snap } : e;
-    });
+  const extintoresDelRegistro = sortExtintoresPersonalizado(
+    extintores
+      .filter((e: any) => (servicio?.extintorUids ?? []).includes(e.uid))
+      .map((e: any) => {
+        const snap = servicio?.extintorEstados?.[e.uid];
+        return snap ? { ...e, ...snap } : e;
+      }),
+    selectedEmpresa?.servicioWeightOrder,
+    selectedEmpresa?.servicioEstadoOrder,
+    selectedEmpresa?.servicioAgenteOrder,
+    extintores
+  );
 
   const certificado = useCertificado(selectedEmpresa, activeSede, servicio, extintoresDelRegistro);
 
@@ -90,35 +96,39 @@ export default function HistorialRegistroView() {
       return snap ? { ...e, ...snap } : e;
     });
 
-  const formatFecha = (f: string) => f ? f.split("-").reverse().join("/") : "—";
+  const registrosDelMes = servicios
+    .filter((s: any) => (s.fechaRetiro || "").slice(0, 7) === (servicio.fechaRetiro || "").slice(0, 7))
+    .sort((a: any, b: any) => (a.secuencia ?? 0) - (b.secuencia ?? 0));
+  const posicionServicio = registrosDelMes.findIndex((s: any) => s.id === servicio.id) + 1;
+  const etiquetaServicio = servicio.fechaRetiro
+    ? `${ordinalServicio(posicionServicio)} Servicio de ${mesAnioLabel(servicio.fechaRetiro)}`
+    : "Servicio";
 
   const handleDelete = () => {
     deleteServicio(servicio.id);
     navigate(`../../${mes}`, { relative: "path" });
   };
 
-  const handleAsociarExtintores = (uids: string[]) => {
-    uids.forEach((uid) => {
-      const snap = getSnapshotHastaFecha(servicios, uid, servicio.fechaRetiro);
-      const ext = extintores.find((e: any) => e.uid === uid);
-      const estadoHistorico = snap || (ext ? {
-        estadoExtintor: ext.estadoExtintor,
-        realizadoPH: ext.realizadoPH,
-        vencimPH: ext.vencimPH,
-        motivoBaja: ext.motivoBaja,
-      } : null);
-      if (estadoHistorico?.estadoExtintor === "De Baja") return; // punto 5
+  const handleAsociarExtintor = (uid: string) => {
+    const snap = getSnapshotHastaFecha(servicios, uid, servicio.fechaRetiro);
+    const ext = extintores.find((e: any) => e.uid === uid);
+    const estadoHistorico = snap || (ext ? {
+      estadoExtintor: ext.estadoExtintor,
+      realizadoPH: ext.realizadoPH,
+      vencimPH: ext.vencimPH,
+      motivoBaja: ext.motivoBaja,
+    } : null);
+    if (estadoHistorico?.estadoExtintor === "De Baja") return;
 
-      addExtintorToServicio(servicio.id, uid);
-      const estado = estadoHistorico ? {
-        estadoExtintor: estadoHistorico.estadoExtintor,
-        realizadoPH: estadoHistorico.realizadoPH,
-        vencimPH: estadoHistorico.vencimPH,
-        motivoBaja: estadoHistorico.motivoBaja,
-      } : {};
-      setExtintorEstado(servicio.id, uid, estado);
-      sincronizarEstadoActual(uid, { servicioId: servicio.id, fecha: servicio.fechaRetiro, estado });
-    });
+    addExtintorToServicio(servicio.id, uid);
+    const estado = estadoHistorico ? {
+      estadoExtintor: estadoHistorico.estadoExtintor,
+      realizadoPH: estadoHistorico.realizadoPH,
+      vencimPH: estadoHistorico.vencimPH,
+      motivoBaja: estadoHistorico.motivoBaja,
+    } : {};
+    setExtintorEstado(servicio.id, uid, estado);
+    sincronizarEstadoActual(uid, { servicioId: servicio.id, fecha: servicio.fechaRetiro, estado });
     setAsociarModal(false);
   };
 
@@ -126,7 +136,7 @@ export default function HistorialRegistroView() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl">
         <div>
-          <h3 className="text-xl font-black text-white">📜 Registro · Retiro {formatFecha(servicio.fechaRetiro)} → Entrega {formatFecha(servicio.fechaEntrega)}</h3>
+          <h3 className="text-xl font-black text-white">📜 {etiquetaServicio}</h3>
           {servicio.notas && <p className="text-sm text-zinc-400 mt-1">{servicio.notas}</p>}
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
@@ -170,7 +180,7 @@ export default function HistorialRegistroView() {
         isOpen={asociarModal}
         disponibles={extintoresDisponibles}
         onClose={() => setAsociarModal(false)}
-        onConfirm={handleAsociarExtintores}
+        onConfirm={handleAsociarExtintor}
       />
 
       <CertificadoModal
@@ -183,6 +193,9 @@ export default function HistorialRegistroView() {
         onCambiarTipoCertificado={certificado.cambiarTipoCertificado}
         onCambiarTipoIdentificacion={certificado.cambiarTipoIdentificacion}
         familiasDisponibles={certificado.familiasDisponibles}
+        hayPqs={certificado.hayPqs}
+        pqsVariante={certificado.pqsVariante}
+        onCambiarPqsVariante={certificado.cambiarPqsVariante}
         nombreArchivo={`Certificado_${selectedEmpresa?.slug || "fama"}_${servicio.fechaRetiro || "servicio"}.pdf`}
       />
     </div>

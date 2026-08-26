@@ -16,13 +16,13 @@ const campoInfo = (label: string, valor: string) => (
   </div>
 );
 
-const AlertaBadge = ({ label, vencido, tono }: { label: string; vencido: boolean; tono: "rojo" | "ambar" | "azul" }) => {
+const AlertaBadge = ({ label, vencido, tono }: { label: string; vencido: boolean; tono: "ambar" | "azul" }) => {
   const colores = vencido
     ? "text-red-400 bg-red-950/30 border-red-900/40"
     : tono === "ambar"
       ? "text-amber-400 bg-amber-950/30 border-amber-900/40"
       : "text-sky-400 bg-sky-950/30 border-sky-900/40";
-  return <span className={`text-xs font-black px-3 py-1.5 rounded-lg border ${colores}`}>{label}</span>;
+  return <span className={`text-xs font-black px-3 py-1.5 rounded-lg border whitespace-nowrap ${colores}`}>{vencido ? "🔴" : tono === "ambar" ? "🟡" : "🔵"} {label}</span>;
 };
 
 function AlertaCard({ a }: { a: any }) {
@@ -66,6 +66,8 @@ function AlertaCard({ a }: { a: any }) {
 export default function AlertasPage({ socket }: { socket: Socket | null }) {
   const { anticipacionDias, cambiarAnticipacion, empresas, totalVencidas, totalProximas, loading, recargar } = useAlertas(socket);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState<"todas" | "vencidas" | "proximas">("todas");
 
   const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
@@ -77,6 +79,19 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
     return encodeURIComponent(`Hola, le escribimos de FAMA para coordinar el servicio de sus extintores en ${razonSocial}:\n${lineas.join("\n")}`);
   };
 
+  const empresasFiltradas = empresas
+    .map((empresa: any) => {
+      const sedes = empresa.sedes
+        .map((sede: any) => ({
+          ...sede,
+          alertas: sede.alertas.filter((a: any) => filtroEstado === "todas" || (filtroEstado === "vencidas" ? a.vencido : !a.vencido)),
+        }))
+        .filter((sede: any) => sede.alertas.length > 0);
+      return { ...empresa, sedes };
+    })
+    .filter((empresa: any) => empresa.sedes.length > 0)
+    .filter((empresa: any) => !busqueda.trim() || empresa.razonSocial.toLowerCase().includes(busqueda.trim().toLowerCase()));
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
@@ -87,39 +102,50 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
         <button onClick={recargar} className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-sm font-bold text-zinc-300 self-start md:self-auto">🔄 Actualizar</button>
       </div>
 
-      <div className="mb-6 flex flex-col gap-2 bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
-        <label className="text-xs font-bold text-zinc-400 uppercase">Avisar con anticipación de</label>
-        <select value={anticipacionDias} onChange={(e) => cambiarAnticipacion(Number(e.target.value))} className="bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-bold text-zinc-300 focus:outline-none focus:border-red-600 w-fit">
-          {ANTICIPACION_OPCIONES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <p className="text-[11px] text-zinc-500 leading-relaxed">
-          Todo servicio o venta de un extintor requiere revisión al año (Venta, Recarga, Mantenimiento o Servicio cuentan por igual), por lo que "15 días" es exacto para esa alerta. La Prueba Hidrostática vence cada 5 años y se calcula desde el dato ya registrado en el extintor, desde el 1 de enero de ese año.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-3 mb-6">
-        <div className="px-4 py-3 rounded-2xl bg-red-950/20 border border-red-900/40">
+      <div className="flex flex-wrap gap-3 mb-4">
+        <button onClick={() => setFiltroEstado("todas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "todas" ? "bg-zinc-800 border-zinc-600" : "bg-zinc-900/30 border-zinc-800/60 hover:border-zinc-700"}`}>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Todas</p>
+          <p className="text-2xl font-black text-white">{totalVencidas + totalProximas}</p>
+        </button>
+        <button onClick={() => setFiltroEstado("vencidas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "vencidas" ? "bg-red-950/40 border-red-700" : "bg-red-950/20 border-red-900/40 hover:border-red-800"}`}>
           <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">🔴 Vencidas</p>
           <p className="text-2xl font-black text-red-400">{totalVencidas}</p>
-        </div>
-        <div className="px-4 py-3 rounded-2xl bg-amber-950/20 border border-amber-900/40">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400">🟡 Próximas a vencer</p>
+        </button>
+        <button onClick={() => setFiltroEstado("proximas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "proximas" ? "bg-amber-950/40 border-amber-700" : "bg-amber-950/20 border-amber-900/40 hover:border-amber-800"}`}>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400">🟡 Próximas</p>
           <p className="text-2xl font-black text-amber-400">{totalProximas}</p>
+        </button>
+      </div>
+
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">🔎</span>
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar empresa..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
         </div>
+        <select value={anticipacionDias} onChange={(e) => cambiarAnticipacion(Number(e.target.value))} className="bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-bold text-zinc-300 focus:outline-none focus:border-red-600">
+          {ANTICIPACION_OPCIONES.map((o) => <option key={o.value} value={o.value}>Avisar con {o.label}</option>)}
+        </select>
+      </div>
+
+      <div className="mb-6 flex items-start gap-2.5 bg-zinc-900/20 px-4 py-3 rounded-xl border border-zinc-800/40">
+        <span className="text-sm shrink-0">ℹ️</span>
+        <p className="text-[11px] text-zinc-500 leading-relaxed">
+          La revisión anual aplica a cualquier servicio o venta (Recarga, Mantenimiento, etc.) por igual. La Prueba Hidrostática vence cada 5 años según el dato ya registrado en el extintor.
+        </p>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-6 h-6 border-2 border-zinc-700 border-t-red-500 rounded-full animate-spin" />
         </div>
-      ) : empresas.length === 0 ? (
+      ) : empresasFiltradas.length === 0 ? (
         <div className="text-center py-20 text-zinc-600 bg-zinc-950/20 rounded-2xl border border-dashed border-zinc-800/60">
-          <p className="text-5xl mb-3 opacity-80">✅</p>
-          <p className="text-sm font-medium">No hay vencimientos próximos en el rango seleccionado</p>
+          <p className="text-5xl mb-3 opacity-80">{busqueda ? "🔎" : "✅"}</p>
+          <p className="text-sm font-medium">{busqueda ? "Ninguna empresa coincide con la búsqueda" : "No hay vencimientos próximos en el rango seleccionado"}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {empresas.map((empresa: any) => {
+          {empresasFiltradas.map((empresa: any) => {
             const sedesNombradas = empresa.sedes.filter((s: any) => s.nombre);
             const esMultisede = sedesNombradas.length > 1;
             const sedeUnica = sedesNombradas.length === 1 ? sedesNombradas[0].nombre : null;

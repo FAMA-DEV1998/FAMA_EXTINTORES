@@ -1,7 +1,7 @@
 import type { Extintor } from "../../types";
-import { ESTADOS, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS } from "../../constants";
+import { ESTADOS, MESES, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL, COMP_KEYS, COMP_LABELS } from "../../constants";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
-import { getRecargasPermitidas, estadoBloqueaServicio, estadoBloqueaServicioExtra } from "../../utils/helpers";
+import { getRecargasPermitidas, estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes, calcularVencimientoPH, confirmarCambioPH, formatVencimPH, phVenceEsteAnio, phVencida } from "../../utils/helpers";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import type { Socket } from "socket.io-client";
@@ -20,16 +20,17 @@ type Props = {
     serviciosExtra: string[];
     socket: Socket | null;
     userRole: string;
-    sedes?: { id: string; nombre: string }[];
 };
 
-export default function ExtintorModal({ form, setForm, isEditing, onClose, onSave, saving, marcas, agentes, recargas, motivosBaja, serviciosExtra, socket, userRole, sedes = [] }: Props) {
+export default function ExtintorModal({ form, setForm, isEditing, onClose, onSave, saving, marcas, agentes, recargas, motivosBaja, serviciosExtra, socket, userRole }: Props) {
     const setEF = (k: string, v: string) => {
         setForm((p) => {
             const next = { ...p, [k]: v };
             if (k === "realizadoPH") {
-                const yr = parseInt(v);
-                if (!isNaN(yr) && v.length === 4) next.vencimPH = String(yr + 5);
+                next.vencimPH = calcularVencimientoPH(p.mesRealizadoPH || "", v);
+            }
+            if (k === "mesRealizadoPH") {
+                next.vencimPH = calcularVencimientoPH(v, p.realizadoPH || "");
             }
             if (k === "agenteExtintor") {
                 const permitidas = getRecargasPermitidas(v, recargas);
@@ -46,6 +47,9 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
     const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor || "", recargas);
     const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor || "");
     const servicioExtraBloqueado = estadoBloqueaServicioExtra(form.estadoExtintor || "");
+    const componentesBloqueados = estadoBloqueaComponentes(form.estadoExtintor || "");
+    const phVencidaAlerta = phVencida(form as Extintor);
+    const phProximaAlerta = !phVencidaAlerta && phVenceEsteAnio(form as Extintor);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -78,9 +82,29 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                     {/* Prueba Hidrostática */}
                     <ModalSection title="🔬 Prueba Hidrostática">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                            <ModalField label="Realizado PH"><input className={modalInput} value={form.realizadoPH || ""} onChange={(e) => setEF("realizadoPH", e.target.value)} maxLength={4} placeholder="Ej: 2024" /></ModalField>
-                            <ModalField label="Vencimiento PH (+5)"><input className={`${modalInput} opacity-60`} value={form.vencimPH || ""} readOnly placeholder="Automático" /></ModalField>
+                            <ModalField label="Mes Realizado PH">
+                                <select className={`${modalInput} ${form.ph === "SI" ? "opacity-60 cursor-not-allowed" : ""}`} value={form.mesRealizadoPH || ""} disabled={form.ph === "SI"} onChange={(e) => setEF("mesRealizadoPH", e.target.value)}>
+                                    <option value="">Seleccionar...</option>
+                                    {MESES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                </select>
+                            </ModalField>
+                            <ModalField label="Año Realizado PH"><input className={`${modalInput} ${form.ph === "SI" ? "opacity-60 cursor-not-allowed" : ""}`} value={form.realizadoPH || ""} disabled={form.ph === "SI"} onChange={(e) => setEF("realizadoPH", e.target.value)} maxLength={4} placeholder="Ej: 2024" /></ModalField>
+                            <ModalField label="Vencimiento PH (+5)" full><input className={`${modalInput} opacity-60`} value={formatVencimPH(form.vencimPH) || ""} readOnly placeholder="Automático" /></ModalField>
                         </div>
+                        {form.ph === "SI" && (
+                            <p className="mt-3 text-[11px] font-bold text-zinc-500">🔒 Desactiva "Prueba Hidrostatica (P.H)" en Servicio Realizado para modificar el mes/año</p>
+                        )}
+                        {phVencidaAlerta ? (
+                            <div className="mt-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-red-950/30 border border-red-900/50 text-red-400 text-xs font-bold">
+                                <span className="shrink-0">🔴</span>
+                                <span className="leading-snug">Prueba hidrostática vencida — realizar urgentemente</span>
+                            </div>
+                        ) : phProximaAlerta && (
+                            <div className="mt-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-950/30 border border-amber-900/50 text-amber-400 text-xs font-bold">
+                                <span className="shrink-0">⚠️</span>
+                                <span className="leading-snug">Debe realizarse la prueba hidrostática este mes</span>
+                            </div>
+                        )}
                     </ModalSection>
 
                     {/* Características */}
@@ -103,14 +127,6 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                                     className={modalInput}
                                 />
                             </ModalField>
-                            {sedes.length > 0 && (
-                                <ModalField label="Sede">
-                                    <select className={modalInput} value={form.sedeId || ""} onChange={(e) => setForm((p) => ({ ...p, sedeId: e.target.value || null }))}>
-                                        <option value="">Sin sede</option>
-                                        {sedes.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                                    </select>
-                                </ModalField>
-                            )}
                             <ModalField label="Unidad">
                                 <div className="flex rounded-xl overflow-hidden border border-zinc-700">
                                     {(["KG", "LB", "LT", "GAL"] as const).map((u) => (
@@ -162,10 +178,22 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                                                 const next = p.ma === "SI" ? "" : "SI";
                                                 return next === "SI" ? { ...p, ma: "SI", ph: "", recarga: "" } : { ...p, ma: "" };
                                             })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ma === "SI" ? "bg-red-700 border-red-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Mantenimiento</button>
-                                            <button type="button" onClick={() => setForm((p) => {
-                                                const next = p.ph === "SI" ? "" : "SI";
-                                                return next === "SI" ? { ...p, ph: "SI", ma: "" } : { ...p, ph: "" };
-                                            })} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ph === "SI" ? "bg-blue-700 border-blue-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Prueba Hidrostatica (P.H)</button>
+                                            <button type="button" onClick={() => {
+                                                if (form.ph === "SI") {
+                                                    setForm((p) => ({ ...p, ph: "" }));
+                                                    return;
+                                                }
+                                                const hoy = new Date();
+                                                const mesActual = String(hoy.getMonth() + 1);
+                                                const anioActual = String(hoy.getFullYear());
+                                                if (!confirmarCambioPH(form.mesRealizadoPH || "", form.realizadoPH || "", mesActual, anioActual)) return;
+                                                setForm((p) => ({
+                                                    ...p, ph: "SI", ma: "",
+                                                    mesRealizadoPH: mesActual,
+                                                    realizadoPH: anioActual,
+                                                    vencimPH: calcularVencimientoPH(mesActual, anioActual),
+                                                }));
+                                            }} className={`flex-1 py-2.5 rounded-xl border text-sm font-bold ${form.ph === "SI" ? "bg-blue-700 border-blue-600 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400"}`}>Prueba Hidrostatica (P.H)</button>
                                         </div>
                                     </ModalField>
                                     <ModalField label="Recarga">
@@ -208,14 +236,20 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
 
                     {/* Componentes */}
                     <ModalSection title="🔩 Componentes Nuevos">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {COMP_KEYS.map((k) => (
-                                <button key={k} type="button" onClick={() => setEF(k, (form as any)[k] === "SI" ? "" : "SI")} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all ${(form as any)[k] === "SI" ? "bg-emerald-900/40 border-emerald-700 text-emerald-400" : "bg-zinc-800 border-zinc-700 text-zinc-500"}`}>
-                                    <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold shrink-0 ${(form as any)[k] === "SI" ? "bg-emerald-600 border-emerald-600 text-white" : "border-zinc-600"}`}>{(form as any)[k] === "SI" ? "✓" : ""}</span>
-                                    <span className="text-xs font-semibold">{COMP_LABELS[k]}</span>
-                                </button>
-                            ))}
-                        </div>
+                        {componentesBloqueados ? (
+                            <div className="px-3 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700 text-zinc-400 text-sm font-semibold">
+                                🚫 El estado "{form.estadoExtintor}" no permite registrar componentes instalados
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {COMP_KEYS.map((k) => (
+                                    <button key={k} type="button" onClick={() => setEF(k, (form as any)[k] === "SI" ? "" : "SI")} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all ${(form as any)[k] === "SI" ? "bg-emerald-900/40 border-emerald-700 text-emerald-400" : "bg-zinc-800 border-zinc-700 text-zinc-500"}`}>
+                                        <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold shrink-0 ${(form as any)[k] === "SI" ? "bg-emerald-600 border-emerald-600 text-white" : "border-zinc-600"}`}>{(form as any)[k] === "SI" ? "✓" : ""}</span>
+                                        <span className="text-xs font-semibold">{COMP_LABELS[k]}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </ModalSection>
 
                     {/* Observaciones */}

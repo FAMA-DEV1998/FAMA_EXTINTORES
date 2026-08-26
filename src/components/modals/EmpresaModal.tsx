@@ -1,6 +1,6 @@
 import type { EmpresaData } from "../../types";
 import { DISTRITOS_LIMA } from "../../constants";
-import { validarRucPorTipo } from "../../utils/helpers";
+import { validarRucPorTipo, detectarTipoClientePorRuc } from "../../utils/helpers";
 import { ModalField, modalInput } from "../ui/ModalUI";
 
 type Props = {
@@ -15,7 +15,18 @@ type Props = {
 export default function EmpresaModal({ title, form, setForm, onClose, onSave, saving }: Props) {
     const setF = (k: keyof EmpresaData, v: string) => setForm((p) => p ? { ...p, [k]: v } : p);
     const tipoCliente = form.tipoCliente || "";
+    const esPersona = tipoCliente === "persona";
+    const maxLen = esPersona ? 8 : 11;
     const errorRuc = tipoCliente ? validarRucPorTipo(tipoCliente, form.ruc) : null;
+
+    const setRuc = (valor: string) => {
+        const limpio = valor.replace(/\D/g, "").slice(0, maxLen);
+        setForm((p) => {
+            if (!p) return p;
+            const detectado = p.tipoCliente !== "persona" ? detectarTipoClientePorRuc(limpio) : null;
+            return { ...p, ruc: limpio, tipoCliente: detectado || p.tipoCliente };
+        });
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -50,16 +61,16 @@ export default function EmpresaModal({ title, form, setForm, onClose, onSave, sa
                             <option value="ruc20">RUC 20</option>
                         </select>
                     </ModalField>
-                    <ModalField label={tipoCliente === "persona" ? "DNI" : "RUC"} full>
+                    <ModalField label={esPersona ? "DNI" : "RUC"} full>
                         <div className="relative">
                             <input
-                                className={`${modalInput} ${form.ruc.length > 0 && form.ruc.length !== 11 ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""}`}
+                                className={`${modalInput} ${form.ruc.length > 0 && form.ruc.length !== maxLen ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""}`}
                                 value={form.ruc}
-                                onChange={(e) => setF("ruc", e.target.value.replace(/\D/g, "").slice(0, 11))}
-                                placeholder={tipoCliente === "persona" ? "DNI" : "20xxxxxxxxx"} inputMode="numeric" maxLength={11}
+                                onChange={(e) => setRuc(e.target.value)}
+                                placeholder={esPersona ? "8 dígitos" : "20xxxxxxxxx"} inputMode="numeric" maxLength={maxLen}
                             />
-                            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${form.ruc.length === 11 ? "text-emerald-500 font-bold" : "text-zinc-500"}`}>
-                                {form.ruc.length}/11 {form.ruc.length === 11 && "✓"}
+                            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${form.ruc.length === maxLen ? "text-emerald-500 font-bold" : "text-zinc-500"}`}>
+                                {form.ruc.length}/{maxLen} {form.ruc.length === maxLen && "✓"}
                             </span>
                         </div>
                         {errorRuc && <p className="text-xs font-bold text-amber-500 mt-1.5">⚠️ {errorRuc}</p>}
@@ -78,7 +89,7 @@ export default function EmpresaModal({ title, form, setForm, onClose, onSave, sa
                 {/* FOOTER FIJO */}
                 <div className="px-6 py-4 border-t border-zinc-800 flex gap-3 justify-end shrink-0 bg-zinc-900/50">
                     <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-zinc-700 text-sm font-semibold text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">Cancelar</button>
-                    <button onClick={onSave} disabled={saving || !form.razonSocial || (form.ruc.length > 0 && form.ruc.length !== 11)} className="px-6 py-2.5 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-900/20 disabled:opacity-50 transition-all hover:-translate-y-0.5">
+                    <button onClick={onSave} disabled={saving || !form.razonSocial || (form.ruc.length > 0 && form.ruc.length !== maxLen)} className="px-6 py-2.5 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-900/20 disabled:opacity-50 transition-all hover:-translate-y-0.5">
                         {saving ? "Guardando..." : "Guardar Empresa"}
                     </button>
                 </div>

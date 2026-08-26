@@ -8,8 +8,13 @@ export function useCustomOrders(
   selectedEmpresa: EmpresaData | null,
   extintores: Extintor[],
   pesoCounts: Record<string, number>,
-  estadoCounts: [string, number][]
+  estadoCounts: [string, number][],
+  variant: "todos" | "servicio" = "todos"
 ) {
+  const campoWeight = variant === "servicio" ? "servicioWeightOrder" : "weightOrder";
+  const campoEstado = variant === "servicio" ? "servicioEstadoOrder" : "estadoOrder";
+  const campoAgente = variant === "servicio" ? "servicioAgenteOrder" : "agenteOrder";
+
   const [weightOrderModal, setWeightOrderModal] = useState(false);
   const [customWeightOrder, setCustomWeightOrder] = useState<string[]>([]);
 
@@ -20,19 +25,18 @@ export function useCustomOrders(
   const [customAgenteOrder, setCustomAgenteOrder] = useState<string[]>([]);
 
   const setFromEmpresaData = (data: EmpresaData) => {
-    setCustomWeightOrder(data.weightOrder || []);
-    setCustomEstadoOrder(data.estadoOrder || []);
-    setCustomAgenteOrder(data.agenteOrder || []);
+    setCustomWeightOrder((data as any)[campoWeight] || []);
+    setCustomEstadoOrder((data as any)[campoEstado] || []);
+    setCustomAgenteOrder((data as any)[campoAgente] || []);
   };
 
   const persistOrders = (overrides: Partial<{ weightOrder: string[]; estadoOrder: string[]; agenteOrder: string[] }>) => {
     if (!socket || !selectedEmpresa?.id) return;
     socket.emit("empresa:save", {
       id: selectedEmpresa.id,
-      weightOrder: customWeightOrder,
-      estadoOrder: customEstadoOrder,
-      agenteOrder: customAgenteOrder,
-      ...overrides,
+      [campoWeight]: overrides.weightOrder ?? customWeightOrder,
+      [campoEstado]: overrides.estadoOrder ?? customEstadoOrder,
+      [campoAgente]: overrides.agenteOrder ?? customAgenteOrder,
     });
   };
 
@@ -48,7 +52,7 @@ export function useCustomOrders(
         return [...prev, ...missing].sort((a, b) => getWeightInKg(a) - getWeightInKg(b));
       });
     }
-  }, [extintores]); 
+  }, [extintores]);
 
 
   useEffect(() => {

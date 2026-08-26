@@ -84,21 +84,24 @@ const generarCodigo = (
   return codigo;
 };
 
-const generarNombre = (peso: string, agente: string, capacidad: string, marca: string) => {
-  const partes = ["Extintor", peso, agente, capacidad].map((p) => p.trim()).filter(Boolean);
-  let nombre = partes.join(" ");
-  if (marca.trim()) nombre += ` - ${marca.trim()}`;
+const generarNombre = (peso: string, agente: string, capacidad: string, marca: string, operacion: string) => {
+  const prefijo = operacion === "Recarga" ? "Recarga" : "Venta";
+  const partes = ["extintor", peso, agente, capacidad].map((p) => p.trim()).filter(Boolean);
+  let nombre = `${prefijo} ${partes.join(" ")}`;
+  if (marca.trim()) nombre += ` ${marca.trim()}`;
   return nombre;
 };
 
 export default function InventarioModal({ isOpen, form, setForm, onClose, onSave, saving, socket, userRole, categorias, marcas, agentes, capacidades, codigosExistentes }: Props) {
   const [nombreManual, setNombreManual] = useState(false);
+  const [codigoManual, setCodigoManual] = useState(false);
   const [unidad, setUnidad] = useState<"KG" | "LB" | "LT" | "GAL">(() => parsePeso(form?.peso || "").unidad);
 
   if (!isOpen || !form) return null;
 
   const esExtintor = form.categoria.toLowerCase().includes("extintor");
   const esServicio = form.categoria.toLowerCase().includes("servicio");
+  const esAgentePQS = (form.agente || "").toUpperCase().includes("PQS");
   const total = form.precioTotal || 0;
   const subtotal = total / (1 + IGV_RATE);
   const igv = total - subtotal;
@@ -114,8 +117,9 @@ export default function InventarioModal({ isOpen, form, setForm, onClose, onSave
       const agente = next.agente || "";
       const capacidad = next.capacidad || "";
       const marca = next.marca || "";
-      if (!nombreManual) next.nombre = generarNombre(peso, agente, capacidad, marca);
-      if (!p.id) next.codigo = generarCodigo(next.categoria, peso, unidadActual, agente, capacidad, marca, next.operacion || "Venta", codigosExistentes);
+      const operacion = next.operacion || "Venta";
+      if (!nombreManual || !next.nombre.trim()) next.nombre = generarNombre(peso, agente, capacidad, marca, operacion);
+      if (!codigoManual || !next.codigo.trim()) next.codigo = generarCodigo(next.categoria, peso, unidadActual, agente, capacidad, marca, operacion, codigosExistentes);
       return next;
     });
   };
@@ -174,29 +178,31 @@ export default function InventarioModal({ isOpen, form, setForm, onClose, onSave
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-zinc-400 uppercase">Agente</label>
-                <CreatableSelect value={form.agente || ""} onChange={(v) => actualizarCamposExtintor({ agente: v })} options={agentes} catalogType="agente" socket={socket} userRole={userRole} className={selectCls} />
+                <CreatableSelect value={form.agente || ""} onChange={(v) => actualizarCamposExtintor({ agente: v, capacidad: v.toUpperCase().includes("PQS") ? form.capacidad : "" })} options={agentes} catalogType="agente" socket={socket} userRole={userRole} className={selectCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-zinc-400 uppercase">Marca</label>
                 <CreatableSelect value={form.marca || ""} onChange={(v) => actualizarCamposExtintor({ marca: v })} options={marcas} catalogType="marca" socket={socket} userRole={userRole} className={selectCls} />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-zinc-400 uppercase">Calidad de Polvo</label>
-                <CreatableSelect value={form.capacidad || ""} onChange={(v) => actualizarCamposExtintor({ capacidad: v })} options={capacidades} catalogType="capacidad" socket={socket} userRole={userRole} className={selectCls} />
-              </div>
+              {esAgentePQS && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-zinc-400 uppercase">Calidad de Polvo</label>
+                  <CreatableSelect value={form.capacidad || ""} onChange={(v) => actualizarCamposExtintor({ capacidad: v })} options={capacidades} catalogType="capacidad" socket={socket} userRole={userRole} className={selectCls} />
+                </div>
+              )}
             </div>
           )}
 
           <div className="flex flex-col gap-1.5 md:col-span-2">
             <label className="text-xs font-bold text-zinc-400 uppercase">Código</label>
-            <input value={form.codigo} onChange={(e) => setForm((p) => p && { ...p, codigo: e.target.value })} className={selectCls} placeholder="Se genera automáticamente" />
+            <input value={form.codigo} onChange={(e) => { const v = e.target.value; setCodigoManual(v.trim() !== ""); setForm((p) => p && { ...p, codigo: v }); }} className={selectCls} placeholder="Se genera automáticamente" />
           </div>
 
           <div className="flex flex-col gap-1.5 md:col-span-2">
             <label className="text-xs font-bold text-zinc-400 uppercase">Nombre / Descripción</label>
             <input
               value={form.nombre}
-              onChange={(e) => { setNombreManual(true); setForm((p) => p && { ...p, nombre: e.target.value }); }}
+              onChange={(e) => { const v = e.target.value; setNombreManual(v.trim() !== ""); setForm((p) => p && { ...p, nombre: v }); }}
               className={selectCls}
               placeholder={esServicio ? "Ej: Prueba Hidrostática" : "Ej: Extintor 6 kg PQS 75%"}
             />

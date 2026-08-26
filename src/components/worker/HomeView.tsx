@@ -48,6 +48,13 @@ export default function HomeView({ empresas, connected, selectEmpresa, onCreateN
       </div>
 
       <button
+        onClick={onCreateNew}
+        className="w-full md:w-auto md:self-center md:px-14 py-4 rounded-2xl bg-red-700 text-white font-black text-sm md:text-base hover:bg-red-600 shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+      >
+        <span className="text-xl leading-none">+</span> Registrar Nueva Empresa
+      </button>
+
+      <button
         onClick={onEscanearQR}
         className="w-full md:w-auto md:self-center md:px-14 py-3.5 rounded-2xl bg-zinc-900 text-white font-black text-sm md:text-base hover:bg-zinc-800 shadow-lg transition-all hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
       >
@@ -104,13 +111,23 @@ export default function HomeView({ empresas, connected, selectEmpresa, onCreateN
               <p className="font-black text-zinc-800 text-sm md:text-base truncate group-hover:text-red-700 transition-colors">
                 {emp.razonSocial}
               </p>
-              {esMultisede(emp) ? (
-                <p className="text-xs text-zinc-400 font-medium mt-0.5 truncate">Multisede · {emp.ruc || ""}</p>
-              ) : emp.tipoCliente ? (
-                <p className="text-xs text-zinc-400 font-medium mt-0.5 truncate">{TIPO_CLIENTE_LABELS[emp.tipoCliente]} · {emp.ruc || ""}</p>
-              ) : (
-                <p className="text-xs text-amber-600 font-bold mt-0.5 truncate">⚠️ Falta definir clasificación de cliente</p>
-              )}
+              {(() => {
+                const faltantes: string[] = [];
+                if (!emp.tipoCliente) faltantes.push("clasificación");
+                if (!emp.ruc) faltantes.push("RUC/DNI");
+                if (faltantes.length > 0) {
+                  return (
+                    <p className="text-xs text-amber-600 font-bold mt-0.5">
+                      ⚠️ Falta {faltantes.join(" y ")}{esMultisede(emp) && " (multisede)"}
+                    </p>
+                  );
+                }
+                return esMultisede(emp) ? (
+                  <p className="text-xs text-zinc-400 font-medium mt-0.5">Multisede · {emp.ruc}</p>
+                ) : (
+                  <p className="text-xs text-zinc-400 font-medium mt-0.5">{TIPO_CLIENTE_LABELS[emp.tipoCliente!]} · {emp.ruc}</p>
+                );
+              })()}
             </div>
             <div className="w-8 h-8 rounded-full bg-zinc-50 flex items-center justify-center group-hover:bg-red-600 transition-colors shrink-0">
               <span className="text-zinc-400 group-hover:text-white text-lg font-bold">›</span>
@@ -118,13 +135,6 @@ export default function HomeView({ empresas, connected, selectEmpresa, onCreateN
           </button>
         ))}
       </div>
-
-      <button
-        onClick={onCreateNew}
-        className="w-full md:w-auto md:self-center md:px-14 py-4 rounded-2xl bg-red-700 text-white font-black text-sm md:text-base hover:bg-red-600 shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 active:scale-95 mt-4 flex items-center justify-center gap-2"
-      >
-        <span className="text-xl leading-none">+</span> Registrar Nueva Empresa
-      </button>
     </div>
   );
 }

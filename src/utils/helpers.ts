@@ -1,8 +1,9 @@
 import type { FormData, EmpresaData, Extintor, Servicio, Sede } from "../types";
-import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH, ESTADOS_SIN_SERVICIO_EXTRA, ESTADOS_SOLO_RECARGA } from "../constants/extintores";
+import { ESTADO_ORDEN_DEFAULT, ESTADOS_SIN_SERVICIO, ESTADOS_REQUIEREN_DATOS_PH, ESTADOS_SIN_SERVICIO_EXTRA, ESTADOS_SOLO_RECARGA, ESTADOS_SIN_COMPONENTES } from "../constants/extintores";
+import { MESES } from "../constants/meses";
 
 export const emptyForm = (): FormData => ({
-    nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "",
+    nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "", mesRealizadoPH: "",
     vencimPH: "", estadoExtintor: "", agenteExtintor: "", peso: "", unidadPeso: "KG",
     ma: false, recarga: "", ph: false, valvula: "", manguera: "", manometro: "",
     tobera: "", observaciones: "", servicioExtra: "", motivoBaja: "", evidencias: [],
@@ -16,7 +17,7 @@ export const emptyEmpresa = (): EmpresaData => ({
 
 export const emptyExtintor = (): Partial<Extintor> => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "",
-    realizadoPH: "", vencimPH: "", estadoExtintor: "", agenteExtintor: "",
+    realizadoPH: "", mesRealizadoPH: "", vencimPH: "", estadoExtintor: "", agenteExtintor: "",
     peso: "", unidadPeso: "KG", ma: "", recarga: "", ph: "",
     valvula: "", manguera: "", manometro: "", tobera: "", observaciones: "", servicioExtra: "", motivoBaja: "",
     evidencia: "[]"
@@ -141,28 +142,77 @@ export const estadoBloqueaServicioExtra = (estado: string): boolean => {
     return ESTADOS_SIN_SERVICIO_EXTRA.includes(estado);
 };
 
+export const estadoBloqueaComponentes = (estado: string): boolean => {
+    return ESTADOS_SIN_COMPONENTES.includes(estado);
+};
+
 export const estadoRequiereDatosPH = (estado: string): boolean => {
     return ESTADOS_REQUIEREN_DATOS_PH.includes(estado);
 };
 
-export const proximoAnioPH = (realizadoPH?: string): number | null => {
+const mesLabelCompleto = (mes: number): string => MESES.find((m) => parseInt(m.value, 10) === mes)?.label || String(mes);
+
+export const calcularVencimientoPH = (mesRealizadoPH: string, realizadoPH: string): string => {
     const anio = parseInt(realizadoPH || "", 10);
+    if (isNaN(anio) || (realizadoPH || "").length !== 4) return "";
+    return mesRealizadoPH ? `${mesRealizadoPH}/${anio + 5}` : String(anio + 5);
+};
+
+export const parseVencimPH = (vencimPH?: string): { mes: number | null; anio: number } | null => {
+    const valor = (vencimPH || "").trim();
+    if (!valor) return null;
+    if (valor.includes("/")) {
+        const [mesStr, anioStr] = valor.split("/");
+        const mes = parseInt(mesStr, 10);
+        const anio = parseInt(anioStr, 10);
+        if (isNaN(anio)) return null;
+        return { mes: isNaN(mes) ? null : mes, anio };
+    }
+    const anio = parseInt(valor, 10);
     if (isNaN(anio)) return null;
-    return anio + 5;
+    return { mes: null, anio };
+};
+
+export const formatVencimPH = (vencimPH?: string): string => {
+    const parsed = parseVencimPH(vencimPH);
+    if (!parsed) return "";
+    return parsed.mes ? `${mesLabelCompleto(parsed.mes)} ${parsed.anio}` : String(parsed.anio);
+};
+
+export const formatRealizadoPH = (mesRealizadoPH?: string, realizadoPH?: string): string => {
+    const anio = parseInt(realizadoPH || "", 10);
+    if (isNaN(anio)) return "";
+    const mes = parseInt(mesRealizadoPH || "", 10);
+    return !isNaN(mes) && mes >= 1 && mes <= 12 ? `${mesLabelCompleto(mes)} ${anio}` : String(anio);
+};
+
+export const confirmarCambioPH = (mesActual: string, anioActual: string, mesNuevo: string, anioNuevo: string): boolean => {
+    if (!anioActual) return true;
+    if (mesActual === mesNuevo && anioActual === anioNuevo) return true;
+    const labelActual = formatRealizadoPH(mesActual, anioActual);
+    if (!labelActual) return true;
+    const labelNuevo = formatRealizadoPH(mesNuevo, anioNuevo) || "la nueva fecha";
+    return confirm(`Existe una prueba hidrostática registrada en ${labelActual}. ¿Deseas cambiarla a ${labelNuevo}?`);
 };
 
 export const phVenceEsteAnio = (ext: Extintor): boolean => {
     if (!estadoRequiereDatosPH(ext.estadoExtintor || "")) return false;
-    const proximo = proximoAnioPH(ext.realizadoPH);
-    if (proximo === null) return false;
-    return proximo === new Date().getFullYear();
+    const parsed = parseVencimPH(ext.vencimPH);
+    if (!parsed) return false;
+    const hoy = new Date();
+    if (parsed.anio !== hoy.getFullYear()) return false;
+    return parsed.mes === null || parsed.mes === hoy.getMonth() + 1;
 };
 
 export const phVencida = (ext: Extintor): boolean => {
     if (!estadoRequiereDatosPH(ext.estadoExtintor || "")) return false;
-    const proximo = proximoAnioPH(ext.realizadoPH);
-    if (proximo === null) return false;
-    return proximo < new Date().getFullYear();
+    const parsed = parseVencimPH(ext.vencimPH);
+    if (!parsed) return false;
+    const hoy = new Date();
+    const anioActual = hoy.getFullYear();
+    const mesActual = hoy.getMonth() + 1;
+    if (parsed.mes === null) return parsed.anio < anioActual;
+    return parsed.anio < anioActual || (parsed.anio === anioActual && parsed.mes < mesActual);
 };
 
 export const esExtintorIncompleto = (ext: Extintor): boolean => {
@@ -356,10 +406,23 @@ export const iconoEmpresa = (e: { tipoCliente?: string | null; sedes?: Sede[] })
 };
 
 export const validarRucPorTipo = (tipoCliente: string, ruc: string): string | null => {
-    if (tipoCliente === "ruc10" || tipoCliente === "ruc20") {
-        if (!/^\d{11}$/.test((ruc || "").trim())) return "El RUC debe tener 11 dígitos";
-        if (tipoCliente === "ruc20" && !ruc.trim().startsWith("20")) return "El RUC 20 debe iniciar en 20";
+    const valor = (ruc || "").trim();
+    if (tipoCliente === "persona") {
+        if (valor.length > 0 && valor.length !== 8) return "El DNI debe tener 8 dígitos";
+        return null;
     }
+    if (tipoCliente === "ruc10" || tipoCliente === "ruc20") {
+        if (!/^\d{11}$/.test(valor)) return "El RUC debe tener 11 dígitos";
+        if (tipoCliente === "ruc20" && !valor.startsWith("20")) return "El RUC 20 debe iniciar en 20";
+        if (tipoCliente === "ruc10" && !valor.startsWith("10")) return "El RUC 10 debe iniciar en 10";
+    }
+    return null;
+};
+
+export const detectarTipoClientePorRuc = (ruc: string): "ruc10" | "ruc20" | null => {
+    const valor = (ruc || "").trim();
+    if (valor.startsWith("10")) return "ruc10";
+    if (valor.startsWith("20")) return "ruc20";
     return null;
 };
 

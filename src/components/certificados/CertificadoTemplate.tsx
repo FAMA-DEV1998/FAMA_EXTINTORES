@@ -91,7 +91,7 @@ export default function CertificadoTemplate({ datos }: Props) {
             </h3>
 
             <p className="text-justify mb-5 leading-[1.6]">
-              <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
+              <span className="font-bold uppercase">{datos.nombre || "—"}</span> con{" "}
               <span className="font-bold">
                 {labelIdentificacion} {datos.numeroIdentificacion || "—"}
                 {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
@@ -172,7 +172,7 @@ export default function CertificadoTemplate({ datos }: Props) {
               inspeccionar su extintor una vez al mes por si exista la posibilidad de que lo hayan utilizado.
             </p>
 
-            <p className="mb-8">{datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
+            <p className="mb-8">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
 
             <div className="flex justify-center w-full mt-6">
               <div className="relative w-80 flex flex-col items-center">

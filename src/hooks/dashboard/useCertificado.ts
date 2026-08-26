@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { MESES } from "../../constants";
+import { formatVencimPH } from "../../utils/helpers";
 import type { CertificadoDatos, CertificadoItem, TipoCertificado, TipoIdentificacion } from "../../components/certificados/CertificadoTemplate";
 
 export type FamiliaAgente = "co2" | "pqs" | "acetato" | "otro";
+export type PqsVariante = "75" | "90";
 
 export const clasificarAgente = (agente: string): FamiliaAgente => {
   const a = (agente || "").toLowerCase();
@@ -12,11 +14,14 @@ export const clasificarAgente = (agente: string): FamiliaAgente => {
   return "otro";
 };
 
-const FAMILIA_LABEL: Record<FamiliaAgente, string> = {
-  co2: "gas carbónico CO2",
-  pqs: "polvo químico seco (PQS)",
-  acetato: "acetato de potasio",
-  otro: "",
+const PQS_LABEL: Record<PqsVariante, string> = {
+  "75": "polvo químico seco (PQS) 75%",
+  "90": "polvo químico seco (PQS) 90% UL",
+};
+
+export const PQS_TIPO_LABEL: Record<PqsVariante, string> = {
+  "75": "PQS 75%",
+  "90": "PQS 90% UL",
 };
 
 export const FAMILIA_FILTRO_LABEL: Record<FamiliaAgente, string> = {
@@ -26,11 +31,11 @@ export const FAMILIA_FILTRO_LABEL: Record<FamiliaAgente, string> = {
   otro: "Otros",
 };
 
-const construirAgentesTexto = (agentesPresentes: string[], familias: FamiliaAgente[]) => {
+const construirAgentesTexto = (agentesPresentes: string[], familias: FamiliaAgente[], pqsVariante: PqsVariante) => {
   const partes: string[] = [];
-  if (familias.includes("co2")) partes.push(FAMILIA_LABEL.co2);
-  if (familias.includes("pqs")) partes.push(FAMILIA_LABEL.pqs);
-  if (familias.includes("acetato")) partes.push(FAMILIA_LABEL.acetato);
+  if (familias.includes("co2")) partes.push("gas carbónico CO2");
+  if (familias.includes("pqs")) partes.push(PQS_LABEL[pqsVariante]);
+  if (familias.includes("acetato")) partes.push("acetato de potasio");
   const otros = Array.from(new Set(agentesPresentes.filter((a) => clasificarAgente(a) === "otro" && a)));
   partes.push(...otros);
   if (partes.length === 0) return "extintores portátiles";
@@ -41,7 +46,7 @@ const construirAgentesTexto = (agentesPresentes: string[], familias: FamiliaAgen
 const presionPSIPorDefecto = (familia: FamiliaAgente): string => (familia === "co2" ? "3000" : "");
 
 const tipoExtintorLabel = (familia: FamiliaAgente, agenteOriginal: string): string => {
-  if (familia === "pqs") return "PQS-ABC";
+  if (familia === "pqs") return "PQS";
   if (familia === "co2") return "CO2";
   return agenteOriginal || "—";
 };
@@ -63,12 +68,15 @@ const formatMesAnio = (fecha: Date): string => `${MESES[fecha.getMonth()].label}
 export function useCertificado(empresa: any, activeSede: any, servicio: any, extintoresDelServicio: any[]) {
   const [modal, setModal] = useState(false);
   const [filtroAgente, setFiltroAgente] = useState<"todos" | FamiliaAgente>("todos");
+  const [pqsVariante, setPqsVariante] = useState<PqsVariante>("75");
 
   const familiasDisponibles = useMemo<FamiliaAgente[]>(() => {
     const set = new Set<FamiliaAgente>();
     (extintoresDelServicio || []).forEach((e) => set.add(clasificarAgente(e.agenteExtintor)));
     return Array.from(set);
   }, [extintoresDelServicio]);
+
+  const hayPqs = familiasDisponibles.includes("pqs");
 
   const filtrarExtintores = (tipoCertificado: TipoCertificado, filtro: "todos" | FamiliaAgente) =>
     (extintoresDelServicio || []).filter((e) => {
@@ -91,17 +99,17 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
         estanqueidad: "Conforme",
         vencimientoRecarga,
         anioFabricacion: e.fechaFabricacion || "—",
-        vencimientoPH: e.vencimPH || "—",
+        vencimientoPH: formatVencimPH(e.vencimPH) || "—",
         presionPSI: presionPSIPorDefecto(familia),
         condicion: e.estadoExtintor || "—",
       };
     });
   };
 
-  const construirAgentesTextoPara = (tipoCertificado: TipoCertificado, filtro: "todos" | FamiliaAgente) => {
+  const construirAgentesTextoPara = (tipoCertificado: TipoCertificado, filtro: "todos" | FamiliaAgente, variante: PqsVariante) => {
     const base = filtrarExtintores(tipoCertificado, filtro);
     const familias = Array.from(new Set(base.map((e) => clasificarAgente(e.agenteExtintor))));
-    return construirAgentesTexto(base.map((e) => e.agenteExtintor || ""), familias);
+    return construirAgentesTexto(base.map((e) => e.agenteExtintor || ""), familias, variante);
   };
 
   const datosIniciales = useMemo<CertificadoDatos>(() => {
@@ -121,7 +129,7 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       diaFecha: String(hoy.getDate()),
       mesFecha: String(hoy.getMonth() + 1),
       anioFecha: String(hoy.getFullYear()),
-      agentesTexto: construirAgentesTextoPara("garantia", "todos"),
+      agentesTexto: construirAgentesTextoPara("garantia", "todos", "75"),
       items: construirItems("garantia", "todos"),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,9 +137,18 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
 
   const [datos, setDatos] = useState<CertificadoDatos>(datosIniciales);
 
+  const cacheInicial = () => ({
+    ruc: empresa?.tipoCliente !== "persona" ? (empresa?.ruc || "") : "",
+    dni: empresa?.tipoCliente === "persona" ? (empresa?.ruc || "") : "",
+  });
+
+  const [cacheIdentificacion, setCacheIdentificacion] = useState<{ ruc: string; dni: string }>(cacheInicial);
+
   const abrir = () => {
     setFiltroAgente("todos");
+    setPqsVariante("75");
     setDatos(datosIniciales);
+    setCacheIdentificacion(cacheInicial());
     setModal(true);
   };
 
@@ -142,7 +159,7 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       ...p,
       tipoCertificado: tipo,
       items: construirItems(tipo, filtroAgente),
-      agentesTexto: construirAgentesTextoPara(tipo, filtroAgente),
+      agentesTexto: construirAgentesTextoPara(tipo, filtroAgente, pqsVariante),
     }));
   };
 
@@ -151,17 +168,33 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     setDatos((p) => ({
       ...p,
       items: construirItems(p.tipoCertificado, filtro),
-      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtro),
+      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtro, pqsVariante),
+    }));
+  };
+
+  const cambiarPqsVariante = (variante: PqsVariante) => {
+    setPqsVariante(variante);
+    setDatos((p) => ({
+      ...p,
+      items: construirItems(p.tipoCertificado, filtroAgente),
+      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, variante),
     }));
   };
 
   const cambiarTipoIdentificacion = (tipo: TipoIdentificacion) => {
-    setDatos((p) => ({ ...p, tipoIdentificacion: tipo, numeroIdentificacion: "", dniAdicional: "" }));
+    setDatos((p) => {
+      const cacheActualizada = p.tipoIdentificacion === "ruc" || p.tipoIdentificacion === "dni"
+        ? { ...cacheIdentificacion, [p.tipoIdentificacion]: p.numeroIdentificacion }
+        : cacheIdentificacion;
+      setCacheIdentificacion(cacheActualizada);
+      const numeroNuevo = tipo === "placa" ? "" : cacheActualizada[tipo] || "";
+      return { ...p, tipoIdentificacion: tipo, numeroIdentificacion: numeroNuevo };
+    });
   };
 
   return {
     modal, setModal, datos, actualizar, abrir,
     filtroAgente, cambiarFiltroAgente, cambiarTipoCertificado, cambiarTipoIdentificacion,
-    familiasDisponibles,
+    familiasDisponibles, hayPqs, pqsVariante, cambiarPqsVariante,
   };
 }

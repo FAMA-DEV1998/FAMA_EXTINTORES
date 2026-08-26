@@ -19,29 +19,30 @@ function useBuildScope(socket: Socket | null, role: string, catalogs: Catalogs) 
   const [showMetrics, setShowMetrics] = useState(true);
   const [obsModal, setObsModal] = useState<string | null>(null);
 
-  const empresaSelection = useEmpresaSelection(socket, (data) => customOrders.setFromEmpresaData(data));
+  const empresaSelection = useEmpresaSelection(socket, (data) => {
+    customOrders.setFromEmpresaData(data);
+    customOrdersServicio.setFromEmpresaData(data);
+  });
   const { empresas, selectedEmpresa, extintores: extintoresRaw, loadingDetail, openEmpresa, goBack } = empresaSelection;
 
   const extintores = Array.from(new Map(extintoresRaw.map((e: any) => [e.uid, e])).values()) as typeof extintoresRaw;
 
   const { pesoCounts, estadoCounts } = computeBaseMetrics(extintores);
 
-  const customOrders = useCustomOrders(socket, selectedEmpresa, extintores, pesoCounts, estadoCounts);
+  const customOrders = useCustomOrders(socket, selectedEmpresa, extintores, pesoCounts, estadoCounts, "todos");
+  const customOrdersServicio = useCustomOrders(socket, selectedEmpresa, extintores, pesoCounts, estadoCounts, "servicio");
 
   const sedesHook = useSedes(socket, selectedEmpresa?.id);
 
-  // Edición/archivado de la empresa activa (usado por EmpresaLayout)
   const empresaForm = useEmpresaForm(socket, role, selectedEmpresa, goBack, saving, setSaving);
 
-  // Alta/edición/eliminación de extintores (usado por ExtintorInventoryPanel,
-  // compartido entre la vista "Extintores" y la vista "Historial")
   const extintorForm = useExtintorForm(socket, role, selectedEmpresa, saving, setSaving);
 
   const evidencia = useEvidencia(socket);
 
   return {
     empresas, selectedEmpresa, extintores, loadingDetail, openEmpresa, goBack,
-    customOrders, sedes: sedesHook, empresaForm, extintorForm, evidencia,
+    customOrders, customOrdersServicio, sedes: sedesHook, empresaForm, extintorForm, evidencia,
     saving, setSaving, showMetrics, setShowMetrics, obsModal, setObsModal,
     catalogLists, socket, role,
   };
@@ -61,8 +62,6 @@ export function EmpresaScopeProvider({ socket, role, catalogs, children }: { soc
 
   const activeSede = sedeSlug ? scope.sedes.sedes.find((s) => s.slug === sedeSlug) || null : null;
 
-  // Vuelve a pedir la lista de extintores filtrada por sede cada vez que
-  // cambia la sede activa (o al quitarla, para volver a ver el total).
   useEffect(() => {
     if (!socket || !scope.selectedEmpresa?.id) return;
     socket.emit("extintor:list", {

@@ -35,6 +35,9 @@ export type EmpresaData = {
   weightOrder?: string[];
   estadoOrder?: string[];
   agenteOrder?: string[];
+  servicioWeightOrder?: string[];
+  servicioEstadoOrder?: string[];
+  servicioAgenteOrder?: string[];
   slug?: string;
   sedes?: Sede[];
   tipoCliente?: string | null;
@@ -48,6 +51,7 @@ export type Extintor = {
   marca: string;
   fechaFabricacion: string;
   realizadoPH: string;
+  mesRealizadoPH: string;
   vencimPH: string;
   estadoExtintor: string;
   agenteExtintor: string;
@@ -75,6 +79,7 @@ export type FormData = {
   marca: string;
   fechaFabricacion: string;
   realizadoPH: string;
+  mesRealizadoPH: string;
   vencimPH: string;
   estadoExtintor: string;
   agenteExtintor: string;
@@ -125,9 +130,16 @@ export type Cotizacion = {
   numero: string;
   fecha: string;
   cliente: string;
+  tipoDestinatario?: "empresa" | "persona";
   ruc: string;
+  tipoDocumento?: "ruc" | "dni";
   direccion: string;
+  sede?: string;
+  guia?: string;
   atencion: string;
+  observacionesMes?: string;
+  formaPago?: "contado" | "credito";
+  diasCredito?: string;
   items: CotizacionItem[];
   createdAt?: string;
 };

@@ -1,14 +1,19 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { Socket } from "socket.io-client";
-import { COMP_KEYS, COMP_LABELS, ESTADOS, PESOS_GAL, PESOS_KG, PESOS_LB, PESOS_LT } from "../../constants";
+import { COMP_KEYS, COMP_LABELS, ESTADOS, MESES, PESOS_GAL, PESOS_KG, PESOS_LB, PESOS_LT } from "../../constants";
 import type { FormData, WorkerView as View } from "../../types";
 import {
+    calcularVencimientoPH,
+    confirmarCambioPH,
+    estadoBloqueaComponentes,
     estadoBloqueaServicio,
     estadoBloqueaServicioExtra,
     estadoRequiereDatosPH,
     estadoSoloPermiteRecarga,
+    formatVencimPH,
     getRecargasPermitidas,
-    proximoAnioPH,
+    phVenceEsteAnio,
+    phVencida,
 } from "../../utils/helpers";import { Card, Field, SiNo, Toggle, inputCls } from "../ui/WorkerUI";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
@@ -19,6 +24,7 @@ interface ExtintorFormViewProps {
     setForm: Dispatch<SetStateAction<FormData>>;
     setF: (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
     handleRealizadoPH: (val: string) => void;
+    handleMesRealizadoPH: (val: string) => void;
     handleExtintorSave: () => void;
 
     socket: Socket | null;
@@ -51,6 +57,7 @@ export default function ExtintorFormView({
     setForm,
     setF,
     handleRealizadoPH,
+    handleMesRealizadoPH,
     handleExtintorSave,
     socket,
     userRole,
@@ -75,6 +82,9 @@ export default function ExtintorFormView({
     const soloRecarga = estadoSoloPermiteRecarga(form.estadoExtintor);
     const servicioBloqueado = estadoBloqueaServicio(form.estadoExtintor) && !soloRecarga;
     const servicioExtraBloqueado = estadoBloqueaServicioExtra(form.estadoExtintor);
+    const componentesBloqueados = estadoBloqueaComponentes(form.estadoExtintor);
+    const phVencidaAlerta = phVencida(form as any);
+    const phProximaAlerta = !phVencidaAlerta && phVenceEsteAnio(form as any);
 
     return (
         <div className="scroll-area h-full overflow-y-auto p-4 md:p-8 flex flex-col gap-6 max-w-5xl mx-auto w-full">
@@ -108,21 +118,30 @@ export default function ExtintorFormView({
             <div className="grid grid-cols-2 md:grid-cols-2 gap-6 items-start">
                 <Card title="🔬 Prueba Hidrostática">
                     <div className="flex flex-col gap-5">
+                        <Field label="Mes Realizado PH">
+                            <select className={`${inputCls} ${form.ph ? "opacity-60 cursor-not-allowed" : ""}`} value={form.mesRealizadoPH} disabled={!!form.ph} onChange={(e) => handleMesRealizadoPH(e.target.value)}>
+                                <option value="">Seleccionar...</option>
+                                {MESES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                            </select>
+                        </Field>
                         <Field label="Año Realizado PH">
-                            <input className={inputCls} value={form.realizadoPH} onChange={(e) => handleRealizadoPH(e.target.value)} placeholder="Ej: 2024" inputMode="numeric" maxLength={4} />
+                            <input className={`${inputCls} ${form.ph ? "opacity-60 cursor-not-allowed" : ""}`} value={form.realizadoPH} disabled={!!form.ph} onChange={(e) => handleRealizadoPH(e.target.value)} placeholder="Ej: 2024" inputMode="numeric" maxLength={4} />
                         </Field>
-                        <Field label="Año Vencimiento PH (Automático +5)">
-                            <input className={`${inputCls} bg-zinc-100 text-zinc-500 border-dashed cursor-not-allowed`} value={form.vencimPH} readOnly placeholder="Se calcula solo" />
+                        <Field label="Vencimiento PH (Automático +5)">
+                            <input className={`${inputCls} bg-zinc-100 text-zinc-500 border-dashed cursor-not-allowed`} value={formatVencimPH(form.vencimPH)} readOnly placeholder="Se calcula solo" />
                         </Field>
-                        {estadoRequiereDatosPH(form.estadoExtintor) && proximoAnioPH(form.realizadoPH) !== null && proximoAnioPH(form.realizadoPH)! < new Date().getFullYear() ? (
+                        {form.ph && (
+                            <p className="text-[11px] font-bold text-zinc-500">🔒 Desactiva "PH — Prueba Hidrostática" para modificar el mes/año</p>
+                        )}
+                        {estadoRequiereDatosPH(form.estadoExtintor) && phVencidaAlerta ? (
                             <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
                                 <span className="shrink-0">🔴</span>
                                 <span className="leading-snug">Prueba hidrostática vencida — realizar urgentemente</span>
                             </div>
-                        ) : estadoRequiereDatosPH(form.estadoExtintor) && proximoAnioPH(form.realizadoPH) === new Date().getFullYear() && (
+                        ) : estadoRequiereDatosPH(form.estadoExtintor) && phProximaAlerta && (
                             <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold">
                                 <span className="shrink-0">⚠️</span>
-                                <span className="leading-snug">Debe realizarse la prueba hidrostática este año</span>
+                                <span className="leading-snug">Debe realizarse la prueba hidrostática este mes</span>
                             </div>
                         )}
                     </div>
@@ -230,10 +249,22 @@ export default function ExtintorFormView({
                                             const next = !p.ma;
                                             return next ? { ...p, ma: true, ph: false, recarga: "" } : { ...p, ma: false };
                                         })} />
-                                        <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => setForm((p) => {
-                                            const next = !p.ph;
-                                            return next ? { ...p, ph: true, ma: false } : { ...p, ph: false };
-                                        })} />
+                                        <Toggle checked={form.ph} label="PH — Prueba Hidrostática" onChange={() => {
+                                            if (form.ph) {
+                                                setForm((p) => ({ ...p, ph: false }));
+                                                return;
+                                            }
+                                            const hoy = new Date();
+                                            const mesActual = String(hoy.getMonth() + 1);
+                                            const anioActual = String(hoy.getFullYear());
+                                            if (!confirmarCambioPH(form.mesRealizadoPH, form.realizadoPH, mesActual, anioActual)) return;
+                                            setForm((p) => ({
+                                                ...p, ph: true, ma: false,
+                                                mesRealizadoPH: mesActual,
+                                                realizadoPH: anioActual,
+                                                vencimPH: calcularVencimientoPH(mesActual, anioActual),
+                                            }));
+                                        }} />
                                     </>
                                 )}
 
@@ -281,16 +312,22 @@ export default function ExtintorFormView({
 
             <div className="grid grid-cols-2 md:grid-cols-2 gap-6 items-stretch">
                 <Card title="🔩 Componentes Instalados">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-x-6 lg:gap-x-10 gap-y-3 w-full">
-                        {COMP_KEYS.map((k) => (
-                            <div key={k} className="flex items-center w-full min-w-0 gap-3 py-2 border-b border-zinc-100 sm:border-0 md:border-b lg:border-0">
-                                <span className="text-sm font-bold text-zinc-700 flex-1 truncate">
-                                    {COMP_LABELS[k]}
-                                </span>
-                                <SiNo value={form[k]} onChange={(v) => setForm((p) => ({ ...p, [k]: v }))} />
-                            </div>
-                        ))}
-                    </div>
+                    {componentesBloqueados ? (
+                        <div className="px-3 py-2.5 rounded-xl bg-zinc-50 border-2 border-dashed border-zinc-200 text-zinc-500 text-sm font-bold">
+                            🚫 El estado "{form.estadoExtintor}" no permite registrar componentes instalados
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-x-6 lg:gap-x-10 gap-y-3 w-full">
+                            {COMP_KEYS.map((k) => (
+                                <div key={k} className="flex items-center w-full min-w-0 gap-3 py-2 border-b border-zinc-100 sm:border-0 md:border-b lg:border-0">
+                                    <span className="text-sm font-bold text-zinc-700 flex-1 truncate">
+                                        {COMP_LABELS[k]}
+                                    </span>
+                                    <SiNo value={form[k]} onChange={(v) => setForm((p) => ({ ...p, [k]: v }))} />
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </Card>
 
                 <Card title="📝 Observaciones">

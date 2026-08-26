@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { Extintor, FormData, WorkerView as View } from "../../types";
-import { emptyForm, estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoSoloPermiteRecarga } from "../../utils/helpers";
+import { emptyForm, estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes, estadoSoloPermiteRecarga, calcularVencimientoPH } from "../../utils/helpers";
 
 export function useExtintorForm(
     socket: Socket | null,
@@ -20,11 +20,18 @@ export function useExtintorForm(
     const clearLastSavedExtintor = () => setLastSavedExtintor(null);
 
     const handleRealizadoPH = (val: string) => {
-        const yr = parseInt(val);
         setForm((p) => ({
             ...p,
             realizadoPH: val,
-            vencimPH: !isNaN(yr) && val.length === 4 ? String(yr + 5) : p.vencimPH,
+            vencimPH: calcularVencimientoPH(p.mesRealizadoPH, val),
+        }));
+    };
+
+    const handleMesRealizadoPH = (val: string) => {
+        setForm((p) => ({
+            ...p,
+            mesRealizadoPH: val,
+            vencimPH: calcularVencimientoPH(val, p.realizadoPH),
         }));
     };
 
@@ -34,6 +41,7 @@ export function useExtintorForm(
         const { evidencias, ...formWithoutEvidencias } = form;
         const soloRecargaGuardado = estadoSoloPermiteRecarga(form.estadoExtintor);
         const bloqueado = estadoBloqueaServicio(form.estadoExtintor) && !soloRecargaGuardado;
+        const componentesBloqueados = estadoBloqueaComponentes(form.estadoExtintor);
         const payload = {
             ...formWithoutEvidencias, id: activeId,
             sedeId: editingRow !== null ? form.sedeId : (form.sedeId ?? activeSedeId ?? null),
@@ -43,12 +51,17 @@ export function useExtintorForm(
             ph: (bloqueado || soloRecargaGuardado) ? "" : (form.ph ? "SI" : ""),
             recarga: bloqueado ? "" : form.recarga,
             servicioExtra: estadoBloqueaServicioExtra(form.estadoExtintor) ? "" : form.servicioExtra, motivoBaja: form.motivoBaja,
+            valvula: componentesBloqueados ? "" : form.valvula,
+            manguera: componentesBloqueados ? "" : form.manguera,
+            manometro: componentesBloqueados ? "" : form.manometro,
+            tobera: componentesBloqueados ? "" : form.tobera,
             evidencia: JSON.stringify(evidencias || []),
         };
         const estadoSnapshot = {
             nSerie: payload.nSerie,
             estadoExtintor: payload.estadoExtintor,
             realizadoPH: payload.realizadoPH,
+            mesRealizadoPH: payload.mesRealizadoPH,
             vencimPH: payload.vencimPH,
             ma: payload.ma,
             ph: payload.ph,
@@ -95,6 +108,7 @@ export function useExtintorForm(
             setForm({
                 nSerie: ext.nSerie, nInterno: ext.nInterno, marca: ext.marca,
                 fechaFabricacion: ext.fechaFabricacion, realizadoPH: ext.realizadoPH,
+                mesRealizadoPH: ext.mesRealizadoPH || "",
                 vencimPH: ext.vencimPH, estadoExtintor: ext.estadoExtintor,
                 agenteExtintor: ext.agenteExtintor, peso: ext.peso,
                 unidadPeso: (ext.unidadPeso as "KG" | "LB" | "LT" | "GAL") || "KG",
@@ -157,6 +171,7 @@ export function useExtintorForm(
         lastSavedExtintor,
         clearLastSavedExtintor,
         handleRealizadoPH,
+        handleMesRealizadoPH,
         handleExtintorSave,
         handleEdit,
         openCrearExtintor,

@@ -8,6 +8,8 @@ export const ESTADOS_SOLO_RECARGA = ["Nuevo - Venta"]
 
 export const ESTADOS_SIN_SERVICIO_EXTRA = ["De Baja", "Garantía"];
 
+export const ESTADOS_SIN_COMPONENTES = ["Nuevo - Venta"];
+
 export const ESTADOS_REQUIEREN_DATOS_PH = ["Aprobado", "Nuevo - Venta", "Garantía"];
 
 export const PESOS_KG = ["1", "2", "4", "6", "9", "12", "25", "50", "75", "100"] as const;

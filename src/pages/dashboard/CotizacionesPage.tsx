@@ -10,6 +10,10 @@ const UNIDADES_MEDIDA = ["UND", "KG", "LT", "GLN"];
 const A4_WIDTH_PX = 210 * 3.7795275591;
 const A4_HEIGHT_PX = 297 * 3.7795275591;
 
+const fieldCls = "w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600";
+const labelCls = "text-[10px] font-bold text-zinc-500 uppercase tracking-wide";
+const sectionLabelCls = "text-[10px] font-bold text-zinc-600 uppercase tracking-widest";
+
 const anioActual = () => String(new Date().getFullYear());
 
 const nuevaCotizacion = (): Cotizacion => ({
@@ -17,9 +21,16 @@ const nuevaCotizacion = (): Cotizacion => ({
   numero: "",
   fecha: `${anioActual()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
   cliente: "",
+  tipoDestinatario: "empresa",
   ruc: "",
+  tipoDocumento: "ruc",
   direccion: "",
+  sede: "",
+  guia: "",
   atencion: "",
+  observacionesMes: "",
+  formaPago: "contado",
+  diasCredito: "30",
   items: [],
 });
 
@@ -63,7 +74,11 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
   const inventarioFiltrado = useMemo(() => {
     const q = buscarItem.trim().toLowerCase();
     if (!q || !cotizacion) return [];
-    return inventario.filter((i) => i.nombre.toLowerCase().includes(q) || i.codigo.toLowerCase().includes(q)).slice(0, 8);
+    const codigosUsados = new Set(cotizacion.items.map((it) => it.codigo));
+    return inventario
+      .filter((i) => !codigosUsados.has(i.codigo))
+      .filter((i) => i.nombre.toLowerCase().includes(q) || i.codigo.toLowerCase().includes(q))
+      .slice(0, 8);
   }, [inventario, buscarItem, cotizacion]);
 
   const mut = (fn: (p: Cotizacion) => Cotizacion) => {
@@ -78,6 +93,10 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
   const setMes = (m: string) => setF("fecha", `${anioActual()}-${m.padStart(2, "0")}-${diaFecha || "01"}`);
 
   const agregarItem = (inv: (typeof inventario)[number]) => {
+    if (cotizacion?.items.some((it) => it.codigo === inv.codigo)) {
+      setBuscarItem("");
+      return;
+    }
     const item: CotizacionItem = {
       codigo: inv.codigo,
       descripcion: inv.nombre,
@@ -98,9 +117,13 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
     mut((p) => ({ ...p, items: p.items.filter((_, i) => i !== index) }));
   };
 
-  const rucValido = /^\d{11}$/.test(cotizacion?.ruc || "");
+  const tipoDocumento = cotizacion?.tipoDocumento || "ruc";
+  const largoEsperado = tipoDocumento === "dni" ? 8 : 11;
+  const documentoValido = !cotizacion?.ruc || cotizacion.ruc.length === largoEsperado;
   const itemsInvalidos = (cotizacion?.items || []).some((it) => !it.cantidad || it.cantidad < 1 || !it.precioUnit || it.precioUnit <= 0);
-  const puedeGuardar = !!cotizacion && !saving && !!cotizacion.cliente && rucValido && cotizacion.items.length > 0 && !itemsInvalidos;
+  const puedeGuardar = !!cotizacion && !saving && !!cotizacion.cliente && documentoValido && cotizacion.items.length > 0 && !itemsInvalidos;
+  const totalEstimado = (cotizacion?.items || []).reduce((s, it) => s + (it.cantidad || 0) * (it.precioUnit || 0), 0);
+  const esCredito = cotizacion?.formaPago === "credito";
 
   const confirmarSalidaSinGuardar = () => !dirty || confirm("Tienes cambios sin guardar. ¿Deseas continuar sin guardar?");
 
@@ -152,10 +175,6 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
     setTab("crear");
   };
 
-  const handleArchivar = (id: string) => {
-    archivar(id);
-  };
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
@@ -190,7 +209,7 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
                       <p className="text-lg font-black text-white">N° {c.numero}</p>
                       <p className="text-sm text-zinc-300 truncate">{c.cliente}</p>
                     </div>
-                    <button onClick={() => handleArchivar(c.id)} className="w-7 h-7 rounded-lg bg-red-950/30 hover:bg-red-900/40 text-red-400 flex items-center justify-center shrink-0" title="Archivar">🗄️</button>
+                    <button onClick={() => archivar(c.id)} className="w-7 h-7 rounded-lg bg-red-950/30 hover:bg-red-900/40 text-red-400 flex items-center justify-center shrink-0" title="Archivar">🗄️</button>
                   </div>
                   <p className="text-xs text-zinc-500">{c.fecha ? c.fecha.split("-").reverse().join("/") : ""} · {c.items.length} ítem{c.items.length === 1 ? "" : "s"}</p>
                   <button onClick={() => handleCargar(c)} className="mt-1 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 transition-all">Ver / Editar</button>
@@ -202,48 +221,128 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <div className="flex flex-col gap-5">
-            <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 flex flex-col gap-4">
+            <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 flex flex-col gap-5">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-zinc-500 uppercase">Datos del Cliente</p>
+                <p className={labelCls}>Datos del Cliente</p>
                 <span className="text-sm font-black text-red-400">N° {cotizacion.numero || "..."}</span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input value={cotizacion.cliente} onChange={(e) => setF("cliente", e.target.value)} placeholder="Cliente / Empresa" className="col-span-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
-                <div className="col-span-2 flex flex-col gap-1">
+
+              <div className="flex flex-col gap-2">
+                <p className={sectionLabelCls}>Destinatario</p>
+                <div className="grid grid-cols-[130px_1fr] gap-2">
+                  <select value={cotizacion.tipoDestinatario || "empresa"} onChange={(e) => setF("tipoDestinatario", e.target.value)} className={fieldCls}>
+                    <option value="empresa">Empresa</option>
+                    <option value="persona">Persona</option>
+                  </select>
+                  <input value={cotizacion.cliente} onChange={(e) => setF("cliente", e.target.value)} placeholder={cotizacion.tipoDestinatario === "persona" ? "Nombre completo" : "Nombre de la empresa"} className={fieldCls} />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className={sectionLabelCls}>Documento (opcional)</p>
+                <div className="grid grid-cols-[100px_1fr] gap-2">
+                  <select
+                    value={tipoDocumento}
+                    onChange={(e) => mut((p) => ({ ...p, tipoDocumento: e.target.value as "ruc" | "dni", ruc: "" }))}
+                    className={fieldCls}
+                  >
+                    <option value="ruc">RUC</option>
+                    <option value="dni">DNI</option>
+                  </select>
                   <input
                     value={cotizacion.ruc}
-                    onChange={(e) => { if (/^\d{0,11}$/.test(e.target.value)) setF("ruc", e.target.value); }}
-                    placeholder="RUC (11 dígitos)"
+                    onChange={(e) => setF("ruc", e.target.value.replace(/\D/g, "").slice(0, largoEsperado))}
+                    placeholder={`${largoEsperado} dígitos`}
                     inputMode="numeric"
-                    className={`bg-zinc-950 border rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600 ${cotizacion.ruc && !rucValido ? "border-amber-600" : "border-zinc-800"}`}
+                    className={`${fieldCls} ${cotizacion.ruc && !documentoValido ? "border-amber-600" : ""}`}
                   />
-                  {cotizacion.ruc && !rucValido && <p className="text-[11px] font-bold text-amber-500">⚠️ El RUC debe tener 11 dígitos</p>}
                 </div>
-                <div className="col-span-2 grid grid-cols-3 gap-2">
+                {cotizacion.ruc && !documentoValido && <p className="text-[11px] font-bold text-amber-500">⚠️ El {tipoDocumento === "dni" ? "DNI" : "RUC"} debe tener {largoEsperado} dígitos</p>}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className={sectionLabelCls}>Fecha de emisión</p>
+                <div className="grid grid-cols-3 gap-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Día</label>
-                    <input type="number" min={1} max={31} value={diaFecha ? parseInt(diaFecha) : ""} onChange={(e) => setDia(String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))))} className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
+                    <label className={labelCls}>Día</label>
+                    <input type="number" min={1} max={31} value={diaFecha ? parseInt(diaFecha) : ""} onChange={(e) => setDia(String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))))} className={fieldCls} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Mes</label>
-                    <select value={mesFecha ? String(parseInt(mesFecha)) : ""} onChange={(e) => setMes(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600">
+                    <label className={labelCls}>Mes</label>
+                    <select value={mesFecha ? String(parseInt(mesFecha)) : ""} onChange={(e) => setMes(e.target.value)} className={fieldCls}>
                       {MESES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Año</label>
-                    <input value={anioActual()} disabled className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-500 cursor-not-allowed" />
+                    <label className={labelCls}>Año</label>
+                    <input value={anioActual()} disabled className={`${fieldCls} bg-zinc-900 text-zinc-500 cursor-not-allowed`} />
                   </div>
                 </div>
-                <input value={cotizacion.direccion} onChange={(e) => setF("direccion", e.target.value)} placeholder="Dirección" className="col-span-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
-                <input value={cotizacion.atencion} onChange={(e) => setF("atencion", e.target.value)} placeholder="Atención (opcional)" className="col-span-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
+              </div>
+
+              <div className="h-px bg-zinc-800/60" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 flex flex-col gap-1">
+                  <label className={labelCls}>Dirección</label>
+                  <input value={cotizacion.direccion} onChange={(e) => setF("direccion", e.target.value)} placeholder="Dirección (opcional)" className={fieldCls} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className={labelCls}>Sede</label>
+                  <input value={cotizacion.sede || ""} onChange={(e) => setF("sede", e.target.value)} placeholder="Opcional" className={fieldCls} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className={labelCls}>Guía</label>
+                  <input value={cotizacion.guia || ""} onChange={(e) => setF("guia", e.target.value)} placeholder="Opcional" className={fieldCls} />
+                </div>
+                <div className="col-span-2 flex flex-col gap-1">
+                  <label className={labelCls}>Atención</label>
+                  <input value={cotizacion.atencion} onChange={(e) => setF("atencion", e.target.value)} placeholder="Opcional" className={fieldCls} />
+                </div>
+              </div>
+
+              <div className="h-px bg-zinc-800/60" />
+
+              <div className="flex flex-col gap-2">
+                <p className={sectionLabelCls}>Condiciones comerciales</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className={labelCls}>Forma de pago</label>
+                    <select value={cotizacion.formaPago || "contado"} onChange={(e) => setF("formaPago", e.target.value)} className={fieldCls}>
+                      <option value="contado">Contado</option>
+                      <option value="credito">Crédito</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className={labelCls}>Días de crédito</label>
+                    {esCredito ? (
+                      <input
+                        type="number"
+                        min={1}
+                        value={cotizacion.diasCredito || ""}
+                        onChange={(e) => setF("diasCredito", e.target.value.replace(/\D/g, ""))}
+                        placeholder="30"
+                        className={fieldCls}
+                      />
+                    ) : (
+                      <div className={`${fieldCls} bg-zinc-900/50 text-zinc-600 text-center cursor-not-allowed`}>—</div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 mt-1">
+                  <label className={labelCls}>Observaciones (mes, opcional)</label>
+                  <select value={cotizacion.observacionesMes || ""} onChange={(e) => setF("observacionesMes", e.target.value)} className={fieldCls}>
+                    <option value="">Sin observaciones</option>
+                    {MESES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 flex flex-col gap-4">
-              <p className="text-xs font-bold text-zinc-500 uppercase">Ítems (desde Inventario)</p>
+              <p className={labelCls}>Ítems (desde Inventario)</p>
               <div className="relative">
-                <input value={buscarItem} onChange={(e) => setBuscarItem(e.target.value)} placeholder="Buscar por código o nombre..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
+                <input value={buscarItem} onChange={(e) => setBuscarItem(e.target.value)} placeholder="Buscar por código o nombre..." className={fieldCls} />
                 {inventarioFiltrado.length > 0 && (
                   <div className="absolute z-10 mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
                     {inventarioFiltrado.map((inv) => (
@@ -266,40 +365,57 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
                 ) : (
                   cotizacion.items.map((it, i) => {
                     const sinPrecio = !it.precioUnit || it.precioUnit <= 0;
+                    const subtotalItem = (it.cantidad || 0) * (it.precioUnit || 0);
                     return (
-                      <div key={i} className="p-3 rounded-xl bg-zinc-950/40 border border-zinc-800/60 flex flex-col gap-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-bold text-zinc-200 truncate">{it.descripcion}</p>
-                          <button onClick={() => quitarItem(i)} className="text-red-400 hover:text-red-300 text-xs font-bold shrink-0">Quitar</button>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase">Detalle adicional (opcional)</label>
-                          <input value={it.detalle} onChange={(e) => actualizarItem(i, { detalle: e.target.value })} placeholder="Ej: incluye soporte de pared" className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600" />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">U.M.</label>
-                            <select value={it.um} onChange={(e) => actualizarItem(i, { um: e.target.value })} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600">
-                              {UNIDADES_MEDIDA.map((u) => <option key={u} value={u}>{u}</option>)}
-                            </select>
+                      <div key={i} className="rounded-xl border border-zinc-800/60 bg-zinc-950/40 overflow-hidden">
+                        <div className="flex items-start justify-between gap-3 px-4 py-3 bg-zinc-900/40 border-b border-zinc-800/40">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-mono text-zinc-500">{it.codigo}</p>
+                            <p className="text-sm font-bold text-zinc-100 truncate">{it.descripcion}</p>
                           </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">Cantidad *</label>
-                            <input type="number" min={1} value={it.cantidad} onChange={(e) => actualizarItem(i, { cantidad: parseInt(e.target.value) || 0 })} className={`bg-zinc-950 border rounded-lg px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600 ${!it.cantidad || it.cantidad < 1 ? "border-amber-600" : "border-zinc-800"}`} />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">P. Unitario *</label>
-                            <input type="number" min={0} step="0.01" value={it.precioUnit} onChange={(e) => actualizarItem(i, { precioUnit: parseFloat(e.target.value) || 0 })} className={`bg-zinc-950 border rounded-lg px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600 ${sinPrecio ? "border-amber-600" : "border-zinc-800"}`} />
-                          </div>
+                          <button onClick={() => quitarItem(i)} className="w-7 h-7 shrink-0 rounded-lg bg-red-950/30 hover:bg-red-900/40 text-red-400 flex items-center justify-center transition-colors" title="Quitar ítem">✕</button>
                         </div>
-                        {sinPrecio && (
-                          <p className="text-[11px] font-bold text-amber-500">⚠️ Este producto no tiene precio en Inventario. Ingresa el precio unitario manualmente.</p>
-                        )}
+                        <div className="p-4 flex flex-col gap-3">
+                          <div className="flex flex-col gap-1">
+                            <label className={labelCls}>Detalle adicional (opcional)</label>
+                            <input value={it.detalle} onChange={(e) => actualizarItem(i, { detalle: e.target.value })} placeholder="Ej: incluye soporte de pared" className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600" />
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            <div className="flex flex-col gap-1">
+                              <label className={labelCls}>U.M.</label>
+                              <select value={it.um} onChange={(e) => actualizarItem(i, { um: e.target.value })} className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600">
+                                {UNIDADES_MEDIDA.map((u) => <option key={u} value={u}>{u}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className={labelCls}>Cantidad</label>
+                              <input type="number" min={1} value={it.cantidad} onChange={(e) => actualizarItem(i, { cantidad: parseInt(e.target.value) || 0 })} className={`bg-zinc-950 border rounded-lg px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600 ${!it.cantidad || it.cantidad < 1 ? "border-amber-600" : "border-zinc-800"}`} />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className={labelCls}>P. Unit.</label>
+                              <input type="number" min={0} step="0.01" value={it.precioUnit} onChange={(e) => actualizarItem(i, { precioUnit: parseFloat(e.target.value) || 0 })} className={`bg-zinc-950 border rounded-lg px-2 py-2 text-xs text-zinc-300 focus:outline-none focus:border-red-600 ${sinPrecio ? "border-amber-600" : "border-zinc-800"}`} />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className={labelCls}>Subtotal</label>
+                              <div className="px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-bold text-emerald-400 text-right">S/{subtotalItem.toFixed(2)}</div>
+                            </div>
+                          </div>
+                          {sinPrecio && (
+                            <p className="text-[11px] font-bold text-amber-500">⚠️ Este producto no tiene precio en Inventario. Ingresa el precio unitario manualmente.</p>
+                          )}
+                        </div>
                       </div>
                     );
                   })
                 )}
               </div>
+
+              {cotizacion.items.length > 0 && (
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-800/60">
+                  <span className={labelCls}>Total estimado (incl. IGV)</span>
+                  <span className="text-lg font-black text-white">S/{totalEstimado.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
@@ -314,7 +430,7 @@ export default function CotizacionesPage({ socket }: { socket: Socket | null }) 
 
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between px-1">
-              <p className="text-xs font-bold text-zinc-500 uppercase">Previsualización</p>
+              <p className={labelCls}>Previsualización</p>
               <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 rounded-lg p-1">
                 <button onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} className="w-7 h-7 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-sm font-bold flex items-center justify-center">−</button>
                 <span className="text-xs font-bold text-zinc-400 w-12 text-center">{Math.round(zoom * 100)}%</span>
