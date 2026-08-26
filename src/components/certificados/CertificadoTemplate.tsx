@@ -2,22 +2,38 @@ import { MESES } from "../../constants";
 
 export type TipoCertificado = "garantia" | "ph";
 export type TipoIdentificacion = "ruc" | "dni" | "placa";
+export type Denominacion = "portatiles_rodantes" | "portatiles" | "rodantes" | "extintores";
 
 export interface CertificadoItem {
+  uid: string;
   item: string;
   serie: string;
+  nInterno: string;
+  marca: string;
   tipo: string;
   capacidad: string;
+  tipoServicio: string;
   estanqueidad: string;
   vencimientoRecarga: string;
   anioFabricacion: string;
+  realizadoPH: string;
   vencimientoPH: string;
   presionPSI: string;
+  rating: string;
   condicion: string;
+}
+
+export interface CertificadoColumnas {
+  item: boolean;
+  nInterno: boolean;
+  marca: boolean;
+  tipoServicio: boolean;
+  rating: boolean;
 }
 
 export interface CertificadoDatos {
   tipoCertificado: TipoCertificado;
+  denominacion: Denominacion;
   tipoIdentificacion: TipoIdentificacion;
   nombre: string;
   numeroIdentificacion: string;
@@ -28,23 +44,55 @@ export interface CertificadoDatos {
   anioFecha: string;
   agentesTexto: string;
   items: CertificadoItem[];
+  columnas: CertificadoColumnas;
 }
 
 interface Props {
   datos: CertificadoDatos;
 }
 
-const TITULOS: Record<TipoCertificado, string> = {
-  garantia:
-    "CERTIFICADO DE GARANTIA Y OPERATIVIDAD DE EXTINTORES PORTATILES DE LUCHA CONTRA INCENDIOS Y VIGENCIA DE PRUEBA HIDROSTATICA",
-  ph: "CERTIFICADO DE PRUEBA HIDROSTATICA DE EXTINTORES PORTATILES",
+const DENOMINACION_TITULO: Record<Denominacion, string> = {
+  portatiles_rodantes: "EXTINTORES PORTATILES Y RODANTES",
+  portatiles: "EXTINTORES PORTATILES",
+  rodantes: "EXTINTORES RODANTES",
+  extintores: "EXTINTORES",
+};
+
+const DENOMINACION_PARRAFO: Record<Denominacion, string> = {
+  portatiles_rodantes: "extintores portátiles y rodantes",
+  portatiles: "extintores portátiles",
+  rodantes: "extintores rodantes",
+  extintores: "extintores",
+};
+
+const DENOMINACION_PARRAFO_SINGULAR: Record<Denominacion, string> = {
+  portatiles_rodantes: "extintor portátil o rodante",
+  portatiles: "extintor portátil",
+  rodantes: "extintor rodante",
+  extintores: "extintor",
+};
+
+const tituloCertificado = (tipo: TipoCertificado, denominacion: Denominacion): string => {
+  const nombreExtintores = DENOMINACION_TITULO[denominacion];
+  return tipo === "ph"
+    ? `CERTIFICADO DE PRUEBA HIDROSTATICA DE ${nombreExtintores}`
+    : `CERTIFICADO DE GARANTIA Y OPERATIVIDAD DE ${nombreExtintores} DE LUCHA CONTRA INCENDIOS Y VIGENCIA DE PRUEBA HIDROSTATICA`;
 };
 
 export default function CertificadoTemplate({ datos }: Props) {
   const esPH = datos.tipoCertificado === "ph";
   const esPlaca = datos.tipoIdentificacion === "placa";
+  const esSingular = datos.items.length === 1;
   const labelIdentificacion = datos.tipoIdentificacion === "ruc" ? "RUC N°" : datos.tipoIdentificacion === "dni" ? "DNI N°" : "Placa N°";
   const mesLabel = MESES.find((m) => m.value === datos.mesFecha)?.label.toLowerCase() || "";
+  const denominacionTexto = esSingular ? DENOMINACION_PARRAFO_SINGULAR[datos.denominacion] : DENOMINACION_PARRAFO[datos.denominacion];
+  const marcaVisible = datos.columnas.marca || esPH;
+  const colSpanVacio = 8
+    + (datos.columnas.item ? 1 : 0)
+    + (datos.columnas.nInterno ? 1 : 0)
+    + (marcaVisible ? 1 : 0)
+    + (datos.columnas.rating ? 1 : 0)
+    + (datos.columnas.tipoServicio ? 1 : 0);
 
   return (
     <div style={{ fontFamily: "Arial, Helvetica, sans-serif" }} className="bg-white text-black">
@@ -87,11 +135,11 @@ export default function CertificadoTemplate({ datos }: Props) {
 
           <section className="flex-1 flex flex-col pl-2">
             <h3 className="text-red-600 font-bold text-center text-[16px] mb-5 leading-tight px-6">
-              {TITULOS[datos.tipoCertificado]}
+              {tituloCertificado(datos.tipoCertificado, datos.denominacion)}
             </h3>
 
             <p className="text-justify mb-5 leading-[1.6]">
-              <span className="font-bold uppercase">{datos.nombre || "—"}</span> con{" "}
+              <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
               <span className="font-bold">
                 {labelIdentificacion} {datos.numeroIdentificacion || "—"}
                 {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
@@ -104,54 +152,64 @@ export default function CertificadoTemplate({ datos }: Props) {
               ,{" "}
               {esPH ? (
                 <>
-                  se ha efectuado la Prueba Hidrostática a los extintores portátiles de {datos.agentesTexto},
-                  utilizando la máquina <span className="font-bold">CAMEX Maquinaria EIRL</span>, modelo{" "}
+                  se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto} de {datos.agentesTexto},
+                  utilizando la máquina <span className="font-bold"> MARCA CAMEX Maquinaria EIRL</span>, modelo{" "}
                   <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
-                  <span className="font-bold">NTP 350.043.1-2011; 833.030 según detalle:</span>
+                  <span className="font-bold">NTP 350.043.1; 833.030 según detalle:</span>
                 </>
               ) : (
                 <>
-                  se ha efectuado la recarga de los extintores portátiles de {datos.agentesTexto}, dicho trabajo se
+                  se ha efectuado la recarga {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
                   ha realizado conforme lo establece la{" "}
                   <span className="font-bold">NTP 350.043.1-2011; 833.030 según detalle:</span>
                 </>
               )}
             </p>
 
-            <table className="w-full border-collapse border border-black text-[12px] mb-6 text-center">
+            <table className="w-full border-collapse border border-black text-[11px] mb-6 text-center">
               <thead className="font-bold">
                 <tr>
-                  <th className="border border-black p-1 w-10">Ítem</th>
+                  {datos.columnas.item && <th className="border border-black p-1 w-10">Ítem</th>}
                   <th className="border border-black p-1 w-12.5">Serie</th>
+                  {datos.columnas.nInterno && <th className="border border-black p-1 leading-tight">N°<br />Interno</th>}
+                  {marcaVisible && <th className="border border-black p-1">Marca</th>}
                   <th className="border border-black p-1 leading-tight">Tipo<br />Extintor</th>
                   <th className="border border-black p-1">Cap.</th>
-                  <th className="border border-black p-1 leading-tight">Prueba de<br />Estanqueidad<br />y Fuga</th>
-                  <th className="border border-black p-1 leading-tight">Vencimiento<br />Recarga</th>
+                  {datos.columnas.rating && <th className="border border-black p-1">Rating</th>}
+                  {!esPH && <th className="border border-black p-1 leading-tight">Prueba de<br />Estanqueidad<br />y Fuga</th>}
+                  {!esPH && <th className="border border-black p-1 leading-tight">Vencimiento<br />Recarga</th>}
                   <th className="border border-black p-1 leading-tight">Año de<br />Fabr.</th>
+                  {esPH && <th className="border border-black p-1 leading-tight">Realizado<br />P.H</th>}
                   <th className="border border-black p-1 leading-tight">Vencimiento<br />Prueba<br />Hidrostática</th>
                   {esPH && <th className="border border-black p-1 leading-tight">Presión<br />PSI</th>}
+                  {datos.columnas.tipoServicio && <th className="border border-black p-1 leading-tight">Tipo de<br />Servicio</th>}
                   <th className="border border-black p-1 leading-tight">Condición<br />Extintor</th>
                 </tr>
               </thead>
               <tbody>
                 {datos.items.length === 0 ? (
                   <tr>
-                    <td colSpan={esPH ? 10 : 9} className="border border-black p-3 text-gray-500">
+                    <td colSpan={colSpanVacio} className="border border-black p-3 text-gray-500">
                       {esPH ? "Ningún extintor de este servicio tiene Prueba Hidrostática registrada" : "Este servicio no tiene extintores asociados"}
                     </td>
                   </tr>
                 ) : (
                   datos.items.map((it, i) => (
                     <tr key={i}>
-                      <td className="border border-black p-1 py-2">{it.item}</td>
+                      {datos.columnas.item && <td className="border border-black p-1 py-2">{it.item}</td>}
                       <td className="border border-black p-1 py-2">{it.serie}</td>
+                      {datos.columnas.nInterno && <td className="border border-black p-1 py-2">{it.nInterno}</td>}
+                      {marcaVisible && <td className="border border-black p-1 py-2">{it.marca}</td>}
                       <td className="border border-black p-1 py-2">{it.tipo}</td>
                       <td className="border border-black p-1 py-2">{it.capacidad}</td>
-                      <td className="border border-black p-1 py-2">{it.estanqueidad}</td>
-                      <td className="border border-black p-1 py-2">{it.vencimientoRecarga}</td>
+                      {datos.columnas.rating && <td className="border border-black p-1 py-2">{it.rating || "—"}</td>}
+                      {!esPH && <td className="border border-black p-1 py-2">{it.estanqueidad}</td>}
+                      {!esPH && <td className="border border-black p-1 py-2">{it.vencimientoRecarga}</td>}
                       <td className="border border-black p-1 py-2">{it.anioFabricacion}</td>
+                      {esPH && <td className="border border-black p-1 py-2">{it.realizadoPH}</td>}
                       <td className="border border-black p-1 py-2">{it.vencimientoPH}</td>
                       {esPH && <td className="border border-black p-1 py-2">{it.presionPSI || "—"}</td>}
+                      {datos.columnas.tipoServicio && <td className="border border-black p-1 py-2">{it.tipoServicio}</td>}
                       <td className="border border-black p-1 py-2">{it.condicion}</td>
                     </tr>
                   ))
@@ -160,7 +218,7 @@ export default function CertificadoTemplate({ datos }: Props) {
             </table>
 
             <p className="text-justify mb-5 leading-[1.6]">
-              <span className="font-bold">LOS EXTINTORES ENTREGADOS EN CALIDAD DE APROBADOS</span>, cualquier evento
+              <span className="font-bold">{esSingular ? "EL EXTINTOR ENTREGADO EN CALIDAD DE APROBADO" : "LOS EXTINTORES ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
               o falla posterior por la mala manipulación, el mal uso (golpes, abolladuras, exposición al calor,
               soldaduras y/o modificaciones, intemperie, oxido, corrosión, etc.) o uso distinto para el que está
               destinado es de responsabilidad del cliente, después de haber sido entregado, 1 año de garantía del
@@ -176,8 +234,7 @@ export default function CertificadoTemplate({ datos }: Props) {
 
             <div className="flex justify-center w-full mt-6">
               <div className="relative w-80 flex flex-col items-center">
-                <img src="/images/firma.png" alt="Firma" className="w-72 h-44 object-contain -mb-3" />
-                <div className="w-full border-t-[1.5px] border-black border-dashed"></div>
+                <img src="/images/firma.jpg" alt="Firma" className="w-72 h-44 object-contain -mb-3" />
               </div>
             </div>
           </section>

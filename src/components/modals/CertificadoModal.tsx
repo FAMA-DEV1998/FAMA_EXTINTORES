@@ -1,21 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CertificadoTemplate from "../certificados/CertificadoTemplate";
-import type { CertificadoDatos, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
-import { FAMILIA_FILTRO_LABEL, PQS_TIPO_LABEL, type FamiliaAgente, type PqsVariante } from "../../hooks/dashboard/useCertificado";
+import type { CertificadoDatos, Denominacion, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
+import { PQS_TIPO_LABEL, type PqsVariante } from "../../hooks/dashboard/useCertificado";
 import { MESES } from "../../constants";
 import { exportarElementoPdf } from "../../utils/exportarPdf";
+import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   datos: CertificadoDatos;
   onChange: (cambios: Partial<CertificadoDatos>) => void;
-  filtroAgente: "todos" | FamiliaAgente;
-  onCambiarFiltroAgente: (filtro: "todos" | FamiliaAgente) => void;
+  filtroAgente: string;
+  onCambiarFiltroAgente: (filtro: string) => void;
   onCambiarTipoCertificado: (tipo: TipoCertificado) => void;
   onCambiarTipoIdentificacion: (tipo: TipoIdentificacion) => void;
-  familiasDisponibles: FamiliaAgente[];
+  onCambiarDenominacion: (denominacion: Denominacion) => void;
+  onActualizarRating: (uid: string, valor: string) => void;
+  onCambiarColumna: (columna: "item" | "nInterno" | "marca" | "tipoServicio" | "rating", valor: boolean) => void;
+  familiasDisponibles: { key: string; label: string }[];
   hayPqs: boolean;
   pqsVariante: PqsVariante;
   onCambiarPqsVariante: (variante: PqsVariante) => void;
@@ -26,17 +30,56 @@ interface Props {
 const A4_WIDTH_PX = 210 * 3.7795275591;
 const A4_HEIGHT_PX = 297 * 3.7795275591;
 
-const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600";
-const labelCls = "text-xs font-bold text-zinc-400 uppercase";
-
 const formatPlaca = (raw: string) => {
   const limpio = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
   return limpio.length <= 3 ? limpio : `${limpio.slice(0, 3)}-${limpio.slice(3)}`;
 };
 
+const COLUMNAS_OPCIONALES: { key: "item" | "nInterno" | "marca" | "rating" | "tipoServicio"; label: string; ayuda: string }[] = [
+  { key: "item", label: "Ítem", ayuda: "Numeración de fila" },
+  { key: "nInterno", label: "N° Interno", ayuda: "Va después de Serie" },
+  { key: "marca", label: "Marca / Procedencia", ayuda: "Va después de N° Interno" },
+  { key: "rating", label: "Rating", ayuda: "Va después de Capacidad" },
+  { key: "tipoServicio", label: "Tipo de Servicio", ayuda: "Va antes de Condición" },
+];
+
+function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
+  return (
+    <div className="grid gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`px-2 py-2 rounded-lg text-[11px] font-bold leading-tight transition-all ${value === opt.value ? "bg-red-700 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"}`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ColumnaChip({ activa, label, ayuda, onToggle }: { activa: boolean; label: string; ayuda: string; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={ayuda}
+      className={`flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-bold border transition-all ${activa ? "bg-red-700/90 border-red-600 text-white shadow-sm" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"}`}
+    >
+      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] shrink-0 ${activa ? "bg-white text-red-700" : "border border-zinc-600"}`}>
+        {activa ? "✓" : ""}
+      </span>
+      {label}
+    </button>
+  );
+}
+
 export default function CertificadoModal({
   isOpen, onClose, datos, onChange, filtroAgente, onCambiarFiltroAgente,
-  onCambiarTipoCertificado, onCambiarTipoIdentificacion, familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante, nombreArchivo, soloImprimir,
+  onCambiarTipoCertificado, onCambiarTipoIdentificacion, onCambiarDenominacion, onActualizarRating, onCambiarColumna,
+  familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante, nombreArchivo, soloImprimir,
 }: Props) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [baseScale, setBaseScale] = useState(0.4);
@@ -119,113 +162,160 @@ export default function CertificadoModal({
         </div>
 
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[440px_1fr]">
-          <div className={`${vistaMovil === "datos" ? "flex" : "hidden"} lg:flex overflow-y-auto p-6 flex-col gap-5 border-b lg:border-b-0 lg:border-r border-zinc-800/60`}>
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Tipo de certificado</label>
-              <select value={datos.tipoCertificado} onChange={(e) => onCambiarTipoCertificado(e.target.value as TipoCertificado)} className={inputCls}>
-                <option value="garantia">Garantía y Operatividad + Vigencia PH</option>
-                <option value="ph">Prueba Hidrostática de Extintores Portátiles</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Extintores a incluir</label>
-              <select value={filtroAgente} onChange={(e) => onCambiarFiltroAgente(e.target.value as "todos" | FamiliaAgente)} className={inputCls}>
-                <option value="todos">Todos los extintores</option>
-                {familiasDisponibles.map((f) => (
-                  <option key={f} value={f}>Solo {FAMILIA_FILTRO_LABEL[f]}</option>
-                ))}
-              </select>
-            </div>
-
-            {hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Tipo de PQS</label>
-                <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={inputCls}>
-                  <option value="75">{PQS_TIPO_LABEL["75"]}</option>
-                  <option value="90">{PQS_TIPO_LABEL["90"]}</option>
-                </select>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Nombre / Razón Social</label>
-              <input value={datos.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className={inputCls} />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Tipo de documento</label>
-              <select value={datos.tipoIdentificacion} onChange={(e) => onCambiarTipoIdentificacion(e.target.value as TipoIdentificacion)} className={inputCls}>
-                <option value="ruc">RUC</option>
-                <option value="dni">DNI</option>
-                <option value="placa">Placa vehicular</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Número de {labelNumero}</label>
-              <input
-                value={datos.numeroIdentificacion}
-                onChange={(e) => handleNumeroChange(e.target.value)}
-                placeholder={esPlaca ? "A13-54C" : esRuc ? "11 dígitos" : esDni ? "8 dígitos" : ""}
-                inputMode={esPlaca ? "text" : "numeric"}
-                className={`${inputCls} ${numeroInvalido ? "border-amber-600" : ""}`}
-              />
-              {numeroInvalido && (
-                <p className="text-[11px] font-bold text-amber-500">
-                  ⚠️ {esRuc ? "El RUC debe tener 11 dígitos" : esDni ? "El DNI debe tener 8 dígitos" : "La placa debe tener 6 caracteres (ej. A13-54C)"}
-                </p>
-              )}
-            </div>
-
-            {esPlaca && (
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>DNI (opcional)</label>
-                <input
-                  value={datos.dniAdicional}
-                  onChange={(e) => onChange({ dniAdicional: e.target.value.replace(/\D/g, "").slice(0, 8) })}
-                  inputMode="numeric"
-                  className={`${inputCls} ${dniAdicionalInvalido ? "border-amber-600" : ""}`}
-                />
-                {dniAdicionalInvalido && <p className="text-[11px] font-bold text-amber-500">⚠️ El DNI debe tener 8 dígitos</p>}
-              </div>
-            )}
-
-            {!esPlaca && (
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Ubicación</label>
-                <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={inputCls} />
-              </div>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Fecha del certificado</label>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Día</label>
-                  <input type="number" min={1} max={31} value={datos.diaFecha} onChange={(e) => onChange({ diaFecha: String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))) })} className={inputCls} />
+          <div className={`${vistaMovil === "datos" ? "flex" : "hidden"} lg:flex overflow-y-auto p-6 flex-col gap-6 border-b lg:border-b-0 lg:border-r border-zinc-800/60`}>
+            <ModalSection title="📄 Tipo de Certificado">
+              <div className="flex flex-col gap-3">
+                <ModalField label="Tipo">
+                  <Segmented
+                    value={datos.tipoCertificado}
+                    onChange={(v) => onCambiarTipoCertificado(v as TipoCertificado)}
+                    options={[
+                      { value: "garantia", label: "Garantía y Operatividad" },
+                      { value: "ph", label: "Prueba Hidrostática" },
+                    ]}
+                  />
+                </ModalField>
+                <ModalField label="Denominación">
+                  <Segmented
+                    value={datos.denominacion}
+                    onChange={(v) => onCambiarDenominacion(v as Denominacion)}
+                    options={[
+                      { value: "portatiles_rodantes", label: "Portátiles y Rodantes" },
+                      { value: "portatiles", label: "Portátiles" },
+                      { value: "rodantes", label: "Rodantes" },
+                      { value: "extintores", label: "Extintores" },
+                    ]}
+                  />
+                </ModalField>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <ModalField label="Extintores a incluir">
+                    <select value={filtroAgente} onChange={(e) => onCambiarFiltroAgente(e.target.value)} className={modalInput}>
+                      <option value="todos">Todos los extintores</option>
+                      {familiasDisponibles.map((f) => (
+                        <option key={f.key} value={f.key}>Solo {f.label}</option>
+                      ))}
+                    </select>
+                  </ModalField>
+                  {hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
+                    <ModalField label="Tipo de PQS">
+                      <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={modalInput}>
+                        <option value="75">{PQS_TIPO_LABEL["75"]}</option>
+                        <option value="90">{PQS_TIPO_LABEL["90"]}</option>
+                      </select>
+                    </ModalField>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Mes</label>
-                  <select value={datos.mesFecha} onChange={(e) => onChange({ mesFecha: e.target.value })} className={inputCls}>
+              </div>
+            </ModalSection>
+
+            <ModalSection title="🏢 Datos del Cliente">
+              <div className="flex flex-col gap-3">
+                <ModalField label="Nombre / Razón Social">
+                  <input value={datos.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className={modalInput} />
+                </ModalField>
+                <ModalField label="Tipo de documento">
+                  <Segmented
+                    value={datos.tipoIdentificacion}
+                    onChange={(v) => onCambiarTipoIdentificacion(v as TipoIdentificacion)}
+                    options={[
+                      { value: "ruc", label: "RUC" },
+                      { value: "dni", label: "DNI" },
+                      { value: "placa", label: "Placa" },
+                    ]}
+                  />
+                </ModalField>
+                <ModalField label={`Número de ${labelNumero}`}>
+                  <input
+                    value={datos.numeroIdentificacion}
+                    onChange={(e) => handleNumeroChange(e.target.value)}
+                    placeholder={esPlaca ? "A13-54C" : esRuc ? "11 dígitos" : esDni ? "8 dígitos" : ""}
+                    inputMode={esPlaca ? "text" : "numeric"}
+                    className={`${modalInput} ${numeroInvalido ? "border-amber-600" : ""}`}
+                  />
+                  {numeroInvalido && (
+                    <p className="text-[11px] font-bold text-amber-500 mt-1">
+                      ⚠️ {esRuc ? "El RUC debe tener 11 dígitos" : esDni ? "El DNI debe tener 8 dígitos" : "La placa debe tener 6 caracteres (ej. A13-54C)"}
+                    </p>
+                  )}
+                </ModalField>
+                {esPlaca && (
+                  <ModalField label="DNI (opcional)">
+                    <input
+                      value={datos.dniAdicional}
+                      onChange={(e) => onChange({ dniAdicional: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+                      inputMode="numeric"
+                      className={`${modalInput} ${dniAdicionalInvalido ? "border-amber-600" : ""}`}
+                    />
+                    {dniAdicionalInvalido && <p className="text-[11px] font-bold text-amber-500 mt-1">⚠️ El DNI debe tener 8 dígitos</p>}
+                  </ModalField>
+                )}
+                {!esPlaca && (
+                  <ModalField label="Ubicación">
+                    <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={modalInput} />
+                  </ModalField>
+                )}
+              </div>
+            </ModalSection>
+
+            <ModalSection title="📅 Fecha del Certificado">
+              <div className="grid grid-cols-3 gap-2">
+                <ModalField label="Día">
+                  <input type="number" min={1} max={31} value={datos.diaFecha} onChange={(e) => onChange({ diaFecha: String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))) })} className={modalInput} />
+                </ModalField>
+                <ModalField label="Mes">
+                  <select value={datos.mesFecha} onChange={(e) => onChange({ mesFecha: e.target.value })} className={modalInput}>
                     {MESES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Año</label>
-                  <input value={datos.anioFecha} disabled className={`${inputCls} opacity-60 cursor-not-allowed`} />
+                </ModalField>
+                <ModalField label="Año">
+                  <input value={datos.anioFecha} disabled className={`${modalInput} opacity-60 cursor-not-allowed`} />
+                </ModalField>
+              </div>
+            </ModalSection>
+
+            <ModalSection title="📊 Columnas de la Tabla">
+              <div className="flex flex-col gap-4">
+                <p className="text-[11px] text-zinc-500 -mt-1">Toca una columna opcional para agregarla o quitarla del certificado</p>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Agregar columnas opcionales</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {COLUMNAS_OPCIONALES.map((c) => (
+                      <ColumnaChip
+                        key={c.key}
+                        label={c.label}
+                        ayuda={c.ayuda}
+                        activa={datos.columnas[c.key]}
+                        onToggle={() => onCambiarColumna(c.key, !datos.columnas[c.key])}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </ModalSection>
 
-            <div className="flex flex-col gap-1.5">
-              <label className={labelCls}>Extintores incluidos</label>
-              <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
-                {datos.items.length === 0 ? "Ningún extintor cumple con el filtro seleccionado" : `${datos.items.length} extintor${datos.items.length === 1 ? "" : "es"} · ${datos.agentesTexto}`}
-              </p>
-            </div>
+            <ModalSection title="🧯 Extintores Incluidos">
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
+                  {datos.items.length === 0 ? "Ningún extintor cumple con el filtro seleccionado" : `${datos.items.length} extintor${datos.items.length === 1 ? "" : "es"} · ${datos.agentesTexto}`}
+                </p>
 
-            <div className="mt-auto flex gap-2">
+                {datos.items.length > 0 && (
+                  <ModalField label="Rating por extintor (manual)">
+                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto bg-zinc-950/50 border border-zinc-800/60 rounded-xl p-3">
+                      {datos.items.map((it) => (
+                        <div key={it.uid} className="flex items-center gap-2">
+                          <span className="text-[11px] text-zinc-400 flex-1 truncate">{it.serie !== "—" ? it.serie : it.item}</span>
+                          <input value={it.rating} onChange={(e) => onActualizarRating(it.uid, e.target.value)} placeholder="Ej: 4A:60B:C" className="w-32 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-red-600" />
+                        </div>
+                      ))}
+                    </div>
+                  </ModalField>
+                )}
+              </div>
+            </ModalSection>
+
+            <div className="mt-auto flex gap-2 pt-1">
               <button onClick={handleImprimir} className="flex-1 px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 transition-all">
                 🖨️ Imprimir
               </button>
