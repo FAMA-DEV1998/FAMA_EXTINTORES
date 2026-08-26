@@ -19,7 +19,7 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
     return () => { socket.off("servicio:list", onList); };
   }, [socket, empresaId, sedeId]);
 
-  const saveServicio = (data: { fechaRetiro: string; fechaEntrega: string; extintorUids: string[]; notas?: string }, onDone?: (ok: boolean, id?: string, error?: string) => void) => {
+  const saveServicio = (data: { fechaRetiro: string; fechaEntrega: string; extintorUids?: string[]; notas?: string }, onDone?: (ok: boolean, id?: string, error?: string) => void) => {
     if (!socket || !empresaId) return;
     setSavingServicio(true);
     socket.emit("servicio:save", { empresaId, sedeId, ...data }, (res: any) => {

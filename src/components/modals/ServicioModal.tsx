@@ -7,7 +7,7 @@ type Props = {
   mes: number; 
   mesLabel: string;
   onClose: () => void;
-  onSave: (data: { fechaRetiro: string; fechaEntrega: string; notas?: string }) => void;
+  onSave: (data: { fechaRetiro: string; fechaEntrega: string; notas?: string,  }) => void;
   saving: boolean;
 };
 
