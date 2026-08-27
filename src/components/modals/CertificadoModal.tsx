@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CertificadoTemplate from "../certificados/CertificadoTemplate";
 import type { CertificadoDatos, Denominacion, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
-import { PQS_TIPO_LABEL, type PqsVariante } from "../../hooks/dashboard/useCertificado";
+import { PQS_TIPO_LABEL, ESTADO_NUEVO_VENTA, type PqsVariante, type AccionTrabajo } from "../../hooks/dashboard/useCertificado";
 import { MESES } from "../../constants";
 import { exportarElementoPdf } from "../../utils/exportarPdf";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
@@ -14,11 +14,15 @@ interface Props {
   onChange: (cambios: Partial<CertificadoDatos>) => void;
   filtroAgente: string;
   onCambiarFiltroAgente: (filtro: string) => void;
+  filtroEstado: string;
+  onCambiarFiltroEstado: (filtro: string) => void;
+  estadosDisponibles: string[];
   onCambiarTipoCertificado: (tipo: TipoCertificado) => void;
   onCambiarTipoIdentificacion: (tipo: TipoIdentificacion) => void;
   onCambiarDenominacion: (denominacion: Denominacion) => void;
   onActualizarRating: (uid: string, valor: string) => void;
   onCambiarColumna: (columna: "item" | "nInterno" | "marca" | "tipoServicio" | "rating", valor: boolean) => void;
+  onCambiarAccionTrabajo: (accion: AccionTrabajo, valor: boolean) => void;
   familiasDisponibles: { key: string; label: string }[];
   hayPqs: boolean;
   pqsVariante: PqsVariante;
@@ -35,12 +39,23 @@ const formatPlaca = (raw: string) => {
   return limpio.length <= 3 ? limpio : `${limpio.slice(0, 3)}-${limpio.slice(3)}`;
 };
 
+const COLUMNAS_FIJAS = [
+  "Serie", "Tipo Extintor", "Cap.", "Prueba de Estanqueidad y Fuga",
+  "Vencimiento Recarga", "Año de Fabr.", "Vencimiento Prueba Hidrostática", "Condición Extintor",
+];
+
 const COLUMNAS_OPCIONALES: { key: "item" | "nInterno" | "marca" | "rating" | "tipoServicio"; label: string; ayuda: string }[] = [
   { key: "item", label: "Ítem", ayuda: "Numeración de fila" },
   { key: "nInterno", label: "N° Interno", ayuda: "Va después de Serie" },
   { key: "marca", label: "Marca / Procedencia", ayuda: "Va después de N° Interno" },
   { key: "rating", label: "Rating", ayuda: "Va después de Capacidad" },
   { key: "tipoServicio", label: "Tipo de Servicio", ayuda: "Va antes de Condición" },
+];
+
+const ACCIONES_TRABAJO: { key: AccionTrabajo; label: string }[] = [
+  { key: "venta", label: "Venta" },
+  { key: "recarga", label: "Recarga" },
+  { key: "mantenimiento", label: "Mantenimiento" },
 ];
 
 function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
@@ -77,8 +92,8 @@ function ColumnaChip({ activa, label, ayuda, onToggle }: { activa: boolean; labe
 }
 
 export default function CertificadoModal({
-  isOpen, onClose, datos, onChange, filtroAgente, onCambiarFiltroAgente,
-  onCambiarTipoCertificado, onCambiarTipoIdentificacion, onCambiarDenominacion, onActualizarRating, onCambiarColumna,
+  isOpen, onClose, datos, onChange, filtroAgente, onCambiarFiltroAgente, filtroEstado, onCambiarFiltroEstado, estadosDisponibles,
+  onCambiarTipoCertificado, onCambiarTipoIdentificacion, onCambiarDenominacion, onActualizarRating, onCambiarColumna, onCambiarAccionTrabajo,
   familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante, nombreArchivo, soloImprimir,
 }: Props) {
   const previewRef = useRef<HTMLDivElement>(null);
@@ -127,13 +142,17 @@ export default function CertificadoModal({
   };
 
   const esPlaca = datos.tipoIdentificacion === "placa";
+  const esPlacaSola = datos.tipoIdentificacion === "placa_sola";
+  const esPlacaTipo = esPlaca || esPlacaSola;
   const esRuc = datos.tipoIdentificacion === "ruc";
   const esDni = datos.tipoIdentificacion === "dni";
   const labelNumero = esRuc ? "RUC" : esDni ? "DNI" : "Placa";
   const numeroInvalido = (esRuc && datos.numeroIdentificacion.length > 0 && datos.numeroIdentificacion.length !== 11)
     || (esDni && datos.numeroIdentificacion.length > 0 && datos.numeroIdentificacion.length !== 8)
-    || (esPlaca && datos.numeroIdentificacion.replace("-", "").length > 0 && datos.numeroIdentificacion.replace("-", "").length !== 6);
-  const dniAdicionalInvalido = esPlaca && datos.dniAdicional.length > 0 && datos.dniAdicional.length !== 8;
+    || (esPlacaTipo && datos.numeroIdentificacion.replace("-", "").length > 0 && datos.numeroIdentificacion.replace("-", "").length !== 6);
+  const dniAdicionalInvalido = esPlacaTipo && datos.dniAdicional.length > 0 && datos.dniAdicional.length !== 8;
+  const esPH = datos.tipoCertificado === "ph";
+  const accionesBloqueadas = filtroEstado === ESTADO_NUEVO_VENTA;
 
   const handleNumeroChange = (valor: string) => {
     if (esRuc) return onChange({ numeroIdentificacion: valor.replace(/\D/g, "").slice(0, 11) });
@@ -196,6 +215,14 @@ export default function CertificadoModal({
                       ))}
                     </select>
                   </ModalField>
+                  <ModalField label="Estado a incluir">
+                    <select value={filtroEstado} onChange={(e) => onCambiarFiltroEstado(e.target.value)} className={modalInput}>
+                      <option value="todos">Todos los estados</option>
+                      {estadosDisponibles.map((e) => (
+                        <option key={e} value={e}>Solo {e}</option>
+                      ))}
+                    </select>
+                  </ModalField>
                   {hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
                     <ModalField label="Tipo de PQS">
                       <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={modalInput}>
@@ -210,7 +237,7 @@ export default function CertificadoModal({
 
             <ModalSection title="🏢 Datos del Cliente">
               <div className="flex flex-col gap-3">
-                <ModalField label="Nombre / Razón Social">
+                <ModalField label={`Nombre / Razón Social${esPlacaSola ? " (opcional)" : ""}`}>
                   <input value={datos.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className={modalInput} />
                 </ModalField>
                 <ModalField label="Tipo de documento">
@@ -221,6 +248,7 @@ export default function CertificadoModal({
                       { value: "ruc", label: "RUC" },
                       { value: "dni", label: "DNI" },
                       { value: "placa", label: "Placa" },
+                      { value: "placa_sola", label: "Placa Sola" },
                     ]}
                   />
                 </ModalField>
@@ -228,8 +256,8 @@ export default function CertificadoModal({
                   <input
                     value={datos.numeroIdentificacion}
                     onChange={(e) => handleNumeroChange(e.target.value)}
-                    placeholder={esPlaca ? "A13-54C" : esRuc ? "11 dígitos" : esDni ? "8 dígitos" : ""}
-                    inputMode={esPlaca ? "text" : "numeric"}
+                    placeholder={esPlacaTipo ? "A13-54C" : esRuc ? "11 dígitos" : esDni ? "8 dígitos" : ""}
+                    inputMode={esPlacaTipo ? "text" : "numeric"}
                     className={`${modalInput} ${numeroInvalido ? "border-amber-600" : ""}`}
                   />
                   {numeroInvalido && (
@@ -238,7 +266,7 @@ export default function CertificadoModal({
                     </p>
                   )}
                 </ModalField>
-                {esPlaca && (
+                {esPlacaTipo && (
                   <ModalField label="DNI (opcional)">
                     <input
                       value={datos.dniAdicional}
@@ -249,13 +277,41 @@ export default function CertificadoModal({
                     {dniAdicionalInvalido && <p className="text-[11px] font-bold text-amber-500 mt-1">⚠️ El DNI debe tener 8 dígitos</p>}
                   </ModalField>
                 )}
-                {!esPlaca && (
+                {esPlacaSola && !datos.dniAdicional && !datos.nombre.trim() && (
+                  <p className="text-[11px] text-zinc-500 -mt-1">Sin nombre ni DNI, el certificado mostrará "UNIDAD PLACA {datos.numeroIdentificacion || "—"}"</p>
+                )}
+                {!esPlacaTipo && (
                   <ModalField label="Ubicación">
                     <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={modalInput} />
                   </ModalField>
                 )}
               </div>
             </ModalSection>
+
+            {!esPH && (
+              <ModalSection title="✏️ Texto del Certificado">
+                <div className="flex flex-col gap-2">
+                  <p className="text-[11px] text-zinc-500 -mt-1">Elige qué trabajo describe el certificado, independiente de los extintores incluidos</p>
+                  <div className={`flex flex-wrap gap-1.5 ${accionesBloqueadas ? "opacity-50 pointer-events-none" : ""}`}>
+                    {ACCIONES_TRABAJO.map((a) => (
+                      <ColumnaChip
+                        key={a.key}
+                        label={a.label}
+                        ayuda={a.label}
+                        activa={datos.accionesTrabajo[a.key]}
+                        onToggle={() => onCambiarAccionTrabajo(a.key, !datos.accionesTrabajo[a.key])}
+                      />
+                    ))}
+                  </div>
+                  {accionesBloqueadas && (
+                    <p className="text-[11px] text-amber-500">⚠️ Al filtrar solo extintores "{ESTADO_NUEVO_VENTA}" el texto queda fijo en venta</p>
+                  )}
+                  <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
+                    "Se ha efectuado {datos.textoAccion} ..."
+                  </p>
+                </div>
+              </ModalSection>
+            )}
 
             <ModalSection title="📅 Fecha del Certificado">
               <div className="grid grid-cols-3 gap-2">
@@ -276,6 +332,22 @@ export default function CertificadoModal({
             <ModalSection title="📊 Columnas de la Tabla">
               <div className="flex flex-col gap-4">
                 <p className="text-[11px] text-zinc-500 -mt-1">Toca una columna opcional para agregarla o quitarla del certificado</p>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Siempre visibles</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {COLUMNAS_FIJAS.map((c) => (
+                      <span key={c} className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
+                        {c}
+                      </span>
+                    ))}
+                    {esPH && (
+                      <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-sky-950/40 text-sky-400 border border-dashed border-sky-800">
+                        Presión PSI
+                      </span>
+                    )}
+                  </div>
+                </div>
 
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Agregar columnas opcionales</span>

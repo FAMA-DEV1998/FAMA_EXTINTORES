@@ -76,6 +76,36 @@ const construirAgentesTexto = (agentesPresentes: string[], familias: string[], p
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
 };
 
+export const ESTADO_NUEVO_VENTA = "Nuevo - Venta";
+
+export type AccionTrabajo = "venta" | "recarga" | "mantenimiento";
+
+const ACCION_ORDEN: AccionTrabajo[] = ["venta", "recarga", "mantenimiento"];
+
+const ACCION_ARTICULO: Record<AccionTrabajo, string> = {
+  venta: "la venta",
+  recarga: "la recarga",
+  mantenimiento: "el mantenimiento",
+};
+
+const ACCION_NOMBRE: Record<AccionTrabajo, string> = {
+  venta: "venta",
+  recarga: "recarga",
+  mantenimiento: "mantenimiento",
+};
+
+const construirTextoAccion = (acciones: Record<AccionTrabajo, boolean>): string => {
+  const seleccion = ACCION_ORDEN.filter((a) => acciones[a]);
+  if (seleccion.length === 0) return ACCION_ARTICULO.recarga;
+  const [primero, ...resto] = seleccion;
+  if (resto.length === 0) return ACCION_ARTICULO[primero];
+  const nombres = resto.map((a) => ACCION_NOMBRE[a]);
+  if (nombres.length === 1) return `${ACCION_ARTICULO[primero]} y/o ${nombres[0]}`;
+  const ultimo = nombres[nombres.length - 1];
+  const previos = nombres.slice(0, -1);
+  return `${ACCION_ARTICULO[primero]}, ${previos.join(", ")} y/o ${ultimo}`;
+};
+
 const presionPSIPorDefecto = (familia: string): string => {
   if (familia === "co2") return "3000";
   if (familia === "pqs") return "600";
@@ -124,6 +154,7 @@ const formatMesAnio = (fecha: Date): string => `${MESES[fecha.getMonth()].label}
 export function useCertificado(empresa: any, activeSede: any, servicio: any, extintoresDelServicio: any[]) {
   const [modal, setModal] = useState(false);
   const [filtroAgente, setFiltroAgente] = useState<string>("todos");
+  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [pqsVariante, setPqsVariante] = useState<PqsVariante>("75");
   const [ratingsPorUid, setRatingsPorUid] = useState<Record<string, string>>({});
 
@@ -137,20 +168,27 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     return Array.from(mapa.entries()).map(([key, label]) => ({ key, label }));
   }, [extintoresDelServicio]);
 
+  const estadosDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    (extintoresDelServicio || []).forEach((e) => { if (e.estadoExtintor) set.add(e.estadoExtintor); });
+    return Array.from(set);
+  }, [extintoresDelServicio]);
+
   const hayPqs = familiasDisponibles.some((f) => f.key === "pqs");
 
-  const filtrarExtintores = (tipoCertificado: TipoCertificado, filtro: string) =>
+  const filtrarExtintores = (tipoCertificado: TipoCertificado, filtro: string, filtroEstadoVal: string) =>
     (extintoresDelServicio || []).filter((e) => {
       if (tipoCertificado === "ph" && e.ph !== "SI") return false;
       if (filtro !== "todos" && clasificarAgente(e.agenteExtintor) !== filtro) return false;
+      if (filtroEstadoVal !== "todos" && e.estadoExtintor !== filtroEstadoVal) return false;
       return true;
     });
 
-  const construirItems = (tipoCertificado: TipoCertificado, filtro: string): CertificadoItem[] => {
+  const construirItems = (tipoCertificado: TipoCertificado, filtro: string, filtroEstadoVal: string): CertificadoItem[] => {
     const fechaServicio = parseFecha(servicio?.fechaRetiro || "");
     const vencimientoRecarga = fechaServicio ? formatMesAnio(addMonths(fechaServicio, 12)) : "—";
 
-    return filtrarExtintores(tipoCertificado, filtro).map((e, i) => {
+    return filtrarExtintores(tipoCertificado, filtro, filtroEstadoVal).map((e, i) => {
       const familia = clasificarAgente(e.agenteExtintor);
       return {
         uid: e.uid,
@@ -173,8 +211,8 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     });
   };
 
-  const construirAgentesTextoPara = (tipoCertificado: TipoCertificado, filtro: string, variante: PqsVariante) => {
-    const base = filtrarExtintores(tipoCertificado, filtro);
+  const construirAgentesTextoPara = (tipoCertificado: TipoCertificado, filtro: string, variante: PqsVariante, filtroEstadoVal: string) => {
+    const base = filtrarExtintores(tipoCertificado, filtro, filtroEstadoVal);
     const familias = Array.from(new Set(base.map((e) => clasificarAgente(e.agenteExtintor))));
     return construirAgentesTexto(base.map((e) => e.agenteExtintor || ""), familias, variante);
   };
@@ -185,6 +223,7 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       .join(", ");
     const tipoIdentificacion: TipoIdentificacion = empresa?.tipoCliente === "persona" ? "dni" : "ruc";
     const hoy = new Date();
+    const accionesTrabajo = { venta: false, recarga: true, mantenimiento: false };
 
     return {
       tipoCertificado: "garantia",
@@ -197,9 +236,11 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       diaFecha: String(hoy.getDate()),
       mesFecha: String(hoy.getMonth() + 1),
       anioFecha: String(hoy.getFullYear()),
-      agentesTexto: construirAgentesTextoPara("garantia", "todos", "75"),
-      items: construirItems("garantia", "todos"),
+      agentesTexto: construirAgentesTextoPara("garantia", "todos", "75", "todos"),
+      items: construirItems("garantia", "todos", "todos"),
       columnas: { item: false, nInterno: false, marca: false, tipoServicio: false, rating: false },
+      accionesTrabajo,
+      textoAccion: construirTextoAccion(accionesTrabajo),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresa, activeSede, servicio, extintoresDelServicio]);
@@ -209,12 +250,15 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
   const cacheInicial = () => ({
     ruc: empresa?.tipoCliente !== "persona" ? (empresa?.ruc || "") : "",
     dni: empresa?.tipoCliente === "persona" ? (empresa?.ruc || "") : "",
+    placa: "",
+    placa_sola: "",
   });
 
-  const [cacheIdentificacion, setCacheIdentificacion] = useState<{ ruc: string; dni: string }>(cacheInicial);
+  const [cacheIdentificacion, setCacheIdentificacion] = useState<{ ruc: string; dni: string; placa: string; placa_sola: string }>(cacheInicial);
 
   const abrir = () => {
     setFiltroAgente("todos");
+    setFiltroEstado("todos");
     setPqsVariante("75");
     setDatos(datosIniciales);
     setCacheIdentificacion(cacheInicial());
@@ -227,8 +271,8 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     setDatos((p) => ({
       ...p,
       tipoCertificado: tipo,
-      items: construirItems(tipo, filtroAgente),
-      agentesTexto: construirAgentesTextoPara(tipo, filtroAgente, pqsVariante),
+      items: construirItems(tipo, filtroAgente, filtroEstado),
+      agentesTexto: construirAgentesTextoPara(tipo, filtroAgente, pqsVariante, filtroEstado),
     }));
   };
 
@@ -238,17 +282,32 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     setFiltroAgente(filtro);
     setDatos((p) => ({
       ...p,
-      items: construirItems(p.tipoCertificado, filtro),
-      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtro, pqsVariante),
+      items: construirItems(p.tipoCertificado, filtro, filtroEstado),
+      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtro, pqsVariante, filtroEstado),
     }));
+  };
+
+  const cambiarFiltroEstado = (filtro: string) => {
+    setFiltroEstado(filtro);
+    setDatos((p) => {
+      const forzarVenta = filtro === ESTADO_NUEVO_VENTA;
+      const accionesTrabajo = forzarVenta ? { venta: true, recarga: false, mantenimiento: false } : p.accionesTrabajo;
+      return {
+        ...p,
+        items: construirItems(p.tipoCertificado, filtroAgente, filtro),
+        agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, pqsVariante, filtro),
+        accionesTrabajo,
+        textoAccion: construirTextoAccion(accionesTrabajo),
+      };
+    });
   };
 
   const cambiarPqsVariante = (variante: PqsVariante) => {
     setPqsVariante(variante);
     setDatos((p) => ({
       ...p,
-      items: construirItems(p.tipoCertificado, filtroAgente),
-      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, variante),
+      items: construirItems(p.tipoCertificado, filtroAgente, filtroEstado),
+      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, variante, filtroEstado),
     }));
   };
 
@@ -261,14 +320,18 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     setDatos((p) => ({ ...p, columnas: { ...p.columnas, [columna]: valor } }));
   };
 
+  const cambiarAccionTrabajo = (accion: AccionTrabajo, valor: boolean) => {
+    setDatos((p) => {
+      const accionesTrabajo = { ...p.accionesTrabajo, [accion]: valor };
+      return { ...p, accionesTrabajo, textoAccion: construirTextoAccion(accionesTrabajo) };
+    });
+  };
+
   const cambiarTipoIdentificacion = (tipo: TipoIdentificacion) => {
     setDatos((p) => {
-      const cacheActualizada = p.tipoIdentificacion === "ruc" || p.tipoIdentificacion === "dni"
-        ? { ...cacheIdentificacion, [p.tipoIdentificacion]: p.numeroIdentificacion }
-        : cacheIdentificacion;
+      const cacheActualizada = { ...cacheIdentificacion, [p.tipoIdentificacion]: p.numeroIdentificacion };
       setCacheIdentificacion(cacheActualizada);
-      const numeroNuevo = tipo === "placa" ? "" : cacheActualizada[tipo] || "";
-      return { ...p, tipoIdentificacion: tipo, numeroIdentificacion: numeroNuevo };
+      return { ...p, tipoIdentificacion: tipo, numeroIdentificacion: cacheActualizada[tipo] || "" };
     });
   };
 
@@ -277,5 +340,6 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     filtroAgente, cambiarFiltroAgente, cambiarTipoCertificado, cambiarTipoIdentificacion,
     familiasDisponibles, hayPqs, pqsVariante, cambiarPqsVariante,
     cambiarDenominacion, actualizarRating, cambiarColumna,
+    filtroEstado, cambiarFiltroEstado, estadosDisponibles, cambiarAccionTrabajo,
   };
 }

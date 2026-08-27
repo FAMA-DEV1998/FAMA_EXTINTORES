@@ -258,11 +258,15 @@ export default function ServicioDetailView({
                 onChange={certificado.actualizar}
                 filtroAgente={certificado.filtroAgente}
                 onCambiarFiltroAgente={certificado.cambiarFiltroAgente}
+                filtroEstado={certificado.filtroEstado}
+                onCambiarFiltroEstado={certificado.cambiarFiltroEstado}
+                estadosDisponibles={certificado.estadosDisponibles}
                 onCambiarTipoCertificado={certificado.cambiarTipoCertificado}
                 onCambiarTipoIdentificacion={certificado.cambiarTipoIdentificacion}
                 onCambiarDenominacion={certificado.cambiarDenominacion}
                 onActualizarRating={certificado.actualizarRating}
                 onCambiarColumna={certificado.cambiarColumna}
+                onCambiarAccionTrabajo={certificado.cambiarAccionTrabajo}
                 familiasDisponibles={certificado.familiasDisponibles}
                 hayPqs={certificado.hayPqs}
                 pqsVariante={certificado.pqsVariante}
