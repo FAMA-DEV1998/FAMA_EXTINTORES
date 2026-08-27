@@ -39,14 +39,17 @@ export interface CertificadoDatos {
   numeroIdentificacion: string;
   dniAdicional: string;
   ubicacion: string;
+  distrito: string;
   diaFecha: string;
   mesFecha: string;
   anioFecha: string;
   agentesTexto: string;
+  agentesTextoCorto: string;
   items: CertificadoItem[];
   columnas: CertificadoColumnas;
   accionesTrabajo: { venta: boolean; recarga: boolean; mantenimiento: boolean };
   textoAccion: string;
+  etiquetasAdicionales: string[];
 }
 
 interface Props {
@@ -90,6 +93,8 @@ export default function CertificadoTemplate({ datos }: Props) {
   const mesLabel = MESES.find((m) => m.value === datos.mesFecha)?.label.toLowerCase() || "";
   const denominacionTexto = esSingular ? DENOMINACION_PARRAFO_SINGULAR[datos.denominacion] : DENOMINACION_PARRAFO[datos.denominacion];
   const marcaVisible = datos.columnas.marca || esPH;
+  const ubicacionCompleta = `${datos.ubicacion || "—"}${datos.distrito ? ` - ${datos.distrito}` : ""} - Lima`;
+  const etiquetasTexto = ["NTP 350.043.1", "833.030", ...datos.etiquetasAdicionales].join("; ");
   const colSpanVacio = 8
     + (datos.columnas.item ? 1 : 0)
     + (datos.columnas.nInterno ? 1 : 0)
@@ -155,22 +160,23 @@ export default function CertificadoTemplate({ datos }: Props) {
               )}
               {!esPlaca && (
                 <>
-                  {" "}ubicado en <span className="font-bold">{datos.ubicacion || "—"}</span>
+                  {" "}ubicado en <span className="font-bold">{ubicacionCompleta}</span>
                 </>
               )}
               ,{" "}
               {esPH ? (
                 <>
-                  se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto} de {datos.agentesTexto},
-                  utilizando la máquina <span className="font-bold"> MARCA CAMEX Maquinaria EIRL</span>, modelo{" "}
+                  se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto}
+                  {datos.agentesTextoCorto ? <> {datos.agentesTextoCorto}</> : null},
+                  utilizando la máquina <span className="font-bold"> MARCA KAMEX MAQUINARIAS EIRL</span>, modelo{" "}
                   <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
-                  <span className="font-bold">NTP 350.043.1; 833.030 según detalle:</span>
+                  <span className="font-bold">{etiquetasTexto} según detalle:</span>
                 </>
               ) : (
                 <>
                   se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
                   ha realizado conforme lo establece la{" "}
-                  <span className="font-bold">NTP 350.043.1; 833.030 según detalle:</span>
+                  <span className="font-bold">{etiquetasTexto} según detalle:</span>
                 </>
               )}
             </p>

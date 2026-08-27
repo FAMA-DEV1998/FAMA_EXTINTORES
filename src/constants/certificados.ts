@@ -1,0 +1,3 @@
+export const ETIQUETAS_ADICIONALES_DISPONIBLES = [
+  "NFPA 10-USA",
+];

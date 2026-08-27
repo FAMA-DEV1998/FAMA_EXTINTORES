@@ -3,7 +3,15 @@ import { MESES } from "../../constants";
 import { formatVencimPH, formatRealizadoPH } from "../../utils/helpers";
 import type { CertificadoDatos, CertificadoItem, Denominacion, TipoCertificado, TipoIdentificacion } from "../../components/certificados/CertificadoTemplate";
 
-export type PqsVariante = "75" | "90";
+export type PqsVariante =
+  | "75_fosfato"
+  | "75_nacional"
+  | "75_solo"
+  | "90_fosfato"
+  | "90_nacional"
+  | "90_ul"
+  | "90_certificado_ul"
+  | "90_solo";
 
 const FAMILIA_LABEL_FIJA: Record<string, string> = {
   co2: "CO2",
@@ -11,6 +19,14 @@ const FAMILIA_LABEL_FIJA: Record<string, string> = {
   acetato: "Acetato de Potasio",
   h2o_desmineralizado: "H2O Desmineralizado",
   h2o_presurizado: "H2O Presurizado",
+};
+
+const FAMILIA_LABEL_CORTA: Record<string, string> = {
+  co2: "CO2",
+  pqs: "PQS",
+  acetato: "K",
+  h2o_desmineralizado: "H2O DES",
+  h2o_presurizado: "H2O PRE",
 };
 
 export const formatearAgente = (agente: string): string =>
@@ -33,14 +49,29 @@ export const clasificarAgente = (agente: string): string => {
 };
 
 const PQS_LABEL: Record<PqsVariante, string> = {
-  "75": "polvo químico seco (PQS) 75%",
-  "90": "polvo químico seco (PQS) 90% UL",
+  "75_fosfato": "polvo químico seco (PQS) al 75% Fosfato Monoamónico",
+  "75_nacional": "polvo químico seco (PQS) al 75% Nacional",
+  "75_solo": "polvo químico seco (PQS) al 75%",
+  "90_fosfato": "polvo químico seco (PQS) al 90% Fosfato Monoamónico",
+  "90_nacional": "polvo químico seco (PQS) al 90% Nacional",
+  "90_ul": "polvo químico seco (PQS) al 90% UL",
+  "90_certificado_ul": "polvo químico seco (PQS) al 90% Certificado UL",
+  "90_solo": "polvo químico seco (PQS) al 90%",
 };
 
 export const PQS_TIPO_LABEL: Record<PqsVariante, string> = {
-  "75": "PQS 75%",
-  "90": "PQS 90% UL",
+  "75_fosfato": "Fosfato Monoamónico",
+  "75_nacional": "Nacional",
+  "75_solo": "75% solo",
+  "90_fosfato": "Fosfato Monoamónico",
+  "90_nacional": "Nacional",
+  "90_ul": "UL",
+  "90_certificado_ul": "Certificado UL",
+  "90_solo": "90% solo",
 };
+
+export const PQS_VARIANTES_75: PqsVariante[] = ["75_fosfato", "75_nacional", "75_solo"];
+export const PQS_VARIANTES_90: PqsVariante[] = ["90_fosfato", "90_nacional", "90_ul", "90_certificado_ul", "90_solo"];
 
 export const DENOMINACION_LABEL: Record<Denominacion, string> = {
   portatiles_rodantes: "EXTINTORES PORTATILES Y RODANTES",
@@ -72,6 +103,22 @@ const construirAgentesTexto = (agentesPresentes: string[], familias: string[], p
   ));
   partes.push(...otros);
   if (partes.length === 0) return "extintores";
+  if (partes.length === 1) return partes[0];
+  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
+};
+
+const construirAgentesTextoCorto = (agentesPresentes: string[], familias: string[]) => {
+  const partes: string[] = [];
+  const conocidas = ["co2", "pqs", "acetato", "h2o_desmineralizado", "h2o_presurizado"];
+  conocidas.forEach((f) => { if (familias.includes(f)) partes.push(FAMILIA_LABEL_CORTA[f]); });
+  const otros = Array.from(new Set(
+    familias
+      .filter((f) => !conocidas.includes(f))
+      .map((f) => formatearAgente(agentesPresentes.find((a) => clasificarAgente(a) === f) || f))
+      .filter(Boolean)
+  ));
+  partes.push(...otros);
+  if (partes.length === 0) return "";
   if (partes.length === 1) return partes[0];
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
 };
@@ -121,6 +168,16 @@ const tipoExtintorLabel = (familia: string, agenteOriginal: string): string => {
   return formatearAgente(agenteOriginal) || "—";
 };
 
+const tipoExtintorLabelCertificado = (familia: string, agenteOriginal: string): string => {
+  if (familia === "pqs") return "PQS-ABC";
+  return tipoExtintorLabel(familia, agenteOriginal);
+};
+
+const marcaCertificado = (marca: string): string => {
+  if (!marca) return "—";
+  return marca.trim().toLowerCase() === "importado" ? "Asiático" : marca;
+};
+
 const UNIDAD_PESO_LABEL: Record<string, string> = {
   KG: "Kg", LB: "Lbs", LT: "Lts", GAL: "Gls",
 };
@@ -151,11 +208,18 @@ const addMonths = (fecha: Date, meses: number): Date => {
 
 const formatMesAnio = (fecha: Date): string => `${MESES[fecha.getMonth()].label} ${fecha.getFullYear()}`;
 
+interface CacheTab {
+  numero: string;
+  nombre: string;
+  ubicacion: string;
+  distrito: string;
+}
+
 export function useCertificado(empresa: any, activeSede: any, servicio: any, extintoresDelServicio: any[]) {
   const [modal, setModal] = useState(false);
   const [filtroAgente, setFiltroAgente] = useState<string>("todos");
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
-  const [pqsVariante, setPqsVariante] = useState<PqsVariante>("75");
+  const [pqsVariante, setPqsVariante] = useState<PqsVariante>("75_solo");
   const [ratingsPorUid, setRatingsPorUid] = useState<Record<string, string>>({});
 
   const familiasDisponibles = useMemo(() => {
@@ -195,8 +259,8 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
         item: String(i + 1).padStart(2, "0"),
         serie: e.nSerie || "—",
         nInterno: e.nInterno || "—",
-        marca: e.marca || "—",
-        tipo: tipoExtintorLabel(familia, e.agenteExtintor),
+        marca: marcaCertificado(e.marca),
+        tipo: tipoExtintorLabelCertificado(familia, e.agenteExtintor),
         capacidad: formatCapacidad(e.peso, e.unidadPeso),
         tipoServicio: tipoServicioItem(e),
         estanqueidad: "Conforme",
@@ -217,10 +281,16 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     return construirAgentesTexto(base.map((e) => e.agenteExtintor || ""), familias, variante);
   };
 
+  const construirAgentesTextoCortoPara = (tipoCertificado: TipoCertificado, filtro: string, filtroEstadoVal: string) => {
+    const base = filtrarExtintores(tipoCertificado, filtro, filtroEstadoVal);
+    const familias = Array.from(new Set(base.map((e) => clasificarAgente(e.agenteExtintor))));
+    return construirAgentesTextoCorto(base.map((e) => e.agenteExtintor || ""), familias);
+  };
+
+  const ubicacionBase = activeSede?.direccion || empresa?.direccion || "";
+  const distritoBase = activeSede?.distrito || empresa?.distrito || "";
+
   const datosIniciales = useMemo<CertificadoDatos>(() => {
-    const ubicacion = [activeSede?.direccion || empresa?.direccion, activeSede?.distrito || empresa?.distrito]
-      .filter(Boolean)
-      .join(", ");
     const tipoIdentificacion: TipoIdentificacion = empresa?.tipoCliente === "persona" ? "dni" : "ruc";
     const hoy = new Date();
     const accionesTrabajo = { venta: false, recarga: true, mantenimiento: false };
@@ -232,33 +302,46 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       nombre: empresa?.razonSocial || "",
       numeroIdentificacion: empresa?.ruc || "",
       dniAdicional: "",
-      ubicacion,
+      ubicacion: ubicacionBase,
+      distrito: distritoBase,
       diaFecha: String(hoy.getDate()),
       mesFecha: String(hoy.getMonth() + 1),
       anioFecha: String(hoy.getFullYear()),
-      agentesTexto: construirAgentesTextoPara("garantia", "todos", "75", "todos"),
+      agentesTexto: construirAgentesTextoPara("garantia", "todos", "75_solo", "todos"),
+      agentesTextoCorto: construirAgentesTextoCortoPara("garantia", "todos", "todos"),
       items: construirItems("garantia", "todos", "todos"),
       columnas: { item: false, nInterno: false, marca: false, tipoServicio: false, rating: false },
       accionesTrabajo,
       textoAccion: construirTextoAccion(accionesTrabajo),
+      etiquetasAdicionales: [],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresa, activeSede, servicio, extintoresDelServicio]);
 
   const [datos, setDatos] = useState<CertificadoDatos>(datosIniciales);
 
-  const cacheInicial = () => ({
-    ruc: empresa?.tipoCliente !== "persona" ? (empresa?.ruc || "") : "",
-    dni: empresa?.tipoCliente === "persona" ? (empresa?.ruc || "") : "",
-    placa: "",
+  const cacheInicial = (): Record<TipoIdentificacion, CacheTab> => ({
+    ruc: {
+      numero: empresa?.tipoCliente !== "persona" ? (empresa?.ruc || "") : "",
+      nombre: empresa?.tipoCliente !== "persona" ? (empresa?.razonSocial || "") : "",
+      ubicacion: ubicacionBase,
+      distrito: distritoBase,
+    },
+    dni: {
+      numero: empresa?.tipoCliente === "persona" ? (empresa?.ruc || "") : "",
+      nombre: empresa?.tipoCliente === "persona" ? (empresa?.razonSocial || "") : "",
+      ubicacion: ubicacionBase,
+      distrito: distritoBase,
+    },
+    placa: { numero: "", nombre: "", ubicacion: ubicacionBase, distrito: distritoBase },
   });
 
-  const [cacheIdentificacion, setCacheIdentificacion] = useState<{ ruc: string; dni: string; placa: string }>(cacheInicial);
+  const [cacheIdentificacion, setCacheIdentificacion] = useState<Record<TipoIdentificacion, CacheTab>>(cacheInicial);
 
   const abrir = () => {
     setFiltroAgente("todos");
     setFiltroEstado("todos");
-    setPqsVariante("75");
+    setPqsVariante("75_solo");
     setDatos(datosIniciales);
     setCacheIdentificacion(cacheInicial());
     setModal(true);
@@ -272,6 +355,7 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       tipoCertificado: tipo,
       items: construirItems(tipo, filtroAgente, filtroEstado),
       agentesTexto: construirAgentesTextoPara(tipo, filtroAgente, pqsVariante, filtroEstado),
+      agentesTextoCorto: construirAgentesTextoCortoPara(tipo, filtroAgente, filtroEstado),
     }));
   };
 
@@ -283,6 +367,7 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       ...p,
       items: construirItems(p.tipoCertificado, filtro, filtroEstado),
       agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtro, pqsVariante, filtroEstado),
+      agentesTextoCorto: construirAgentesTextoCortoPara(p.tipoCertificado, filtro, filtroEstado),
     }));
   };
 
@@ -295,6 +380,7 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
         ...p,
         items: construirItems(p.tipoCertificado, filtroAgente, filtro),
         agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, pqsVariante, filtro),
+        agentesTextoCorto: construirAgentesTextoCortoPara(p.tipoCertificado, filtroAgente, filtro),
         accionesTrabajo,
         textoAccion: construirTextoAccion(accionesTrabajo),
       };
@@ -328,9 +414,20 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
 
   const cambiarTipoIdentificacion = (tipo: TipoIdentificacion) => {
     setDatos((p) => {
-      const cacheActualizada = { ...cacheIdentificacion, [p.tipoIdentificacion]: p.numeroIdentificacion };
+      const cacheActualizada: Record<TipoIdentificacion, CacheTab> = {
+        ...cacheIdentificacion,
+        [p.tipoIdentificacion]: { numero: p.numeroIdentificacion, nombre: p.nombre, ubicacion: p.ubicacion, distrito: p.distrito },
+      };
       setCacheIdentificacion(cacheActualizada);
-      return { ...p, tipoIdentificacion: tipo, numeroIdentificacion: cacheActualizada[tipo] || "" };
+      const destino = cacheActualizada[tipo];
+      return {
+        ...p,
+        tipoIdentificacion: tipo,
+        numeroIdentificacion: destino?.numero || "",
+        nombre: destino?.nombre || "",
+        ubicacion: destino?.ubicacion || ubicacionBase,
+        distrito: destino?.distrito || distritoBase,
+      };
     });
   };
 

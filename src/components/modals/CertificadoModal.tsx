@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CertificadoTemplate from "../certificados/CertificadoTemplate";
 import type { CertificadoDatos, Denominacion, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
-import { PQS_TIPO_LABEL, ESTADO_NUEVO_VENTA, type PqsVariante, type AccionTrabajo } from "../../hooks/dashboard/useCertificado";
-import { MESES } from "../../constants";
+import { PQS_TIPO_LABEL, PQS_VARIANTES_75, PQS_VARIANTES_90, ESTADO_NUEVO_VENTA, type PqsVariante, type AccionTrabajo } from "../../hooks/dashboard/useCertificado";
+import { MESES, DISTRITOS_LIMA, ETIQUETAS_ADICIONALES_DISPONIBLES } from "../../constants";
 import { exportarElementoPdf } from "../../utils/exportarPdf";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
 
@@ -227,11 +227,15 @@ export default function CertificadoModal({
                       ))}
                     </select>
                   </ModalField>
-                  {hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
+                  {!esPH && hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
                     <ModalField label="Tipo de PQS">
                       <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={modalInput}>
-                        <option value="75">{PQS_TIPO_LABEL["75"]}</option>
-                        <option value="90">{PQS_TIPO_LABEL["90"]}</option>
+                        <optgroup label="PQS 75%">
+                          {PQS_VARIANTES_75.map((v) => <option key={v} value={v}>{PQS_TIPO_LABEL[v]}</option>)}
+                        </optgroup>
+                        <optgroup label="PQS 90%">
+                          {PQS_VARIANTES_90.map((v) => <option key={v} value={v}>{PQS_TIPO_LABEL[v]}</option>)}
+                        </optgroup>
                       </select>
                     </ModalField>
                   )}
@@ -242,8 +246,37 @@ export default function CertificadoModal({
               </div>
             </ModalSection>
 
+            <ModalSection title="3️⃣ Normas y Etiquetas">
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
+                    NTP 350.043.1
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
+                    833.030
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 -mt-1">Agrega una o varias etiquetas adicionales (opcional)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ETIQUETAS_ADICIONALES_DISPONIBLES.map((etq) => (
+                    <ColumnaChip
+                      key={etq}
+                      label={etq}
+                      ayuda={etq}
+                      activa={datos.etiquetasAdicionales.includes(etq)}
+                      onToggle={() => onChange({
+                        etiquetasAdicionales: datos.etiquetasAdicionales.includes(etq)
+                          ? datos.etiquetasAdicionales.filter((e) => e !== etq)
+                          : [...datos.etiquetasAdicionales, etq],
+                      })}
+                    />
+                  ))}
+                </div>
+              </div>
+            </ModalSection>
+
             {!esPH && (
-              <ModalSection title="3️⃣ Texto del Certificado">
+              <ModalSection title="4️⃣ Texto del Certificado">
                 <div className="flex flex-col gap-2">
                   <p className="text-[11px] text-zinc-500 -mt-1">¿Qué trabajo se hizo? Puedes elegir más de uno</p>
                   <div className={`flex flex-wrap gap-1.5 ${accionesBloqueadas ? "opacity-50 pointer-events-none" : ""}`}>
@@ -267,7 +300,7 @@ export default function CertificadoModal({
               </ModalSection>
             )}
 
-            <ModalSection title="4️⃣ Datos del Cliente">
+            <ModalSection title="5️⃣ Datos del Cliente">
               <div className="flex flex-col gap-3">
                 <ModalField label="Tipo de documento">
                   <Segmented
@@ -312,14 +345,22 @@ export default function CertificadoModal({
                   <p className="text-[11px] text-zinc-500 -mt-1">Sin nombre ni DNI, el certificado mostrará: "UNIDAD PLACA {datos.numeroIdentificacion || "—"}"</p>
                 )}
                 {!esPlaca && (
-                  <ModalField label="Ubicación">
-                    <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={modalInput} />
-                  </ModalField>
+                  <div className="grid grid-cols-2 gap-3">
+                    <ModalField label="Ubicación">
+                      <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={modalInput} />
+                    </ModalField>
+                    <ModalField label="Distrito">
+                      <select value={datos.distrito} onChange={(e) => onChange({ distrito: e.target.value })} className={modalInput}>
+                        <option value="">Selecciona un distrito</option>
+                        {DISTRITOS_LIMA.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </ModalField>
+                  </div>
                 )}
               </div>
             </ModalSection>
 
-            <ModalSection title="5️⃣ Fecha del Certificado">
+            <ModalSection title="6️⃣ Fecha del Certificado">
               <div className="grid grid-cols-3 gap-2">
                 <ModalField label="Día">
                   <input type="number" min={1} max={31} value={datos.diaFecha} onChange={(e) => onChange({ diaFecha: String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))) })} className={modalInput} />
@@ -335,7 +376,7 @@ export default function CertificadoModal({
               </div>
             </ModalSection>
 
-            <ModalSection title="6️⃣ Columnas de la Tabla">
+            <ModalSection title="7️⃣ Columnas de la Tabla">
               <div className="flex flex-col gap-4">
                 {/* <p className="text-[11px] text-zinc-500 -mt-1">Toca una columna opcional para agregarla o quitarla del certificado</p>
 
@@ -358,7 +399,7 @@ export default function CertificadoModal({
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Agregar columnas opcionales</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {COLUMNAS_OPCIONALES.map((c) => (
+                    {(esPH ? COLUMNAS_OPCIONALES.filter((c) => c.key !== "marca") : COLUMNAS_OPCIONALES).map((c) => (
                       <ColumnaChip
                         key={c.key}
                         label={c.label}
