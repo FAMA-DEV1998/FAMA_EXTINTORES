@@ -251,10 +251,9 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
     ruc: empresa?.tipoCliente !== "persona" ? (empresa?.ruc || "") : "",
     dni: empresa?.tipoCliente === "persona" ? (empresa?.ruc || "") : "",
     placa: "",
-    placa_sola: "",
   });
 
-  const [cacheIdentificacion, setCacheIdentificacion] = useState<{ ruc: string; dni: string; placa: string; placa_sola: string }>(cacheInicial);
+  const [cacheIdentificacion, setCacheIdentificacion] = useState<{ ruc: string; dni: string; placa: string }>(cacheInicial);
 
   const abrir = () => {
     setFiltroAgente("todos");

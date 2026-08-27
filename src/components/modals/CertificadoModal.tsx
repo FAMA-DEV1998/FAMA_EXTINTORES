@@ -39,10 +39,10 @@ const formatPlaca = (raw: string) => {
   return limpio.length <= 3 ? limpio : `${limpio.slice(0, 3)}-${limpio.slice(3)}`;
 };
 
-const COLUMNAS_FIJAS = [
-  "Serie", "Tipo Extintor", "Cap.", "Prueba de Estanqueidad y Fuga",
-  "Vencimiento Recarga", "Año de Fabr.", "Vencimiento Prueba Hidrostática", "Condición Extintor",
-];
+// const COLUMNAS_FIJAS = [
+//   "Serie", "Tipo Extintor", "Cap.", "Prueba de Estanqueidad y Fuga",
+//   "Vencimiento Recarga", "Año de Fabr.", "Vencimiento Prueba Hidrostática", "Condición Extintor",
+// ];
 
 const COLUMNAS_OPCIONALES: { key: "item" | "nInterno" | "marca" | "rating" | "tipoServicio"; label: string; ayuda: string }[] = [
   { key: "item", label: "Ítem", ayuda: "Numeración de fila" },
@@ -142,17 +142,16 @@ export default function CertificadoModal({
   };
 
   const esPlaca = datos.tipoIdentificacion === "placa";
-  const esPlacaSola = datos.tipoIdentificacion === "placa_sola";
-  const esPlacaTipo = esPlaca || esPlacaSola;
   const esRuc = datos.tipoIdentificacion === "ruc";
   const esDni = datos.tipoIdentificacion === "dni";
   const labelNumero = esRuc ? "RUC" : esDni ? "DNI" : "Placa";
   const numeroInvalido = (esRuc && datos.numeroIdentificacion.length > 0 && datos.numeroIdentificacion.length !== 11)
     || (esDni && datos.numeroIdentificacion.length > 0 && datos.numeroIdentificacion.length !== 8)
-    || (esPlacaTipo && datos.numeroIdentificacion.replace("-", "").length > 0 && datos.numeroIdentificacion.replace("-", "").length !== 6);
-  const dniAdicionalInvalido = esPlacaTipo && datos.dniAdicional.length > 0 && datos.dniAdicional.length !== 8;
+    || (esPlaca && datos.numeroIdentificacion.replace("-", "").length > 0 && datos.numeroIdentificacion.replace("-", "").length !== 6);
+  const dniAdicionalInvalido = esPlaca && datos.dniAdicional.length > 0 && datos.dniAdicional.length !== 8;
   const esPH = datos.tipoCertificado === "ph";
   const accionesBloqueadas = filtroEstado === ESTADO_NUEVO_VENTA;
+  const soloUnidadPlaca = esPlaca && !datos.dniAdicional && !datos.nombre.trim();
 
   const handleNumeroChange = (valor: string) => {
     if (esRuc) return onChange({ numeroIdentificacion: valor.replace(/\D/g, "").slice(0, 11) });
@@ -182,9 +181,9 @@ export default function CertificadoModal({
 
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[440px_1fr]">
           <div className={`${vistaMovil === "datos" ? "flex" : "hidden"} lg:flex overflow-y-auto p-6 flex-col gap-6 border-b lg:border-b-0 lg:border-r border-zinc-800/60`}>
-            <ModalSection title="📄 Tipo de Certificado">
+            <ModalSection title="1️⃣ Tipo de Certificado">
               <div className="flex flex-col gap-3">
-                <ModalField label="Tipo">
+                <ModalField label="¿Qué certificado necesitas?">
                   <Segmented
                     value={datos.tipoCertificado}
                     onChange={(v) => onCambiarTipoCertificado(v as TipoCertificado)}
@@ -194,7 +193,7 @@ export default function CertificadoModal({
                     ]}
                   />
                 </ModalField>
-                <ModalField label="Denominación">
+                <ModalField label="Tipo de extintores">
                   <Segmented
                     value={datos.denominacion}
                     onChange={(v) => onCambiarDenominacion(v as Denominacion)}
@@ -206,8 +205,13 @@ export default function CertificadoModal({
                     ]}
                   />
                 </ModalField>
+              </div>
+            </ModalSection>
+
+            <ModalSection title="2️⃣ Extintores a Incluir">
+              <div className="flex flex-col gap-3">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <ModalField label="Extintores a incluir">
+                  <ModalField label="Por tipo de agente">
                     <select value={filtroAgente} onChange={(e) => onCambiarFiltroAgente(e.target.value)} className={modalInput}>
                       <option value="todos">Todos los extintores</option>
                       {familiasDisponibles.map((f) => (
@@ -215,7 +219,7 @@ export default function CertificadoModal({
                       ))}
                     </select>
                   </ModalField>
-                  <ModalField label="Estado a incluir">
+                  <ModalField label="Por estado">
                     <select value={filtroEstado} onChange={(e) => onCambiarFiltroEstado(e.target.value)} className={modalInput}>
                       <option value="todos">Todos los estados</option>
                       {estadosDisponibles.map((e) => (
@@ -232,66 +236,16 @@ export default function CertificadoModal({
                     </ModalField>
                   )}
                 </div>
-              </div>
-            </ModalSection>
-
-            <ModalSection title="🏢 Datos del Cliente">
-              <div className="flex flex-col gap-3">
-                <ModalField label={`Nombre / Razón Social${esPlacaSola ? " (opcional)" : ""}`}>
-                  <input value={datos.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className={modalInput} />
-                </ModalField>
-                <ModalField label="Tipo de documento">
-                  <Segmented
-                    value={datos.tipoIdentificacion}
-                    onChange={(v) => onCambiarTipoIdentificacion(v as TipoIdentificacion)}
-                    options={[
-                      { value: "ruc", label: "RUC" },
-                      { value: "dni", label: "DNI" },
-                      { value: "placa", label: "Placa" },
-                      { value: "placa_sola", label: "Placa Sola" },
-                    ]}
-                  />
-                </ModalField>
-                <ModalField label={`Número de ${labelNumero}`}>
-                  <input
-                    value={datos.numeroIdentificacion}
-                    onChange={(e) => handleNumeroChange(e.target.value)}
-                    placeholder={esPlacaTipo ? "A13-54C" : esRuc ? "11 dígitos" : esDni ? "8 dígitos" : ""}
-                    inputMode={esPlacaTipo ? "text" : "numeric"}
-                    className={`${modalInput} ${numeroInvalido ? "border-amber-600" : ""}`}
-                  />
-                  {numeroInvalido && (
-                    <p className="text-[11px] font-bold text-amber-500 mt-1">
-                      ⚠️ {esRuc ? "El RUC debe tener 11 dígitos" : esDni ? "El DNI debe tener 8 dígitos" : "La placa debe tener 6 caracteres (ej. A13-54C)"}
-                    </p>
-                  )}
-                </ModalField>
-                {esPlacaTipo && (
-                  <ModalField label="DNI (opcional)">
-                    <input
-                      value={datos.dniAdicional}
-                      onChange={(e) => onChange({ dniAdicional: e.target.value.replace(/\D/g, "").slice(0, 8) })}
-                      inputMode="numeric"
-                      className={`${modalInput} ${dniAdicionalInvalido ? "border-amber-600" : ""}`}
-                    />
-                    {dniAdicionalInvalido && <p className="text-[11px] font-bold text-amber-500 mt-1">⚠️ El DNI debe tener 8 dígitos</p>}
-                  </ModalField>
-                )}
-                {esPlacaSola && !datos.dniAdicional && !datos.nombre.trim() && (
-                  <p className="text-[11px] text-zinc-500 -mt-1">Sin nombre ni DNI, el certificado mostrará "UNIDAD PLACA {datos.numeroIdentificacion || "—"}"</p>
-                )}
-                {!esPlacaTipo && (
-                  <ModalField label="Ubicación">
-                    <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={modalInput} />
-                  </ModalField>
-                )}
+                <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
+                  {datos.items.length === 0 ? "Ningún extintor cumple con el filtro seleccionado" : `✅ ${datos.items.length} extintor${datos.items.length === 1 ? "" : "es"} incluido${datos.items.length === 1 ? "" : "s"} · ${datos.agentesTexto}`}
+                </p>
               </div>
             </ModalSection>
 
             {!esPH && (
-              <ModalSection title="✏️ Texto del Certificado">
+              <ModalSection title="3️⃣ Texto del Certificado">
                 <div className="flex flex-col gap-2">
-                  <p className="text-[11px] text-zinc-500 -mt-1">Elige qué trabajo describe el certificado, independiente de los extintores incluidos</p>
+                  <p className="text-[11px] text-zinc-500 -mt-1">¿Qué trabajo se hizo? Puedes elegir más de uno</p>
                   <div className={`flex flex-wrap gap-1.5 ${accionesBloqueadas ? "opacity-50 pointer-events-none" : ""}`}>
                     {ACCIONES_TRABAJO.map((a) => (
                       <ColumnaChip
@@ -313,7 +267,59 @@ export default function CertificadoModal({
               </ModalSection>
             )}
 
-            <ModalSection title="📅 Fecha del Certificado">
+            <ModalSection title="4️⃣ Datos del Cliente">
+              <div className="flex flex-col gap-3">
+                <ModalField label="Tipo de documento">
+                  <Segmented
+                    value={datos.tipoIdentificacion}
+                    onChange={(v) => onCambiarTipoIdentificacion(v as TipoIdentificacion)}
+                    options={[
+                      { value: "ruc", label: "RUC" },
+                      { value: "dni", label: "DNI" },
+                      { value: "placa", label: "Placa" },
+                    ]}
+                  />
+                </ModalField>
+                <ModalField label={`Número de ${labelNumero}`}>
+                  <input
+                    value={datos.numeroIdentificacion}
+                    onChange={(e) => handleNumeroChange(e.target.value)}
+                    placeholder={esPlaca ? "A13-54C" : esRuc ? "11 dígitos" : esDni ? "8 dígitos" : ""}
+                    inputMode={esPlaca ? "text" : "numeric"}
+                    className={`${modalInput} ${numeroInvalido ? "border-amber-600" : ""}`}
+                  />
+                  {numeroInvalido && (
+                    <p className="text-[11px] font-bold text-amber-500 mt-1">
+                      ⚠️ {esRuc ? "El RUC debe tener 11 dígitos" : esDni ? "El DNI debe tener 8 dígitos" : "La placa debe tener 6 caracteres (ej. A13-54C)"}
+                    </p>
+                  )}
+                </ModalField>
+                <ModalField label={`Nombre / Razón Social${esPlaca ? " (opcional)" : ""}`}>
+                  <input value={datos.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className={modalInput} />
+                </ModalField>
+                {esPlaca && (
+                  <ModalField label="DNI del conductor (opcional)">
+                    <input
+                      value={datos.dniAdicional}
+                      onChange={(e) => onChange({ dniAdicional: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+                      inputMode="numeric"
+                      className={`${modalInput} ${dniAdicionalInvalido ? "border-amber-600" : ""}`}
+                    />
+                    {dniAdicionalInvalido && <p className="text-[11px] font-bold text-amber-500 mt-1">⚠️ El DNI debe tener 8 dígitos</p>}
+                  </ModalField>
+                )}
+                {soloUnidadPlaca && (
+                  <p className="text-[11px] text-zinc-500 -mt-1">Sin nombre ni DNI, el certificado mostrará: "UNIDAD PLACA {datos.numeroIdentificacion || "—"}"</p>
+                )}
+                {!esPlaca && (
+                  <ModalField label="Ubicación">
+                    <input value={datos.ubicacion} onChange={(e) => onChange({ ubicacion: e.target.value })} className={modalInput} />
+                  </ModalField>
+                )}
+              </div>
+            </ModalSection>
+
+            <ModalSection title="5️⃣ Fecha del Certificado">
               <div className="grid grid-cols-3 gap-2">
                 <ModalField label="Día">
                   <input type="number" min={1} max={31} value={datos.diaFecha} onChange={(e) => onChange({ diaFecha: String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))) })} className={modalInput} />
@@ -329,9 +335,9 @@ export default function CertificadoModal({
               </div>
             </ModalSection>
 
-            <ModalSection title="📊 Columnas de la Tabla">
+            <ModalSection title="6️⃣ Columnas de la Tabla">
               <div className="flex flex-col gap-4">
-                <p className="text-[11px] text-zinc-500 -mt-1">Toca una columna opcional para agregarla o quitarla del certificado</p>
+                {/* <p className="text-[11px] text-zinc-500 -mt-1">Toca una columna opcional para agregarla o quitarla del certificado</p>
 
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Siempre visibles</span>
@@ -347,7 +353,7 @@ export default function CertificadoModal({
                       </span>
                     )}
                   </div>
-                </div>
+                </div> */}
 
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Agregar columnas opcionales</span>
@@ -363,16 +369,8 @@ export default function CertificadoModal({
                     ))}
                   </div>
                 </div>
-              </div>
-            </ModalSection>
 
-            <ModalSection title="🧯 Extintores Incluidos">
-              <div className="flex flex-col gap-3">
-                <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
-                  {datos.items.length === 0 ? "Ningún extintor cumple con el filtro seleccionado" : `${datos.items.length} extintor${datos.items.length === 1 ? "" : "es"} · ${datos.agentesTexto}`}
-                </p>
-
-                {datos.items.length > 0 && (
+                {datos.columnas.rating && datos.items.length > 0 && (
                   <ModalField label="Rating por extintor (manual)">
                     <div className="flex flex-col gap-2 max-h-48 overflow-y-auto bg-zinc-950/50 border border-zinc-800/60 rounded-xl p-3">
                       {datos.items.map((it) => (

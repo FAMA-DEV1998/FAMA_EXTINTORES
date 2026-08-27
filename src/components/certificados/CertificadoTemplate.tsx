@@ -1,7 +1,7 @@
 import { MESES } from "../../constants";
 
 export type TipoCertificado = "garantia" | "ph";
-export type TipoIdentificacion = "ruc" | "dni" | "placa" | "placa_sola";
+export type TipoIdentificacion = "ruc" | "dni" | "placa";
 export type Denominacion = "portatiles_rodantes" | "portatiles" | "rodantes" | "extintores";
 
 export interface CertificadoItem {
@@ -84,9 +84,7 @@ const tituloCertificado = (tipo: TipoCertificado, denominacion: Denominacion): s
 export default function CertificadoTemplate({ datos }: Props) {
   const esPH = datos.tipoCertificado === "ph";
   const esPlaca = datos.tipoIdentificacion === "placa";
-  const esPlacaSola = datos.tipoIdentificacion === "placa_sola";
-  const esPlacaTipo = esPlaca || esPlacaSola;
-  const soloUnidadPlaca = esPlacaSola && !datos.dniAdicional && !datos.nombre.trim();
+  const soloUnidadPlaca = esPlaca && !datos.dniAdicional && !datos.nombre.trim();
   const esSingular = datos.items.length === 1;
   const labelIdentificacion = datos.tipoIdentificacion === "ruc" ? "RUC N°" : datos.tipoIdentificacion === "dni" ? "DNI N°" : "Placa N°";
   const mesLabel = MESES.find((m) => m.value === datos.mesFecha)?.label.toLowerCase() || "";
@@ -101,7 +99,7 @@ export default function CertificadoTemplate({ datos }: Props) {
 
   return (
     <div style={{ fontFamily: "Arial, Helvetica, sans-serif" }} className="bg-white text-black">
-      <div className="w-[210mm] min-h-[297mm] px-10 py-10 relative text-[14px]">
+      <div className="w-[210mm] min-h-[297mm] px-10 py-15 relative text-[14px]">
         <header className="grid grid-cols-[110px_1fr_110px] items-center gap-4 mb-6">
           <div className="h-28 flex items-center justify-center">
             <img src="/images/logo-extintor.png" alt="Extintor" className="max-h-full max-w-full object-contain" />
@@ -151,11 +149,11 @@ export default function CertificadoTemplate({ datos }: Props) {
                   <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
                   <span className="font-bold">
                     {labelIdentificacion} {datos.numeroIdentificacion || "—"}
-                    {esPlacaTipo && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
+                    {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
                   </span>
                 </>
               )}
-              {!esPlacaTipo && (
+              {!esPlaca && (
                 <>
                   {" "}ubicado en <span className="font-bold">{datos.ubicacion || "—"}</span>
                 </>
@@ -172,7 +170,7 @@ export default function CertificadoTemplate({ datos }: Props) {
                 <>
                   se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
                   ha realizado conforme lo establece la{" "}
-                  <span className="font-bold">NTP 350.043.1-2011; 833.030 según detalle:</span>
+                  <span className="font-bold">NTP 350.043.1; 833.030 según detalle:</span>
                 </>
               )}
             </p>
@@ -229,7 +227,7 @@ export default function CertificadoTemplate({ datos }: Props) {
             </table>
 
             <p className="text-justify mb-5 leading-[1.6]">
-              <span className="font-bold">{esSingular ? "El extintor entregado en calidad de aprobado" : "LOS EXTINTORES ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
+              <span className="font-bold">{esSingular ? "EL EXTINTOR ES ENTREGADO EN CALIDAD DE APROBADO" : "LOS EXTINTORES SON ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
               o falla posterior por la mala manipulación, el mal uso (golpes, abolladuras, exposición al calor,
               soldaduras y/o modificaciones, intemperie, oxido, corrosión, etc.) o uso distinto para el que está
               destinado es de responsabilidad del cliente, después de haber sido entregado, 1 año de garantía del
@@ -241,7 +239,7 @@ export default function CertificadoTemplate({ datos }: Props) {
               inspeccionar su extintor una vez al mes por si exista la posibilidad de que lo hayan utilizado.
             </p>
 
-            <p className="mb-8">{datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
+            <p className="mb-8">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
 
             <div className="flex justify-center w-full mt-6">
               <div className="relative w-80 flex flex-col items-center">
