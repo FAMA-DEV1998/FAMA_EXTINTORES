@@ -160,13 +160,15 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
               </span>
             )}
           </Link>
-          <Link
-            to="/dashboard/voz"
-            title="Aprendizaje de Dictado por Voz"
-            className={`flex-1 md:flex-none px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${location.pathname.startsWith("/dashboard/voz") ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
-          >
-            🎤 {sidebarOpen && "Dictado por Voz"}
-          </Link>
+          {user.role === "boss" && (
+            <Link
+              to="/dashboard/voz"
+              title="Aprendizaje de Dictado por Voz"
+              className={`flex-1 md:flex-none px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${location.pathname.startsWith("/dashboard/voz") ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
+            >
+              🎤 {sidebarOpen && "Dictado por Voz"}
+            </Link>
+          )}
         </aside>
         <div className="flex-1 min-w-0">
         <Routes>
@@ -174,7 +176,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
           <Route path="inventario" element={<InventarioPage socket={socket} catalogs={catalogs} userRole={user.role} />} />
           <Route path="cotizaciones" element={<CotizacionesPage socket={socket} />} />
           <Route path="alertas" element={<AlertasPage socket={socket} />} />
-          <Route path="voz" element={<VozAprendizajePage socket={socket} catalogs={catalogs} />} />
+          {user.role === "boss" && <Route path="voz" element={<VozAprendizajePage socket={socket} catalogs={catalogs} role={user.role} />} />}
           <Route path=":empresaSlug" element={<EmpresaLayout socket={socket} catalogs={catalogs} user={user} />}>
             <Route index element={<Navigate to="extintores" replace />} />
             <Route path="extintores" element={<ExtintoresView />} />

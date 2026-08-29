@@ -10,7 +10,7 @@ declare global {
   }
 }
 
-type TipoCorreccion = "marca" | "agenteExtintor" | "estadoExtintor";
+type TipoCorreccion = "marca" | "agenteExtintor" | "estadoExtintor" | "mes" | "servicioExtra";
 
 const normalizarTexto = (v: string): string =>
   (v || "")
@@ -91,16 +91,51 @@ const mejorCoincidencia = (texto: string, opciones: string[], correcciones: Reco
   return mejor;
 };
 
-const PALABRAS_NUMERO: Record<string, string> = {
-  cero: "0", uno: "1", una: "1", dos: "2", tres: "3", cuatro: "4", cinco: "5",
-  seis: "6", siete: "7", ocho: "8", nueve: "9",
+const UNIDADES_NUMERO: Record<string, number> = {
+  cero: 0, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9,
+  diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15,
+  dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19,
+  veinte: 20, veintiuno: 21, veintidos: 22, veintitres: 23, veinticuatro: 24, veinticinco: 25,
+  veintiseis: 26, veintisiete: 27, veintiocho: 28, veintinueve: 29,
+};
+
+const DECENAS_NUMERO: Record<string, number> = {
+  treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90,
+};
+
+const CENTENAS_NUMERO: Record<string, number> = {
+  cien: 100, ciento: 100, doscientos: 200, trescientos: 300, cuatrocientos: 400, quinientos: 500,
+  seiscientos: 600, setecientos: 700, ochocientos: 800, novecientos: 900,
+};
+
+const parsearGrupoNumero = (palabras: string[]): { valor: number; consumidas: number } | null => {
+  let i = 0;
+  let total = 0;
+  let encontrado = false;
+  if (CENTENAS_NUMERO[palabras[i]] !== undefined) { total += CENTENAS_NUMERO[palabras[i]]; i++; encontrado = true; }
+  if (DECENAS_NUMERO[palabras[i]] !== undefined) {
+    total += DECENAS_NUMERO[palabras[i]]; i++; encontrado = true;
+    if (palabras[i] === "y" && UNIDADES_NUMERO[palabras[i + 1]] !== undefined && UNIDADES_NUMERO[palabras[i + 1]] < 10) {
+      total += UNIDADES_NUMERO[palabras[i + 1]]; i += 2;
+    }
+  } else if (UNIDADES_NUMERO[palabras[i]] !== undefined) {
+    total += UNIDADES_NUMERO[palabras[i]]; i++; encontrado = true;
+  }
+  if (!encontrado) return null;
+  return { valor: total, consumidas: i };
 };
 
 const extraerNumero = (texto: string): string => {
-  const directo = texto.match(/\d+(\.\d+)?/);
-  if (directo) return directo[0];
-  const palabras = normalizarTexto(texto).split(" ").map((p) => PALABRAS_NUMERO[p] || "").filter(Boolean);
-  return palabras.join("");
+  const palabras = normalizarTexto(texto).split(" ").filter(Boolean);
+  let resultado = "";
+  let i = 0;
+  while (i < palabras.length) {
+    if (/^\d+(\.\d+)?$/.test(palabras[i])) { resultado += palabras[i]; i++; continue; }
+    const grupo = parsearGrupoNumero(palabras.slice(i));
+    if (grupo) { resultado += String(grupo.valor); i += grupo.consumidas; continue; }
+    i++;
+  }
+  return resultado;
 };
 
 const masCercano = (valor: string, opciones: readonly string[]): string => {
@@ -249,18 +284,18 @@ export function parsearComandoVoz(
       if (numero.length === 4) { campos.fechaFabricacion = numero; detecciones.push({ campo, label: "Año Fabricación", valor: numero, textoOido: seg, confianza: 1, editable: true }); }
     } else if (campo === "ph") {
       const anio = (seg.match(/\d{4}/) || [""])[0];
-      const mesMatch = mejorCoincidencia(seg, MESES.map((m) => m.label), {});
+      const mesMatch = mejorCoincidencia(seg, MESES.map((m) => m.label), contexto.correcciones.mes || {});
       const mes = mesMatch && mesMatch.confianza >= 0.5 ? MESES.find((m) => m.label === mesMatch.valor)?.value || "" : "";
       if (mes) { campos.mesRealizadoPH = mes; }
       if (anio.length === 4) { campos.realizadoPH = anio; }
-      if (mes || anio) detecciones.push({ campo, label: "PH Realizado", valor: `${mesMatch?.valor || ""} ${anio}`.trim(), textoOido: seg, confianza: mesMatch?.confianza || 0, editable: true });
+      if (mes || anio) detecciones.push({ campo, label: "PH Realizado", valor: `${mesMatch?.valor || ""} ${anio}`.trim(), textoOido: seg, confianza: mesMatch?.confianza || 0, opciones: MESES.map((m) => m.label), tipoCorreccion: "mes", editable: true });
     } else if (campo === "estadoExtintor") {
       const segLimpio = limpiarRelleno(seg);
       const alias = ESTADO_ALIAS[segLimpio];
-      const match = alias ? { valor: alias, confianza: 1 } : mejorCoincidencia(segLimpio, ESTADOS, {});
+      const match = alias ? { valor: alias, confianza: 1 } : mejorCoincidencia(segLimpio, ESTADOS, contexto.correcciones.estadoExtintor || {});
       if (match) {
         campos.estadoExtintor = match.valor;
-        detecciones.push({ campo, label: "Estado", valor: match.valor, textoOido: segLimpio, confianza: match.confianza, opciones: ESTADOS, editable: true });
+        detecciones.push({ campo, label: "Estado", valor: match.valor, textoOido: segLimpio, confianza: match.confianza, opciones: ESTADOS, tipoCorreccion: "estadoExtintor", editable: true });
       }
     } else if (campo === "agenteExtintor") {
       const segLimpio = limpiarRelleno(seg);
@@ -302,12 +337,12 @@ export function parsearComandoVoz(
     } else if (campo === "servicioExtra") {
       const partes = seg.split(/\s+y\s+|,/).map((p) => p.trim()).filter(Boolean);
       const resueltas = partes
-        .map((p) => mejorCoincidencia(p, contexto.serviciosExtra, {}))
+        .map((p) => mejorCoincidencia(p, contexto.serviciosExtra, contexto.correcciones.servicioExtra || {}))
         .filter((m): m is { valor: string; confianza: number } => !!m && m.confianza >= 0.5)
         .map((m) => m.valor);
       if (resueltas.length > 0) {
         campos.servicioExtra = resueltas.join(", ");
-        detecciones.push({ campo, label: "Servicio Adicional", valor: campos.servicioExtra, textoOido: seg, confianza: 1, opciones: contexto.serviciosExtra, editable: true });
+        detecciones.push({ campo, label: "Servicio Adicional", valor: campos.servicioExtra, textoOido: seg, confianza: 1, opciones: contexto.serviciosExtra, tipoCorreccion: "servicioExtra", editable: true });
       }
     } else if (campo === "observaciones") {
       const valor = seg.charAt(0).toUpperCase() + seg.slice(1);
@@ -326,11 +361,14 @@ export function useVoiceDictado(socket: Socket | null) {
   const [soportado] = useState(() => typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   const [escuchando, setEscuchando] = useState(false);
   const [transcripcion, setTranscripcion] = useState("");
+  const [transcripcionFinal, setTranscripcionFinal] = useState("");
   const [correcciones, setCorrecciones] = useState<Record<string, Record<string, string>>>({});
   const recognitionRef = useRef<any>(null);
   const detenerManualRef = useRef(false);
   const baseRef = useRef("");
   const actualRef = useRef("");
+  const baseFinalRef = useRef("");
+  const actualFinalRef = useRef("");
 
   useEffect(() => {
     if (!socket) return;
@@ -350,14 +388,22 @@ export function useVoiceDictado(socket: Socket | null) {
     recognition.interimResults = true;
     recognition.onresult = (event: any) => {
       let texto = "";
-      for (let i = 0; i < event.results.length; i++) texto += event.results[i][0].transcript + " ";
+      let final = "";
+      for (let i = 0; i < event.results.length; i++) {
+        texto += event.results[i][0].transcript + " ";
+        if (event.results[i].isFinal) final += event.results[i][0].transcript + " ";
+      }
       actualRef.current = texto.trim();
+      actualFinalRef.current = final.trim();
       setTranscripcion(colapsarRepeticiones(`${baseRef.current} ${actualRef.current}`.trim()));
+      setTranscripcionFinal(colapsarRepeticiones(`${baseFinalRef.current} ${actualFinalRef.current}`.trim()));
     };
     recognition.onend = () => {
       if (!detenerManualRef.current) {
         baseRef.current = `${baseRef.current} ${actualRef.current}`.trim();
+        baseFinalRef.current = `${baseFinalRef.current} ${actualFinalRef.current}`.trim();
         actualRef.current = "";
+        actualFinalRef.current = "";
         recognitionRef.current = construirReconocimiento();
         recognitionRef.current.start();
         return;
@@ -376,7 +422,10 @@ export function useVoiceDictado(socket: Socket | null) {
     detenerManualRef.current = false;
     baseRef.current = "";
     actualRef.current = "";
+    baseFinalRef.current = "";
+    actualFinalRef.current = "";
     setTranscripcion("");
+    setTranscripcionFinal("");
     recognitionRef.current = construirReconocimiento();
     recognitionRef.current.start();
     setEscuchando(true);
@@ -391,7 +440,10 @@ export function useVoiceDictado(socket: Socket | null) {
   const reiniciar = () => {
     baseRef.current = "";
     actualRef.current = "";
+    baseFinalRef.current = "";
+    actualFinalRef.current = "";
     setTranscripcion("");
+    setTranscripcionFinal("");
   };
 
   const registrarCorreccion = (tipo: TipoCorreccion, textoOido: string, valorElegido: string, esCorreccion = true) => {
@@ -401,5 +453,5 @@ export function useVoiceDictado(socket: Socket | null) {
     socket?.emit("voz:correcciones:save", { tipo, clave, valor: valorElegido, esCorreccion });
   };
 
-  return { soportado, escuchando, transcripcion, iniciar, detener, reiniciar, correcciones, registrarCorreccion };
+  return { soportado, escuchando, transcripcion, transcripcionFinal, iniciar, detener, reiniciar, correcciones, registrarCorreccion };
 }

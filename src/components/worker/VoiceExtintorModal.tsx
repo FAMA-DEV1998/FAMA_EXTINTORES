@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { FormData } from "../../types";
 import { ESTADOS, MESES, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL } from "../../constants";
@@ -111,12 +111,13 @@ function ChipSelector({ opciones, valor, onSeleccionar }: { opciones: string[]; 
 }
 
 export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, agentes, recargas, serviciosExtra, unidadActual, socket }: VoiceExtintorModalProps) {
-    const { soportado, escuchando, transcripcion, iniciar, detener, reiniciar, correcciones, registrarCorreccion } = useVoiceDictado(socket);
+    const { soportado, escuchando, transcripcion, transcripcionFinal, iniciar, detener, reiniciar, correcciones, registrarCorreccion } = useVoiceDictado(socket);
     const [detecciones, setDetecciones] = useState<DeteccionVoz[]>([]);
     const [camposBase, setCamposBase] = useState<Partial<FormData>>({});
+    const aprendidoRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
-        if (!open) { reiniciar(); setDetecciones([]); setCamposBase({}); }
+        if (!open) { reiniciar(); setDetecciones([]); setCamposBase({}); aprendidoRef.current = new Set(); }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
@@ -138,6 +139,19 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transcripcion, escuchando]);
 
+    useEffect(() => {
+        if (!transcripcionFinal.trim()) return;
+        const resultado = parsearComandoVoz(transcripcionFinal, { marcas, agentes, recargas, serviciosExtra, unidadActual: camposBase.unidadPeso || unidadActual, correcciones });
+        resultado.detecciones.forEach((d) => {
+            if (!d.tipoCorreccion || !d.textoOido || !d.valor) return;
+            const clave = `${d.tipoCorreccion}:${d.textoOido}:${d.valor}`;
+            if (aprendidoRef.current.has(clave)) return;
+            aprendidoRef.current.add(clave);
+            registrarCorreccion(d.tipoCorreccion, d.textoOido, d.valor, false);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [transcripcionFinal]);
+
     if (!open) return null;
 
     const procesar = () => {
@@ -155,6 +169,8 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
         if (detMarca && camposBase.marca) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca, camposBase.marca !== detMarca.valor);
         const detAgente = detFor("agenteExtintor");
         if (detAgente && camposBase.agenteExtintor) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, camposBase.agenteExtintor !== detAgente.valor);
+        const detEstado = detFor("estadoExtintor");
+        if (detEstado && camposBase.estadoExtintor) registrarCorreccion("estadoExtintor", detEstado.textoOido, camposBase.estadoExtintor, camposBase.estadoExtintor !== detEstado.valor);
         onAplicar(camposBase);
         onClose();
     };

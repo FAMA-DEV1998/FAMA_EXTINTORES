@@ -11,7 +11,7 @@ export interface VozCorreccionRow {
   updatedAt: string;
 }
 
-export function useVozAprendizaje(socket: Socket | null) {
+export function useVozAprendizaje(socket: Socket | null, role: string) {
   const [lista, setLista] = useState<VozCorreccionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -19,7 +19,7 @@ export function useVozAprendizaje(socket: Socket | null) {
   const cargar = () => {
     if (!socket) return;
     setLoading(true);
-    socket.emit("voz:correcciones:listDetalle", {}, (res: any) => {
+    socket.emit("voz:correcciones:listDetalle", { role }, (res: any) => {
       setLoading(false);
       if (res?.success) setLista(res.lista || []);
     });
@@ -36,7 +36,7 @@ export function useVozAprendizaje(socket: Socket | null) {
   const actualizarValor = (id: number, valor: string, onDone?: (ok: boolean) => void) => {
     if (!socket) return;
     setSaving(true);
-    socket.emit("voz:correcciones:update", { id, valor }, (res: any) => {
+    socket.emit("voz:correcciones:update", { role, id, valor }, (res: any) => {
       setSaving(false);
       if (res?.success) setLista(res.lista || []);
       onDone?.(!!res?.success);
@@ -46,7 +46,7 @@ export function useVozAprendizaje(socket: Socket | null) {
   const eliminar = (id: number, onDone?: (ok: boolean) => void) => {
     if (!socket) return;
     setSaving(true);
-    socket.emit("voz:correcciones:delete", { id }, (res: any) => {
+    socket.emit("voz:correcciones:delete", { role, id }, (res: any) => {
       setSaving(false);
       if (res?.success) setLista(res.lista || []);
       onDone?.(!!res?.success);
@@ -56,7 +56,7 @@ export function useVozAprendizaje(socket: Socket | null) {
   const crear = (tipo: string, clave: string, valor: string, onDone?: (ok: boolean) => void) => {
     if (!socket) return;
     setSaving(true);
-    socket.emit("voz:correcciones:create", { tipo, clave, valor }, (res: any) => {
+    socket.emit("voz:correcciones:create", { role, tipo, clave, valor }, (res: any) => {
       setSaving(false);
       if (res?.success) setLista(res.lista || []);
       onDone?.(!!res?.success);

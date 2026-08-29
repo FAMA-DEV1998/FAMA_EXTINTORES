@@ -6,10 +6,21 @@ const TIPO_LABEL: Record<string, string> = {
     marca: "Marca",
     agenteExtintor: "Agente",
     estadoExtintor: "Estado",
+    mes: "Mes (PH)",
+    servicioExtra: "Adicional",
 };
 
-export default function VozAprendizajePage({ socket, catalogs }: { socket: Socket | null; catalogs: { marcas: { value: string }[]; agentes: { value: string }[] } }) {
-    const { lista, loading, saving, actualizarValor, eliminar, crear } = useVozAprendizaje(socket);
+export default function VozAprendizajePage({ socket, catalogs, role }: { socket: Socket | null; catalogs: { marcas: { value: string }[]; agentes: { value: string }[] }; role: string }) {
+    const { lista, loading, saving, actualizarValor, eliminar, crear } = useVozAprendizaje(socket, role);
+
+    if (role !== "boss") {
+        return (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center text-sm text-zinc-400 max-w-lg">
+                Esta sección solo está disponible para el usuario Boss.
+            </div>
+        );
+    }
+
     const [filtroTipo, setFiltroTipo] = useState<string>("todos");
     const [editandoId, setEditandoId] = useState<number | null>(null);
     const [valorEdicion, setValorEdicion] = useState("");
@@ -57,6 +68,8 @@ export default function VozAprendizajePage({ socket, catalogs }: { socket: Socke
                         <option value="marca">Marca</option>
                         <option value="agenteExtintor">Agente</option>
                         <option value="estadoExtintor">Estado</option>
+                        <option value="mes">Mes (PH)</option>
+                        <option value="servicioExtra">Adicional</option>
                     </select>
                     <input value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} placeholder="Texto que se escucha (ej: badier)" className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600" />
                     <input value={nuevoValor} onChange={(e) => setNuevoValor(e.target.value)} placeholder="Valor correcto (ej: Badger)" list="voz-valores-nuevo" className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600" />
