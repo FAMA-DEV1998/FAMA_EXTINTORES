@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Socket } from "socket.io-client";
 import { Link } from "react-router-dom";
 import { useAlertas, ANTICIPACION_OPCIONES } from "../../hooks/dashboard/useAlertas";
+import { estadoColor } from "../../utils/helpers";
 
 const numeroWhatsapp = (celular: string) => {
   let num = (celular || "").replace(/\D/g, "");
@@ -9,62 +10,202 @@ const numeroWhatsapp = (celular: string) => {
   return num;
 };
 
-const campoInfo = (label: string, valor: string) => (
-  <div className="flex flex-col gap-0.5 min-w-0">
-    <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{label}</p>
-    <p className="text-xs font-semibold text-zinc-200 truncate">{valor}</p>
-  </div>
-);
+const MOSTRAR_ALERTAS_PH = false;
+const MOSTRAR_SERVICIO_PROXIMO = true;
 
-const AlertaBadge = ({ label, vencido, tono }: { label: string; vencido: boolean; tono: "ambar" | "azul" }) => {
+const filtrarAlertaVisible = (alertas: any[]) => alertas
+  .map((a: any) => ({
+    ...a,
+    ph: MOSTRAR_ALERTAS_PH ? a.ph : null,
+    revision: a.revision && (MOSTRAR_SERVICIO_PROXIMO || a.revision.vencido) ? a.revision : null,
+  }))
+  .map((a: any) => ({ ...a, vencido: !!(a.revision?.vencido || a.ph?.vencido) }))
+  .filter((a: any) => a.revision || a.ph);
+
+const MotivoBadge = ({ label, vencido, tono }: { label: string; vencido: boolean; tono: "ambar" | "azul" }) => {
   const colores = vencido
     ? "text-red-400 bg-red-950/30 border-red-900/40"
     : tono === "ambar"
       ? "text-amber-400 bg-amber-950/30 border-amber-900/40"
       : "text-sky-400 bg-sky-950/30 border-sky-900/40";
-  return <span className={`text-xs font-black px-3 py-1.5 rounded-lg border whitespace-nowrap ${colores}`}>{vencido ? "🔴" : tono === "ambar" ? "🟡" : "🔵"} {label}</span>;
+  return <span className={`text-[10px] font-black px-2 py-1 rounded-md border whitespace-nowrap ${colores}`}>{vencido ? "🔴" : tono === "ambar" ? "🟡" : "🔵"} {label}</span>;
 };
 
-function AlertaCard({ a }: { a: any }) {
+function AlertaRow({ a, onDescartar }: { a: any; onDescartar: (uid: string, motivo: string) => void }) {
+  const [descartando, setDescartando] = useState(false);
+  const [motivo, setMotivo] = useState("");
+
+  const confirmarDescarte = () => {
+    onDescartar(a.uid, motivo.trim());
+    setDescartando(false);
+    setMotivo("");
+  };
+
   return (
-    <div className="rounded-xl border border-zinc-800/60 bg-zinc-950/40 p-4 flex flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center text-lg shrink-0">🧯</span>
-          <div className="min-w-0">
-            <p className="text-sm font-black text-zinc-100 truncate">{a.marca || "Sin marca registrada"}</p>
-            <p className="text-[11px] text-zinc-500 truncate">{a.capacidad || "Sin capacidad"} {a.agente ? `· ${a.agente}` : ""}</p>
+    <>
+      <tr className={`border-b border-zinc-800/40 last:border-0 ${a.vencido ? "bg-red-950/10" : ""}`}>
+        <td className="px-3 py-2.5 text-xs font-bold text-zinc-200 whitespace-nowrap">{a.nSerie || "—"}</td>
+        <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{a.nInterno || "—"}</td>
+        <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap max-w-32 truncate">{a.marca || "—"}</td>
+        <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{a.agente || "—"}</td>
+        <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{a.capacidad || "—"}</td>
+        <td className="px-3 py-2.5 whitespace-nowrap">
+          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${estadoColor[a.estado] || "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>{a.estado || "—"}</span>
+        </td>
+        <td className="px-3 py-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {a.revision && (
+              <MotivoBadge label={a.revision.vencido ? `Servicio vencido — ${a.revision.vence}` : `Servicio/recarga por vencer: ${a.revision.vence}`} vencido={a.revision.vencido} tono="ambar" />
+            )}
+            {a.ph && (
+              <MotivoBadge label={a.ph.vencido ? `PH vencida — ${a.ph.vence}` : `PH por vencer: ${a.ph.vence}`} vencido={a.ph.vencido} tono="azul" />
+            )}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          {a.revision && (
-            <AlertaBadge
-              label={a.revision.vencido ? `Revisión vencida — ${a.revision.vence}` : `Próxima revisión: ${a.revision.vence}`}
-              vencido={a.revision.vencido}
-              tono="ambar"
-            />
-          )}
-          {a.ph && (
-            <AlertaBadge
-              label={a.ph.vencido ? `PH vencida — ${a.ph.vence}` : `PH vence: ${a.ph.vence}`}
-              vencido={a.ph.vencido}
-              tono="azul"
-            />
-          )}
-        </div>
+        </td>
+        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          <button onClick={() => setDescartando((v) => !v)} className="text-[11px] font-bold text-zinc-500 hover:text-zinc-300 px-2.5 py-1 rounded-lg hover:bg-zinc-800/60">
+            🔕 Descartar
+          </button>
+        </td>
+      </tr>
+      {descartando && (
+        <tr className="border-b border-zinc-800/40 last:border-0 bg-zinc-950/40">
+          <td colSpan={8} className="px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-zinc-500">El cliente no continuará o no responde. Motivo (opcional):</span>
+              <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej: Cliente no responde hace 2 meses" className="flex-1 min-w-40 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-red-600" />
+              <button onClick={confirmarDescarte} className="text-[11px] font-bold text-white bg-red-700 hover:bg-red-600 px-3 py-1.5 rounded-lg">Confirmar</button>
+              <button onClick={() => setDescartando(false)} className="text-[11px] font-bold text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-lg">Cancelar</button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function TablaAlertas({ alertas, onDescartar }: { alertas: any[]; onDescartar: (uid: string, motivo: string) => void }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-zinc-800/60">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="bg-zinc-900/60 border-b border-zinc-800/60">
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Serie</th>
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">N° Interno</th>
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Marca</th>
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Agente</th>
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Peso</th>
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Estado</th>
+            <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Motivo de la alerta</th>
+            <th className="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {alertas.map((a: any) => <AlertaRow key={a.uid} a={a} onDescartar={onDescartar} />)}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SilenciarEmpresaBoton({ empresaId, onDescartar }: { empresaId: string; onDescartar: (empresaId: string, motivo: string) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [motivo, setMotivo] = useState("");
+
+  const confirmar = () => {
+    onDescartar(empresaId, motivo.trim());
+    setAbierto(false);
+    setMotivo("");
+  };
+
+  if (!abierto) {
+    return (
+      <button onClick={() => setAbierto(true)} className="text-xs font-bold text-zinc-400 hover:text-white px-3 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-800">🔕 Silenciar empresa</button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (opcional)" className="flex-1 min-w-40 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-red-600" />
+      <button onClick={confirmar} className="text-xs font-bold text-white bg-red-700 hover:bg-red-600 px-3 py-1.5 rounded-lg">Confirmar</button>
+      <button onClick={() => setAbierto(false)} className="text-xs font-bold text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-lg">Cancelar</button>
+    </div>
+  );
+}
+
+function EmpresasSilenciadasPanel({ empresas, onReactivar }: { empresas: any[]; onReactivar: (empresaId: string) => void }) {
+  if (empresas.length === 0) return null;
+  return (
+    <div className="mt-8 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
+      <div className="px-5 py-4 border-b border-zinc-800/80 bg-zinc-900/60">
+        <h2 className="text-base font-black text-zinc-100">🔕 Empresas con Alertas Silenciadas</h2>
+        <p className="text-xs text-zinc-500 mt-1">{empresas.length} empresa{empresas.length === 1 ? "" : "s"} silenciada{empresas.length === 1 ? "" : "s"}</p>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2.5 bg-zinc-900/40 rounded-lg p-3 border border-zinc-800/40">
-        {campoInfo("N° Interno", a.nInterno || "—")}
-        {campoInfo("N° Serie", a.nSerie || "—")}
-        {campoInfo("Último servicio", a.ultimoServicio || "Sin registro")}
-        {campoInfo("Tipo de servicio", a.tipoServicio || "—")}
+      <div className="divide-y divide-zinc-800/40">
+        {empresas.map((e: any) => (
+          <div key={e.empresaId} className="px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-zinc-200 truncate">{e.razonSocial}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">{e.tipoCliente === "persona" ? "DNI" : "RUC"} {e.ruc || "—"}{e.motivo && ` · ${e.motivo}`}</p>
+            </div>
+            <button onClick={() => onReactivar(e.empresaId)} className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40 shrink-0">✅ Reactivar</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExtintoresSilenciadosPanel({ extintores, onReactivar }: { extintores: any[]; onReactivar: (uid: string) => void }) {
+  if (extintores.length === 0) return null;
+  return (
+    <div className="mt-8 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
+      <div className="px-5 py-4 border-b border-zinc-800/80 bg-zinc-900/60">
+        <h2 className="text-base font-black text-zinc-100">🔕 Extintores con Alerta Silenciada</h2>
+        <p className="text-xs text-zinc-500 mt-1">{extintores.length} extintor{extintores.length === 1 ? "" : "es"} silenciado{extintores.length === 1 ? "" : "s"}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-zinc-900/60 border-b border-zinc-800/60">
+              <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Empresa</th>
+              <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Serie</th>
+              <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">N° Interno</th>
+              <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Marca</th>
+              <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Estado</th>
+              <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Motivo</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {extintores.map((e: any) => (
+              <tr key={e.uid} className="border-b border-zinc-800/40 last:border-0">
+                <td className="px-3 py-2.5 text-xs font-bold text-zinc-200 whitespace-nowrap">{e.razonSocial}{e.sedeNombre && <span className="text-zinc-500 font-normal"> · {e.sedeNombre}</span>}</td>
+                <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{e.nSerie || "—"}</td>
+                <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{e.nInterno || "—"}</td>
+                <td className="px-3 py-2.5 text-xs text-zinc-400 whitespace-nowrap max-w-32 truncate">{e.marca || "—"}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${estadoColor[e.estado] || "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>{e.estado || "—"}</span>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-zinc-500">{e.motivo || "—"}</td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                  <button onClick={() => onReactivar(e.uid)} className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40">✅ Reactivar</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
 export default function AlertasPage({ socket }: { socket: Socket | null }) {
-  const { anticipacionDias, cambiarAnticipacion, empresas, totalVencidas, totalProximas, loading, recargar } = useAlertas(socket);
+  const {
+    anticipacionDias, cambiarAnticipacion, empresas, loading, recargar,
+    descartarAlerta, reactivarAlerta, descartarAlertaEmpresa, reactivarAlertaEmpresa,
+    empresasSilenciadas, extintoresSilenciados,
+  } = useAlertas(socket);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<"todas" | "vencidas" | "proximas">("todas");
@@ -79,7 +220,20 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
     return encodeURIComponent(`Hola, le escribimos de FAMA para coordinar el servicio de sus extintores en ${razonSocial}:\n${lineas.join("\n")}`);
   };
 
-  const empresasFiltradas = empresas
+  const empresasVisibles = empresas
+    .map((empresa: any) => {
+      const sedes = empresa.sedes
+        .map((sede: any) => ({ ...sede, alertas: filtrarAlertaVisible(sede.alertas) }))
+        .filter((sede: any) => sede.alertas.length > 0);
+      return { ...empresa, sedes };
+    })
+    .filter((empresa: any) => empresa.sedes.length > 0);
+
+  const todasLasAlertasVisibles = empresasVisibles.flatMap((e: any) => e.sedes.flatMap((s: any) => s.alertas));
+  const totalVencidasVisibles = todasLasAlertasVisibles.filter((a: any) => a.vencido).length;
+  const totalProximasVisibles = todasLasAlertasVisibles.length - totalVencidasVisibles;
+
+  const empresasFiltradas = empresasVisibles
     .map((empresa: any) => {
       const sedes = empresa.sedes
         .map((sede: any) => ({
@@ -97,7 +251,7 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
         <div>
           <h1 className="text-xl font-black text-white">🔔 Alertas de Vencimiento</h1>
-          <p className="text-xs text-zinc-500 mt-1">Revisión anual y Prueba Hidrostática por vencer</p>
+          <p className="text-xs text-zinc-500 mt-1">{MOSTRAR_ALERTAS_PH ? "Servicio/recarga y Prueba Hidrostática por vencer" : "Servicio vencido (1 año desde el último servicio)"}</p>
         </div>
         <button onClick={recargar} className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-sm font-bold text-zinc-300 self-start md:self-auto">🔄 Actualizar</button>
       </div>
@@ -105,15 +259,15 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
       <div className="flex flex-wrap gap-3 mb-4">
         <button onClick={() => setFiltroEstado("todas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "todas" ? "bg-zinc-800 border-zinc-600" : "bg-zinc-900/30 border-zinc-800/60 hover:border-zinc-700"}`}>
           <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Todas</p>
-          <p className="text-2xl font-black text-white">{totalVencidas + totalProximas}</p>
+          <p className="text-2xl font-black text-white">{totalVencidasVisibles + totalProximasVisibles}</p>
         </button>
         <button onClick={() => setFiltroEstado("vencidas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "vencidas" ? "bg-red-950/40 border-red-700" : "bg-red-950/20 border-red-900/40 hover:border-red-800"}`}>
           <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">🔴 Vencidas</p>
-          <p className="text-2xl font-black text-red-400">{totalVencidas}</p>
+          <p className="text-2xl font-black text-red-400">{totalVencidasVisibles}</p>
         </button>
         <button onClick={() => setFiltroEstado("proximas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "proximas" ? "bg-amber-950/40 border-amber-700" : "bg-amber-950/20 border-amber-900/40 hover:border-amber-800"}`}>
           <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400">🟡 Próximas</p>
-          <p className="text-2xl font-black text-amber-400">{totalProximas}</p>
+          <p className="text-2xl font-black text-amber-400">{totalProximasVisibles}</p>
         </button>
       </div>
 
@@ -130,7 +284,7 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
       <div className="mb-6 flex items-start gap-2.5 bg-zinc-900/20 px-4 py-3 rounded-xl border border-zinc-800/40">
         <span className="text-sm shrink-0">ℹ️</span>
         <p className="text-[11px] text-zinc-500 leading-relaxed">
-          La revisión anual aplica a cualquier servicio o venta (Recarga, Mantenimiento, etc.) por igual. La Prueba Hidrostática vence cada 5 años según el dato ya registrado en el extintor.
+          El servicio/recarga aplica a cualquier trabajo o venta (Recarga, Mantenimiento, etc.) por igual y se considera vencido 1 año después del último servicio.{MOSTRAR_ALERTAS_PH ? " La Prueba Hidrostática vence cada 5 años según el dato ya registrado en el extintor." : ""} Al descartar una alerta, esta deja de mostrarse hasta que se registre un nuevo servicio sobre ese extintor.
         </p>
       </div>
 
@@ -174,9 +328,12 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
                   <div className="p-5 flex flex-col gap-4 bg-zinc-950/20">
                     <div className="flex flex-wrap items-center justify-between gap-2 -mt-1">
                       <Link to={`/dashboard/${empresa.slug}`} className="text-xs font-bold text-zinc-400 hover:text-white px-3 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-800">Ver registro completo</Link>
-                      {!esMultisede && empresa.celular && (
-                        <a href={`https://wa.me/${numeroWhatsapp(empresa.celular)}?text=${mensajeWhatsapp(empresa.razonSocial, todasLasAlertas)}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40">📲 Contactar</a>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!esMultisede && empresa.celular && (
+                          <a href={`https://wa.me/${numeroWhatsapp(empresa.celular)}?text=${mensajeWhatsapp(empresa.razonSocial, todasLasAlertas)}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40">📲 Contactar</a>
+                        )}
+                        <SilenciarEmpresaBoton empresaId={empresa.empresaId} onDescartar={descartarAlertaEmpresa} />
+                      </div>
                     </div>
 
                     {esMultisede ? (
@@ -188,15 +345,13 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
                               <a href={`https://wa.me/${numeroWhatsapp(empresa.celular)}?text=${mensajeWhatsapp(empresa.razonSocial, sede.alertas)}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40">📲 Contactar</a>
                             )}
                           </div>
-                          <div className="p-3 flex flex-col gap-3 bg-zinc-950/20">
-                            {sede.alertas.map((a: any) => <AlertaCard key={a.uid} a={a} />)}
+                          <div className="p-3 bg-zinc-950/20">
+                            <TablaAlertas alertas={sede.alertas} onDescartar={descartarAlerta} />
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="flex flex-col gap-3">
-                        {todasLasAlertas.map((a: any) => <AlertaCard key={a.uid} a={a} />)}
-                      </div>
+                      <TablaAlertas alertas={todasLasAlertas} onDescartar={descartarAlerta} />
                     )}
                   </div>
                 )}
@@ -205,6 +360,9 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
           })}
         </div>
       )}
+
+      <EmpresasSilenciadasPanel empresas={empresasSilenciadas} onReactivar={reactivarAlertaEmpresa} />
+      <ExtintoresSilenciadosPanel extintores={extintoresSilenciados} onReactivar={reactivarAlerta} />
     </div>
   );
 }

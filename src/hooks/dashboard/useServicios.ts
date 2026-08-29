@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { Servicio } from "../../types";
 
+const claveSede = (sedeId?: string | null): string =>
+  sedeId === undefined ? "__todas__" : sedeId === null ? "__sin_sede__" : sedeId;
+
 export function useServicios(socket: Socket | null, empresaId: string | undefined, sedeId: string | null | undefined) {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [servicioModal, setServicioModal] = useState(false);
@@ -10,8 +13,8 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
   useEffect(() => {
     if (!socket || !empresaId) return;
 
-    const onList = (payload: { empresaId: string; sedeId: string | null; list: Servicio[] }) => {
-      if (payload.empresaId === empresaId && (payload.sedeId ?? null) === (sedeId ?? null)) setServicios(payload.list);
+    const onList = (payload: { empresaId: string; filtro: string; list: Servicio[] }) => {
+      if (payload.empresaId === empresaId && payload.filtro === claveSede(sedeId)) setServicios(payload.list);
     };
     socket.on("servicio:list", onList);
     socket.emit("servicio:list", { empresaId, sedeId });
@@ -58,4 +61,22 @@ export function useServicios(socket: Socket | null, empresaId: string | undefine
   };
 
   return { servicios, servicioModal, setServicioModal, savingServicio, saveServicio, deleteServicio, updateServicioDatos, addExtintorToServicio, removeExtintorDeServicio, setExtintorEstado };
+}
+
+export function useServiciosExtintor(socket: Socket | null, empresaId: string | undefined, uid: string | undefined) {
+  const [servicios, setServicios] = useState<Servicio[]>([]);
+
+  useEffect(() => {
+    if (!socket || !empresaId || !uid) { setServicios([]); return; }
+
+    const onList = (payload: { empresaId: string; uid: string; list: Servicio[] }) => {
+      if (payload.empresaId === empresaId && payload.uid === uid) setServicios(payload.list);
+    };
+    socket.on("servicio:listByExtintor", onList);
+    socket.emit("servicio:listByExtintor", { empresaId, uid });
+
+    return () => { socket.off("servicio:listByExtintor", onList); };
+  }, [socket, empresaId, uid]);
+
+  return { servicios };
 }

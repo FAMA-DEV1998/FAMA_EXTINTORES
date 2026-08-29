@@ -79,9 +79,10 @@ function EmpresaLayoutInner({ user }: { user: { role: string } }) {
 
       {/* ── Navegación: jerarquía Empresa → (Sede) → Extintores/Historial ──
           "Sedes" está siempre visible (aunque la empresa aún no tenga
-          ninguna) para poder crear la primera. Sin Sedes, además se
-          muestra "Historial" a nivel Empresa; con Sedes, el Historial pasa
-          a gestionarse por Sede (ver árbol del requerimiento). Dentro de
+          ninguna) para poder crear la primera. El "Historial" a nivel
+          Empresa siempre es accesible (se relabela como "Historial previo
+          a sedes" una vez que existen Sedes) para no perder acceso a los
+          servicios registrados antes de la gestión por Sede. Dentro de
           una Sede: "Extintores" + "Historial", igual que antes. */}
       <nav aria-label="Navegación de la empresa" className="flex items-center gap-2 bg-zinc-900/30 p-1.5 rounded-2xl border border-zinc-800/50 w-fit flex-wrap">
         {!sedeSlug ? (
@@ -89,11 +90,9 @@ function EmpresaLayoutInner({ user }: { user: { role: string } }) {
             <NavLink to="extintores" end className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
               🧯 Todos los Extintores
             </NavLink>
-            {sedes.sedes.length === 0 && (
-              <NavLink to="historial" className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
-                📜 Historial
-              </NavLink>
-            )}
+            <NavLink to="historial" className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
+              📜 {sedes.sedes.length === 0 ? "Historial" : "Historial previo a sedes"}
+            </NavLink>
             <NavLink to="sedes" className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
               🏬 Sedes
               <span className="px-1.5 py-0.5 rounded-full bg-zinc-950/60 text-[10px]">{sedes.sedes.length}</span>

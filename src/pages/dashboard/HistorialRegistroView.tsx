@@ -91,6 +91,7 @@ export default function HistorialRegistroView() {
 
   const extintoresDisponibles = extintores
     .filter((e: any) => !servicio.extintorUids.includes(e.uid))
+    .filter((e: any) => (e.sedeId || null) === (servicio.sedeId || null))
     .map((e: any) => {
       const snap = getSnapshotHastaFecha(servicios, e.uid, servicio.fechaRetiro);
       return snap ? { ...e, ...snap } : e;

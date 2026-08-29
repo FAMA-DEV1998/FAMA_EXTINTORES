@@ -15,11 +15,13 @@ const ANIO_DEFAULT = 2026;
  */
 export default function HistorialMesesView() {
   const scope = useEmpresaScope() as any;
-  const { selectedEmpresa, activeSede, socket } = scope;
+  const { selectedEmpresa, activeSede, socket, sedes } = scope;
 
   const { servicios } = useServicios(socket, selectedEmpresa?.id, activeSede?.id ?? null);
 
   const [anio, setAnio] = useState(ANIO_DEFAULT);
+
+  const esHistorialPreviAsedes = !activeSede && sedes.sedes.length > 0;
 
   // Años disponibles para el filtro: los que ya tienen registros + siempre
   // el año predeterminado, para que nunca falte como opción.
@@ -36,9 +38,17 @@ export default function HistorialMesesView() {
 
   return (
     <div className="flex flex-col gap-6">
+      {esHistorialPreviAsedes && (
+        <div className="flex items-start gap-2.5 bg-sky-950/20 px-4 py-3 rounded-xl border border-sky-900/40">
+          <span className="text-sm shrink-0">📁</span>
+          <p className="text-[11px] text-sky-300 leading-relaxed">
+            Este historial corresponde a los servicios registrados <span className="font-bold">antes de que la empresa tuviera sedes</span>. No se muestra dentro de ninguna sede específica.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4 px-1">
         <h3 className="text-xl font-black text-white flex items-center gap-3">
-          📜 Historial de Servicios
+          📜 {esHistorialPreviAsedes ? "Historial previo a sedes" : "Historial de Servicios"}
         </h3>
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-zinc-500">{serviciosDelAnio.length} registro{serviciosDelAnio.length === 1 ? "" : "s"} en {anio}</span>

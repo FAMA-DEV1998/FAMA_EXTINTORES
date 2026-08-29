@@ -104,6 +104,11 @@ export default function HistorialExtintorModal({ isOpen, extintor, servicios, tr
                       <span className="px-3 py-1 rounded-lg bg-red-950/40 border border-red-900/50 text-red-400 text-xs font-black uppercase tracking-wider">
                         {mesLabelDe(s.fechaRetiro)}
                       </span>
+                      {Object.keys(sedeNameById).length > 0 && (
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${s.sedeId ? "bg-zinc-800/60 border-zinc-700 text-zinc-400" : "bg-sky-950/40 border-sky-900/50 text-sky-400"}`}>
+                          {s.sedeId ? `🏬 ${sedeLabel(s.sedeId)}` : "📁 Antes de tener sedes"}
+                        </span>
+                      )}
                       <span className="text-[11px] font-bold text-zinc-500">
                         Retiro {formatFecha(s.fechaRetiro)} → Entrega {formatFecha(s.fechaEntrega)}
                       </span>

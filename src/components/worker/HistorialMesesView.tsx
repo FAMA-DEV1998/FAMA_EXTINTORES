@@ -8,9 +8,10 @@ const ANIO_DEFAULT = 2026;
 interface HistorialMesesViewProps {
     servicios: Servicio[];
     onSelectMes: (anio: number, mes: number) => void;
+    esHistorialPrevioASedes?: boolean;
 }
 
-export default function HistorialMesesView({ servicios, onSelectMes }: HistorialMesesViewProps) {
+export default function HistorialMesesView({ servicios, onSelectMes, esHistorialPrevioASedes }: HistorialMesesViewProps) {
     const [anio, setAnio] = useState(ANIO_DEFAULT);
 
     const aniosDisponibles = [...new Set([ANIO_DEFAULT, ...servicios.map((s) => anioFromFecha(s.fechaRetiro)).filter((y): y is number => y !== null)])]
@@ -26,8 +27,14 @@ export default function HistorialMesesView({ servicios, onSelectMes }: Historial
 
     return (
         <div className="scroll-area h-full overflow-y-auto p-4 md:p-8 flex flex-col gap-5 max-w-3xl mx-auto w-full">
+            {esHistorialPrevioASedes && (
+                <div className="flex items-start gap-2 p-3 rounded-2xl bg-sky-50 border-2 border-sky-200">
+                    <span className="text-lg shrink-0">📁</span>
+                    <p className="text-xs font-bold text-sky-700 leading-relaxed">Servicios registrados antes de que la empresa tuviera sedes. No pertenecen a ninguna sede específica.</p>
+                </div>
+            )}
             <div className="flex items-center justify-between">
-                <h2 className="text-xl md:text-2xl font-black text-zinc-800">📜 Historial</h2>
+                <h2 className="text-xl md:text-2xl font-black text-zinc-800">{esHistorialPrevioASedes ? "📁 Historial previo a sedes" : "📜 Historial"}</h2>
                 <select
                     value={anio}
                     onChange={(e) => setAnio(parseInt(e.target.value))}

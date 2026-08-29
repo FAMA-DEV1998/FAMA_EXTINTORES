@@ -43,6 +43,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
     form, setForm, editingRow, setEditingRow, returnView,
     lastSavedExtintor, clearLastSavedExtintor,
     handleRealizadoPH, handleMesRealizadoPH, handleExtintorSave, handleEdit, openCrearExtintor, handleDelete, deleteExtintorSilent, setF,
+    coincidencias, cerrarAvisoDuplicado, confirmarYGuardar,
   } = extintorForm;
 
   const formBackup = useFormBackup(
@@ -70,7 +71,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
   const hasSedes = sedes.length > 0;
   const sedeNameById = Object.fromEntries(sedes.map((s) => [s.id, s.nombre]));
 
-  const serviciosHook = useServicios(socket, activeId, activeSedeId ?? undefined);
+  const serviciosHook = useServicios(socket, activeId, activeSedeId ?? null);
   const { servicios, saveServicio, deleteServicio, updateServicioDatos, addExtintorToServicio, removeExtintorDeServicio, setExtintorEstado } = serviciosHook;
   const serviciosGlobalHook = useServicios(socket, activeId, undefined);
   const { servicios: serviciosGlobal } = serviciosGlobalHook;
@@ -226,14 +227,12 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
         <nav className="flex items-center gap-2 p-3 md:p-4 bg-white border-b border-zinc-200 shrink-0 shadow-sm z-10 overflow-x-auto scrollbar-hide">
           {(activeSedeId
             ? (["todos", "historial"] as const)
-            : hasSedes
-              ? (["empresa", "todos", "sedes"] as const)
-              : (["empresa", "todos", "historial", "sedes"] as const)
+            : (["empresa", "todos", "historial", "sedes"] as const)
           ).map((v) => {
             const labels = {
               empresa: "🏢 Datos",
               todos: `🧯 Todos los Extintores${extintores.length ? ` (${extintores.length})` : ""}`,
-              historial: "📜 Historial",
+              historial: hasSedes && !activeSedeId ? "📁 Historial previo a sedes" : "📜 Historial",
               sedes: "🏬 Sedes",
             } as Record<string, string>;
             const isActive = view === v;
@@ -316,7 +315,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
         )}
 
         {view === "historial" && (
-          <HistorialMesesView servicios={servicios} onSelectMes={onSelectMes} />
+          <HistorialMesesView servicios={servicios} onSelectMes={onSelectMes} esHistorialPrevioASedes={hasSedes && !activeSedeId} />
         )}
 
         {view === "historialMes" && activeMes !== null && (
@@ -327,6 +326,7 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
             savingServicio={serviciosHook.savingServicio}
             onCrear={onCrearServicio}
             onSelectServicio={(id) => { setActiveServicioId(id); setView("servicio"); }}
+            sedeNameById={hasSedes && !activeSedeId ? sedeNameById : undefined}
           />
         )}
 
@@ -416,6 +416,14 @@ export default function WorkerPage({ user, onLogout }: { user: { id: string; use
             cameraInputRef={cameraInputRef}
             galleryInputRef={galleryInputRef}
             compressingPhoto={compressingPhoto}
+            coincidencias={coincidencias}
+            onUsarExistente={(rowIndex) => {
+              const ext = extintoresGlobal.find((e) => e.rowIndex === rowIndex) || extintores.find((e) => e.rowIndex === rowIndex);
+              if (ext) handleEdit(ext, returnView);
+              else cerrarAvisoDuplicado();
+            }}
+            onCerrarAvisoDuplicado={cerrarAvisoDuplicado}
+            onConfirmarYGuardar={confirmarYGuardar}
           />
         )}
       </main>

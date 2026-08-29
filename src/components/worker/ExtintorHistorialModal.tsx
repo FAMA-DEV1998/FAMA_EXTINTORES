@@ -94,7 +94,7 @@ export default function ExtintorHistorialModal({ extintor, servicios, traslados 
                                         return (
                                             <div key={s.id} className="flex flex-col gap-2.5 p-3.5 rounded-2xl border border-zinc-100 bg-zinc-50/60">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <span className="text-xs font-black text-red-700">{ordinalServicio(nServicio)} Servicio de {grupo.label}{s.sedeId ? ` — ${sedeLabel(s.sedeId)}` : ""}</span>
+                                                    <span className="text-xs font-black text-red-700">{ordinalServicio(nServicio)} Servicio de {grupo.label}{Object.keys(sedeNameById).length > 0 ? ` — ${s.sedeId ? sedeLabel(s.sedeId) : "Antes de tener sedes"}` : ""}</span>
                                                     {onIrAlServicio && (
                                                         <button
                                                             onClick={() => onIrAlServicio(s)}

@@ -7,7 +7,7 @@ export { useExportActions } from "./useExportActions";
 export { useExtintorForm } from "./useExtintorForm";
 export { useUsersManagement } from "./useUsersManagement";
 export { useSedes } from "./useSedes";
-export { useServicios } from "./useServicios";
+export { useServicios, useServiciosExtintor } from "./useServicios";
 export { useTraslados } from "./useTraslados";
 export { useInventario } from "./useInventario";
 export { useCotizaciones } from "./useCotizaciones";

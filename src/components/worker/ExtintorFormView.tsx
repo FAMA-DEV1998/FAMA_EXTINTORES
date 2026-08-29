@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import type { Socket } from "socket.io-client";
 import { COMP_KEYS, COMP_LABELS, ESTADOS, MESES, PESOS_GAL, PESOS_KG, PESOS_LB, PESOS_LT } from "../../constants";
 import type { FormData, WorkerView as View } from "../../types";
@@ -17,7 +17,7 @@ import {
 } from "../../utils/helpers";import { Card, Field, SiNo, Toggle, inputCls } from "../ui/WorkerUI";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
-
+import VoiceExtintorModal from "./VoiceExtintorModal";
 interface ExtintorFormViewProps {
     editingRow: number | null;
     form: FormData;
@@ -49,7 +49,15 @@ interface ExtintorFormViewProps {
     cameraInputRef: React.RefObject<HTMLInputElement | null>;
     galleryInputRef: React.RefObject<HTMLInputElement | null>;
     compressingPhoto: boolean;
+    coincidencias?: { uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "parcial"; camposCoincidentes: string[] }[] | null;
+    onUsarExistente?: (rowIndex: number) => void;
+    onCerrarAvisoDuplicado?: () => void;
+    onConfirmarYGuardar?: () => void;
 }
+
+const CAMPO_LABEL: Record<string, string> = {
+    nSerie: "N° Serie", nInterno: "N° Interno", marca: "Marca", agenteExtintor: "Agente", peso: "Peso", fechaFabricacion: "Año de Fabricación",
+};
 
 export default function ExtintorFormView({
     editingRow,
@@ -77,6 +85,10 @@ export default function ExtintorFormView({
     cameraInputRef,
     galleryInputRef,
     compressingPhoto,
+    coincidencias,
+    onUsarExistente,
+    onCerrarAvisoDuplicado,
+    onConfirmarYGuardar,
 }: ExtintorFormViewProps) {
     const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor, RECARGAS);
     const soloRecarga = estadoSoloPermiteRecarga(form.estadoExtintor);
@@ -85,9 +97,58 @@ export default function ExtintorFormView({
     const componentesBloqueados = estadoBloqueaComponentes(form.estadoExtintor);
     const phVencidaAlerta = phVencida(form as any);
     const phProximaAlerta = !phVencidaAlerta && phVenceEsteAnio(form as any);
+    const coincidencia = coincidencias && coincidencias.length > 0 ? coincidencias[0] : null;
+    const esFuerte = coincidencia?.nivel === "fuerte";
+    const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+
+    const aplicarDictado = (campos: Partial<FormData>) => {
+        setForm((p) => {
+            const next = { ...p, ...campos };
+            if (campos.mesRealizadoPH !== undefined || campos.realizadoPH !== undefined) {
+                next.vencimPH = calcularVencimientoPH(next.mesRealizadoPH, next.realizadoPH);
+            }
+            return next;
+        });
+    };
 
     return (
         <div className="scroll-area h-full overflow-y-auto p-4 md:p-8 flex flex-col gap-6 max-w-5xl mx-auto w-full">
+            {coincidencia && (
+                <div className={`flex flex-col gap-3 px-4 py-3.5 rounded-2xl border-2 ${esFuerte ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+                    <div className="flex items-start gap-2.5">
+                        <span className="text-lg shrink-0">{esFuerte ? "🚨" : "⚠️"}</span>
+                        <div className={`flex flex-col gap-1 ${esFuerte ? "text-red-800" : "text-amber-800"}`}>
+                            <p className="text-xs font-bold leading-relaxed">
+                                {esFuerte
+                                    ? "Posible extintor duplicado: todos los datos ingresados coinciden con un extintor ya registrado."
+                                    : "Existe un extintor similar ya registrado. ¿Realmente se trata de un extintor nuevo?"}
+                            </p>
+                            <p className="text-[11px] opacity-80">
+                                Coincide en: {coincidencia.camposCoincidentes.map((c) => CAMPO_LABEL[c] || c).join(", ")} ({coincidencia.estadoExtintor || "sin estado"})
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {onUsarExistente && (
+                            <button type="button" onClick={() => onUsarExistente(coincidencia.rowIndex)} className={`px-3.5 py-2 rounded-xl text-xs font-bold text-white ${esFuerte ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}`}>Usar extintor existente</button>
+                        )}
+                        {onConfirmarYGuardar && (
+                            <button type="button" onClick={onConfirmarYGuardar} disabled={saving} className={`px-3.5 py-2 rounded-xl border-2 text-xs font-bold disabled:opacity-50 ${esFuerte ? "border-red-300 text-red-700 hover:bg-red-100" : "border-amber-300 text-amber-700 hover:bg-amber-100"}`}>Sí, es un extintor diferente</button>
+                        )}
+                        {onCerrarAvisoDuplicado && (
+                            <button type="button" onClick={onCerrarAvisoDuplicado} className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-500 hover:text-zinc-700">Seguir editando</button>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            <button
+                type="button"
+                onClick={() => setVoiceModalOpen(true)}
+                className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-black shadow-md active:scale-95 transition-all"
+            >
+                🎤 Registrar por Voz
+            </button>
 
             <Card title={`🧯 ${editingRow !== null ? "Editar Extintor" : "Nuevo Extintor"}`}>
                 <div className="grid grid-cols-2 md:grid-cols-2 gap-4 md:gap-6">
@@ -432,6 +493,17 @@ export default function ExtintorFormView({
                     {saving ? "⏳ Guardando datos..." : editingRow !== null ? "💾 Actualizar Extintor" : "✅ Guardar Extintor"}
                 </button>
             </div>
+
+            <VoiceExtintorModal
+                open={voiceModalOpen}
+                onClose={() => setVoiceModalOpen(false)}
+                onAplicar={aplicarDictado}
+                marcas={MARCAS}
+                agentes={AGENTES}
+                recargas={RECARGAS}
+                serviciosExtra={SERVICIOS_EXTRA}
+                unidadActual={form.unidadPeso}
+            />
         </div>
     );
 }

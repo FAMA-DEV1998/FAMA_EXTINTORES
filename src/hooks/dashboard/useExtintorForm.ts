@@ -14,6 +14,7 @@ export function useExtintorForm(
   const [extintorModal, setExtintorModal] = useState(false);
   const [extintorForm, setExtintorForm] = useState<Partial<Extintor>>(emptyExtintor());
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
+  const [coincidencias, setCoincidencias] = useState<{ uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "parcial"; camposCoincidentes: string[] }[] | null>(null);
 
   const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any> } | null>(null);
   const clearLastSavedExtintor = () => setLastSavedExtintor(null);
@@ -21,26 +22,25 @@ export function useExtintorForm(
   const openAddExtintor = () => {
     setExtintorForm(emptyExtintor());
     setEditingRowIndex(null);
+    setCoincidencias(null);
     setExtintorModal(true);
   };
 
   const openEditExtintor = (ext: Extintor) => {
     setExtintorForm({ ...ext });
     setEditingRowIndex(ext.rowIndex);
+    setCoincidencias(null);
     setExtintorModal(true);
   };
 
-  const saveExtintor = () => {
-    if (!socket || !selectedEmpresa?.id) return;
-    setSaving(true);
-
+  const construirPayload = () => {
     const { evidencia, evidenciaCount, deletedAt, ...formSinFlags } = extintorForm as any;
     const bloqueado = estadoBloqueaServicio(extintorForm.estadoExtintor || "");
     const componentesBloqueados = estadoBloqueaComponentes(extintorForm.estadoExtintor || "");
 
-    const payload = {
+    return {
       ...formSinFlags,
-      id: selectedEmpresa.id,
+      id: selectedEmpresa?.id,
       nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim().toUpperCase(),
       nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase(),
       ma: bloqueado ? "" : extintorForm.ma,
@@ -52,6 +52,13 @@ export function useExtintorForm(
       manometro: componentesBloqueados ? "" : extintorForm.manometro,
       tobera: componentesBloqueados ? "" : extintorForm.tobera,
     };
+  };
+
+  const ejecutarGuardado = (confirmarDuplicado: boolean) => {
+    if (!socket || !selectedEmpresa?.id) return;
+    setSaving(true);
+
+    const payload = construirPayload();
 
     const estadoSnapshot = {
       estadoExtintor: payload.estadoExtintor,
@@ -80,16 +87,28 @@ export function useExtintorForm(
         else alert(res?.error || "No se pudo actualizar el extintor");
       });
     } else {
-      socket.emit("extintor:add", payload, (res: any) => {
+      socket.emit("extintor:add", { ...payload, confirmarDuplicado }, (res: any) => {
         setSaving(false);
         if (res?.success) {
           setExtintorModal(false);
+          setCoincidencias(null);
           if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot });
         }
+        else if (res?.coincidencias) setCoincidencias(res.coincidencias);
         else alert(res?.error || "No se pudo guardar el extintor");
       });
     }
   };
+
+  const saveExtintor = () => ejecutarGuardado(false);
+
+  const usarExtintorExistente = (ext: Extintor) => {
+    openEditExtintor(ext);
+  };
+
+  const cerrarAvisoDuplicado = () => setCoincidencias(null);
+
+  const confirmarYGuardar = () => ejecutarGuardado(true);
 
   const deleteExtintor = (rowIndex: number) => {
     if (!socket || !selectedEmpresa?.id || !confirm("¿Eliminar este extintor?")) return;
@@ -108,6 +127,10 @@ export function useExtintorForm(
     setExtintorForm,
     editingRowIndex,
     saving,
+    coincidencias,
+    usarExtintorExistente,
+    cerrarAvisoDuplicado,
+    confirmarYGuardar,
     lastSavedExtintor,
     clearLastSavedExtintor,
     openAddExtintor,

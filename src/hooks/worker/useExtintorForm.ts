@@ -16,6 +16,7 @@ export function useExtintorForm(
     const [form, setForm] = useState<FormData>(emptyForm());
     const [editingRow, setEditingRow] = useState<number | null>(null);
     const [returnView, setReturnView] = useState<View>("todos");
+    const [coincidencias, setCoincidencias] = useState<{ uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "parcial"; camposCoincidentes: string[] }[] | null>(null);
     const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any> } | null>(null);
     const clearLastSavedExtintor = () => setLastSavedExtintor(null);
 
@@ -35,7 +36,7 @@ export function useExtintorForm(
         }));
     };
 
-    const handleExtintorSave = () => {
+    const ejecutarGuardado = (confirmarDuplicado: boolean) => {
         if (!socket || !activeId) return;
         setSaving(true);
         const { evidencias, ...formWithoutEvidencias } = form;
@@ -89,21 +90,29 @@ export function useExtintorForm(
             }
             );
         } else {
-            socket.emit("extintor:add", payload, (res: any) => {
+            socket.emit("extintor:add", { ...payload, confirmarDuplicado }, (res: any) => {
                 setSaving(false);
                 if (res?.success) {
                     showToast("Extintor guardado ✓");
                     clearFormBackup();
                     if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot });
+                    setCoincidencias(null);
                     setView(returnView);
                     setForm(emptyForm());
+                } else if (res?.coincidencias) {
+                    setCoincidencias(res.coincidencias);
                 } else showToast(res?.error || "Error", "err");
             });
         }
     };
 
+    const handleExtintorSave = () => ejecutarGuardado(false);
+
+    const confirmarYGuardar = () => ejecutarGuardado(true);
+
     const handleEdit = (ext: Extintor, from: View = "todos") => {
         setReturnView(from);
+        setCoincidencias(null);
         const loadForm = () => {
             setForm({
                 nSerie: ext.nSerie, nInterno: ext.nInterno, marca: ext.marca,
@@ -142,6 +151,7 @@ export function useExtintorForm(
         setReturnView(from);
         setForm(emptyForm());
         setEditingRow(null);
+        setCoincidencias(null);
         setView("form");
     };
 
@@ -162,12 +172,17 @@ export function useExtintorForm(
 
     const setF = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
+    const cerrarAvisoDuplicado = () => setCoincidencias(null);
+
     return {
         form,
         setForm,
         editingRow,
         setEditingRow,
         returnView,
+        coincidencias,
+        cerrarAvisoDuplicado,
+        confirmarYGuardar,
         lastSavedExtintor,
         clearLastSavedExtintor,
         handleRealizadoPH,

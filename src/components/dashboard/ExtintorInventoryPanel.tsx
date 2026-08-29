@@ -5,7 +5,7 @@ import { computeBaseMetrics, getDuplicateSets, getPesoEntriesWithAgents } from "
 import { FilterSelect, MetricPanel, ComponentDots } from "../ui/DashboardUI";
 import { ExtintorModal, ObservationModal, EvidenciaModal, WeightSortModal, HistorialExtintorModal, TrasladoSedeModal, StickersModal } from "../modals";
 import { useEmpresaScope } from "../../context/EmpresaScopeContext";
-import { useDashboardFilters, useServicios, useTraslados } from "../../hooks/dashboard";
+import { useDashboardFilters, useServiciosExtintor, useTraslados } from "../../hooks/dashboard";
 import type { Extintor } from "../../types";
 
 interface ExtintorInventoryPanelProps {
@@ -30,11 +30,11 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
         new Map(baseExtintoresRaw.map((e) => [e.uid, e])).values()
     );
 
-    const { servicios } = useServicios(scope.socket, scope.selectedEmpresa?.id, activeSede?.id ?? null);
     const [historialExtintor, setHistorialExtintor] = useState<Extintor | null>(null);
     const [trasladoExtintor, setTrasladoExtintor] = useState<Extintor | null>(null);
     const [stickersModal, setStickersModal] = useState(false);
     const rutaBase = activeSede ? `/dashboard/${scope.selectedEmpresa?.slug}/sedes/${activeSede.slug}` : `/dashboard/${scope.selectedEmpresa?.slug}`;
+    const { servicios: historialCompletoExtintor } = useServiciosExtintor(scope.socket, scope.selectedEmpresa?.id, historialExtintor?.uid);
     const traslados = useTraslados(scope.socket, historialExtintor?.uid);
     const trasladoDestino = useTraslados(scope.socket, trasladoExtintor?.uid);
 
@@ -69,12 +69,19 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
     const {
         extintorModal, setExtintorModal, extintorForm, setExtintorForm, editingRowIndex, saving,
         openAddExtintor, openEditExtintor, saveExtintor, deleteExtintor,
+        coincidencias, usarExtintorExistente, cerrarAvisoDuplicado, confirmarYGuardar,
     } = scope.extintorForm;
     const { MARCAS, AGENTES, RECARGAS, MOTIVOS_BAJA, SERVICIOS_EXTRA } = scope.catalogLists;
 
     const handleOpenAddExtintor = () => {
         openAddExtintor();
         if (activeSede) setExtintorForm((p: any) => ({ ...p, sedeId: activeSede.id }));
+    };
+
+    const handleUsarExtintorExistente = (rowIndex: number) => {
+        const ext = baseExtintores.find((e) => e.rowIndex === rowIndex);
+        if (ext) usarExtintorExistente(ext);
+        else cerrarAvisoDuplicado();
     };
 
     const sinSedeCount = scopeExtintores.filter((e: any) => !e.sedeId).length;
@@ -460,7 +467,7 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
 
             {/* ════ MODALES DEL INVENTARIO ════ */}
             {extintorModal && (
-                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} />
+                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} coincidencias={coincidencias} onUsarExistente={handleUsarExtintorExistente} onCerrarAvisoDuplicado={cerrarAvisoDuplicado} onConfirmarYGuardar={confirmarYGuardar} />
             )}
             <ObservationModal observation={obsModal} onClose={() => setObsModal(null)} />
             <EvidenciaModal
@@ -513,7 +520,7 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
             <HistorialExtintorModal
                 isOpen={!!historialExtintor}
                 extintor={historialExtintor}
-                servicios={servicios}
+                servicios={historialCompletoExtintor}
                 traslados={traslados.traslados}
                 sedeNameById={sedeNameById}
                 rutaBase={rutaBase}
