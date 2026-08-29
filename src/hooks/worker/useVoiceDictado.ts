@@ -227,9 +227,9 @@ export function parsearComandoVoz(
       if (valor) { campos.nInterno = valor; detecciones.push({ campo, label: "N° Interno", valor, textoOido: seg, confianza: 1, editable: true }); }
     } else if (campo === "marca") {
       const match = mejorCoincidencia(seg, contexto.marcas, contexto.correcciones.marca || {});
-      const valor = match && match.confianza >= 0.55 ? match.valor : seg.replace(/\b\w/g, (c) => c.toUpperCase());
+      const valor = match ? match.valor : (contexto.marcas[0] || seg.replace(/\b\w/g, (c) => c.toUpperCase()));
       campos.marca = valor;
-      detecciones.push({ campo, label: "Marca", valor, textoOido: seg, confianza: match?.confianza || 0, opciones: contexto.marcas, tipoCorreccion: "marca", editable: true });
+      detecciones.push({ campo, label: "Marca", valor, textoOido: seg, confianza: match?.confianza ?? 0, opciones: contexto.marcas, tipoCorreccion: "marca", editable: true });
     } else if (campo === "fechaFabricacion") {
       const numero = extraerNumero(seg);
       if (numero.length === 4) { campos.fechaFabricacion = numero; detecciones.push({ campo, label: "Año Fabricación", valor: numero, textoOido: seg, confianza: 1, editable: true }); }
@@ -243,15 +243,15 @@ export function parsearComandoVoz(
     } else if (campo === "estadoExtintor") {
       const alias = ESTADO_ALIAS[normalizarTexto(seg)];
       const match = alias ? { valor: alias, confianza: 1 } : mejorCoincidencia(seg, ESTADOS, {});
-      if (match && match.confianza >= 0.45) {
+      if (match) {
         campos.estadoExtintor = match.valor;
         detecciones.push({ campo, label: "Estado", valor: match.valor, textoOido: seg, confianza: match.confianza, opciones: ESTADOS, editable: true });
       }
     } else if (campo === "agenteExtintor") {
       const match = mejorCoincidencia(seg, contexto.agentes, contexto.correcciones.agenteExtintor || {});
-      const valor = match && match.confianza >= 0.55 ? match.valor : seg.replace(/\b\w/g, (c) => c.toUpperCase());
+      const valor = match ? match.valor : (contexto.agentes[0] || seg.replace(/\b\w/g, (c) => c.toUpperCase()));
       campos.agenteExtintor = valor;
-      detecciones.push({ campo, label: "Agente", valor, textoOido: seg, confianza: match?.confianza || 0, opciones: contexto.agentes, tipoCorreccion: "agenteExtintor", editable: true });
+      detecciones.push({ campo, label: "Agente", valor, textoOido: seg, confianza: match?.confianza ?? 0, opciones: contexto.agentes, tipoCorreccion: "agenteExtintor", editable: true });
     } else if (campo === "peso") {
       const unidad = UNIDAD_POR_PALABRA(seg) || contexto.unidadActual;
       const numero = extraerNumero(seg);
