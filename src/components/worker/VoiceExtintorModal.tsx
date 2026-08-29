@@ -81,11 +81,12 @@ const COMPONENTES = [
     { key: "tobera", label: "Tobera" },
 ] as const;
 
-function Tarjeta({ icono, titulo, children }: { icono: string; titulo: string; children: React.ReactNode }) {
+function Tarjeta({ icono, titulo, children, dudoso }: { icono: string; titulo: string; children: React.ReactNode; dudoso?: boolean }) {
     return (
-        <div className="rounded-xl border-2 border-zinc-200 bg-white p-3 flex flex-col gap-2">
+        <div className={`rounded-xl border-2 bg-white p-3 flex flex-col gap-2 ${dudoso ? "border-amber-300" : "border-zinc-200"}`}>
             <p className="text-[11px] font-black text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                 <span>{icono}</span> {titulo}
+                {dudoso && <span className="text-amber-600 normal-case font-bold">· verificar</span>}
             </p>
             {children}
         </div>
@@ -151,9 +152,15 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
 
     const aplicar = () => {
         const detMarca = detFor("marca");
-        if (detMarca && camposBase.marca && camposBase.marca !== detMarca.valor) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca);
+        if (detMarca && camposBase.marca) {
+            if (camposBase.marca !== detMarca.valor) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca, true);
+            else if (detMarca.confianza < 1) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca, false);
+        }
         const detAgente = detFor("agenteExtintor");
-        if (detAgente && camposBase.agenteExtintor && camposBase.agenteExtintor !== detAgente.valor) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor);
+        if (detAgente && camposBase.agenteExtintor) {
+            if (camposBase.agenteExtintor !== detAgente.valor) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, true);
+            else if (detAgente.confianza < 1) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, false);
+        }
         onAplicar(camposBase);
         onClose();
     };
@@ -261,7 +268,7 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
                                             </Tarjeta>
                                         )}
                                         {tiene("marca") && (
-                                            <Tarjeta icono="🏭" titulo="Marca">
+                                            <Tarjeta icono="🏭" titulo="Marca" dudoso={(detFor("marca")?.confianza ?? 1) < 0.5}>
                                                 <input list="voz-marcas" className="w-full border-2 border-zinc-200 rounded-lg px-2.5 py-2 text-sm font-bold text-zinc-800" value={camposBase.marca || ""} onChange={(e) => setCampo("marca", e.target.value)} />
                                                 <datalist id="voz-marcas">{marcas.map((m) => <option key={m} value={m} />)}</datalist>
                                             </Tarjeta>
@@ -288,7 +295,7 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
                                             </Tarjeta>
                                         )}
                                         {tiene("agenteExtintor") && (
-                                            <Tarjeta icono="🧪" titulo="Agente">
+                                            <Tarjeta icono="🧪" titulo="Agente" dudoso={(detFor("agenteExtintor")?.confianza ?? 1) < 0.5}>
                                                 <input list="voz-agentes" className="w-full border-2 border-zinc-200 rounded-lg px-2.5 py-2 text-sm font-bold text-zinc-800" value={camposBase.agenteExtintor || ""} onChange={(e) => setCampo("agenteExtintor", e.target.value)} />
                                                 <datalist id="voz-agentes">{agentes.map((a) => <option key={a} value={a} />)}</datalist>
                                             </Tarjeta>

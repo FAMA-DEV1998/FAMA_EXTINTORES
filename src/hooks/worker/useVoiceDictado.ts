@@ -65,7 +65,7 @@ const similitudCombinada = (a: string, b: string): number => Math.max(similitud(
 
 const colapsarRepeticiones = (texto: string): string => texto.replace(/\b([a-záéíóúñ]+)(\s+\1\b)+/gi, "$1");
 
-const PALABRAS_RELLENO = /\b(es|era|sera|será|tiene|tenia|tenía|su|sus|el|la|los|las|un|una|de|del|con|para|esta|está|dice|dicen|creo|que|seria|sería|osea|digamos|diria|diría)\b/g;
+const PALABRAS_RELLENO = /\b(es|era|sera|será|tiene|tenia|tenía|su|sus|el|la|los|las|un|una|de|del|con|para|esta|está|dice|dicen|creo|que|seria|sería|osea|digamos|diria|diría|numero|numeros)\b/g;
 
 const limpiarRelleno = (texto: string): string => normalizarTexto(texto).replace(PALABRAS_RELLENO, " ").replace(/\s+/g, " ").trim();
 
@@ -394,11 +394,11 @@ export function useVoiceDictado(socket: Socket | null) {
     setTranscripcion("");
   };
 
-  const registrarCorreccion = (tipo: TipoCorreccion, textoOido: string, valorElegido: string) => {
+  const registrarCorreccion = (tipo: TipoCorreccion, textoOido: string, valorElegido: string, esCorreccion = true) => {
     const clave = normalizarTexto(textoOido);
     if (!clave || !valorElegido) return;
     setCorrecciones((prev) => ({ ...prev, [tipo]: { ...(prev[tipo] || {}), [clave]: valorElegido } }));
-    socket?.emit("voz:correcciones:save", { tipo, clave, valor: valorElegido });
+    socket?.emit("voz:correcciones:save", { tipo, clave, valor: valorElegido, esCorreccion });
   };
 
   return { soportado, escuchando, transcripcion, iniciar, detener, reiniciar, correcciones, registrarCorreccion };
