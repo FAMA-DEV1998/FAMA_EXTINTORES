@@ -65,10 +65,11 @@ const similitudCombinada = (a: string, b: string): number => Math.max(similitud(
 
 const colapsarRepeticiones = (texto: string): string => texto.replace(/\b([a-záéíóúñ]+)(\s+\1\b)+/gi, "$1");
 
-const PALABRAS_RELLENO = /\b(es|era|sera|será|creo|que|seria|sería|osea|digamos|diria|diría)\b/g;
+const PALABRAS_RELLENO = /\b(es|era|sera|será|tiene|tenia|tenía|su|sus|el|la|los|las|un|una|de|del|con|para|esta|está|dice|dicen|creo|que|seria|sería|osea|digamos|diria|diría)\b/g;
 
-const extraerCodigo = (texto: string): string =>
-  normalizarTexto(texto).replace(PALABRAS_RELLENO, " ").replace(/\s+/g, "").toUpperCase();
+const limpiarRelleno = (texto: string): string => normalizarTexto(texto).replace(PALABRAS_RELLENO, " ").replace(/\s+/g, " ").trim();
+
+const extraerCodigo = (texto: string): string => limpiarRelleno(texto).replace(/\s+/g, "").toUpperCase();
 
 const mejorCoincidencia = (texto: string, opciones: string[], correcciones: Record<string, string>): { valor: string; confianza: number } | null => {
   const normalizado = normalizarTexto(texto);
@@ -238,10 +239,11 @@ export function parsearComandoVoz(
       const valor = extraerCodigo(seg);
       if (valor) { campos.nInterno = valor; detecciones.push({ campo, label: "N° Interno", valor, textoOido: seg, confianza: 1, editable: true }); }
     } else if (campo === "marca") {
-      const match = mejorCoincidencia(seg, contexto.marcas, contexto.correcciones.marca || {});
+      const segLimpio = limpiarRelleno(seg);
+      const match = mejorCoincidencia(segLimpio, contexto.marcas, contexto.correcciones.marca || {});
       const valor = match ? match.valor : (contexto.marcas[0] || seg.replace(/\b\w/g, (c) => c.toUpperCase()));
       campos.marca = valor;
-      detecciones.push({ campo, label: "Marca", valor, textoOido: seg, confianza: match?.confianza ?? 0, opciones: contexto.marcas, tipoCorreccion: "marca", editable: true });
+      detecciones.push({ campo, label: "Marca", valor, textoOido: segLimpio, confianza: match?.confianza ?? 0, opciones: contexto.marcas, tipoCorreccion: "marca", editable: true });
     } else if (campo === "fechaFabricacion") {
       const numero = extraerNumero(seg);
       if (numero.length === 4) { campos.fechaFabricacion = numero; detecciones.push({ campo, label: "Año Fabricación", valor: numero, textoOido: seg, confianza: 1, editable: true }); }
@@ -253,17 +255,19 @@ export function parsearComandoVoz(
       if (anio.length === 4) { campos.realizadoPH = anio; }
       if (mes || anio) detecciones.push({ campo, label: "PH Realizado", valor: `${mesMatch?.valor || ""} ${anio}`.trim(), textoOido: seg, confianza: mesMatch?.confianza || 0, editable: true });
     } else if (campo === "estadoExtintor") {
-      const alias = ESTADO_ALIAS[normalizarTexto(seg)];
-      const match = alias ? { valor: alias, confianza: 1 } : mejorCoincidencia(seg, ESTADOS, {});
+      const segLimpio = limpiarRelleno(seg);
+      const alias = ESTADO_ALIAS[segLimpio];
+      const match = alias ? { valor: alias, confianza: 1 } : mejorCoincidencia(segLimpio, ESTADOS, {});
       if (match) {
         campos.estadoExtintor = match.valor;
-        detecciones.push({ campo, label: "Estado", valor: match.valor, textoOido: seg, confianza: match.confianza, opciones: ESTADOS, editable: true });
+        detecciones.push({ campo, label: "Estado", valor: match.valor, textoOido: segLimpio, confianza: match.confianza, opciones: ESTADOS, editable: true });
       }
     } else if (campo === "agenteExtintor") {
-      const match = mejorCoincidencia(seg, contexto.agentes, contexto.correcciones.agenteExtintor || {});
+      const segLimpio = limpiarRelleno(seg);
+      const match = mejorCoincidencia(segLimpio, contexto.agentes, contexto.correcciones.agenteExtintor || {});
       const valor = match ? match.valor : (contexto.agentes[0] || seg.replace(/\b\w/g, (c) => c.toUpperCase()));
       campos.agenteExtintor = valor;
-      detecciones.push({ campo, label: "Agente", valor, textoOido: seg, confianza: match?.confianza ?? 0, opciones: contexto.agentes, tipoCorreccion: "agenteExtintor", editable: true });
+      detecciones.push({ campo, label: "Agente", valor, textoOido: segLimpio, confianza: match?.confianza ?? 0, opciones: contexto.agentes, tipoCorreccion: "agenteExtintor", editable: true });
     } else if (campo === "peso") {
       const unidad = UNIDAD_POR_PALABRA(seg) || contexto.unidadActual;
       const numero = extraerNumero(seg);
