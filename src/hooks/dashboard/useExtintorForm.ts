@@ -14,7 +14,7 @@ export function useExtintorForm(
   const [extintorModal, setExtintorModal] = useState(false);
   const [extintorForm, setExtintorForm] = useState<Partial<Extintor>>(emptyExtintor());
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
-  const [coincidencias, setCoincidencias] = useState<{ uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "parcial"; camposCoincidentes: string[] }[] | null>(null);
+  const [coincidencias, setCoincidencias] = useState<{ uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; mesRealizadoPH: string; realizadoPH: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "sospechosa"; camposCoincidentes: string[] }[] | null>(null);
 
   const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any> } | null>(null);
   const clearLastSavedExtintor = () => setLastSavedExtintor(null);

@@ -301,8 +301,8 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
         <div className="flex flex-col gap-4">
           {empresasFiltradas.map((empresa: any) => {
             const sedesNombradas = empresa.sedes.filter((s: any) => s.nombre);
-            const esMultisede = sedesNombradas.length > 1;
-            const sedeUnica = sedesNombradas.length === 1 ? sedesNombradas[0].nombre : null;
+            const esMultisede = empresa.sedes.length > 1;
+            const sedeUnica = sedesNombradas.length === 1 && empresa.sedes.length === 1 ? sedesNombradas[0].nombre : null;
             const icono = esMultisede ? "🏬" : empresa.tipoCliente === "persona" ? "👤" : "🏢";
             const todasLasAlertas = empresa.sedes.flatMap((s: any) => s.alertas);
             const vencidasEmpresa = todasLasAlertas.filter((a: any) => a.vencido).length;

@@ -4,13 +4,10 @@ import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
 import { getRecargasPermitidas, estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes, calcularVencimientoPH, confirmarCambioPH, formatVencimPH, phVenceEsteAnio, phVencida } from "../../utils/helpers";
 import { CreatableSelect } from "../ui/CreatableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
+import DuplicadoComparacionModal from "./DuplicadoComparacionModal";
 import type { Socket } from "socket.io-client";
 
-const CAMPO_LABEL: Record<string, string> = {
-    nSerie: "N° Serie", nInterno: "N° Interno", marca: "Marca", agenteExtintor: "Agente", peso: "Peso", fechaFabricacion: "Año de Fabricación",
-};
-
-type Coincidencia = { uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "parcial"; camposCoincidentes: string[] };
+type Coincidencia = { uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; mesRealizadoPH: string; realizadoPH: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "sospechosa"; camposCoincidentes: string[] };
 
 type Props = {
     form: Partial<Extintor>;
@@ -61,7 +58,6 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
     const phVencidaAlerta = phVencida(form as Extintor);
     const phProximaAlerta = !phVencidaAlerta && phVenceEsteAnio(form as Extintor);
     const coincidencia = coincidencias && coincidencias.length > 0 ? coincidencias[0] : null;
-    const esFuerte = coincidencia?.nivel === "fuerte";
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -72,33 +68,15 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                 </div>
 
                 <div className="px-6 py-6 flex flex-col gap-6 overflow-y-auto flex-1">
-                    {coincidencia && (
-                        <div className={`flex flex-col gap-3 px-4 py-3.5 rounded-xl border ${esFuerte ? "bg-red-950/30 border-red-800/60" : "bg-amber-950/30 border-amber-800/60"}`}>
-                            <div className="flex items-start gap-2.5">
-                                <span className="text-lg shrink-0">{esFuerte ? "🚨" : "⚠️"}</span>
-                                <div className={`flex flex-col gap-1 ${esFuerte ? "text-red-300" : "text-amber-300"}`}>
-                                    <p className="text-xs font-bold leading-relaxed">
-                                        {esFuerte
-                                            ? "Posible extintor duplicado: todos los datos ingresados coinciden con un extintor ya registrado."
-                                            : "Existe un extintor similar ya registrado. ¿Realmente se trata de un extintor nuevo?"}
-                                    </p>
-                                    <p className="text-[11px] opacity-80">
-                                        Coincide en: {coincidencia.camposCoincidentes.map((c) => CAMPO_LABEL[c] || c).join(", ")} ({coincidencia.estadoExtintor || "sin estado"})
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {onUsarExistente && (
-                                    <button type="button" onClick={() => onUsarExistente(coincidencia.rowIndex)} className={`px-3.5 py-2 rounded-lg text-xs font-bold text-white ${esFuerte ? "bg-red-700 hover:bg-red-600" : "bg-amber-700 hover:bg-amber-600"}`}>Usar extintor existente</button>
-                                )}
-                                {onConfirmarYGuardar && (
-                                    <button type="button" onClick={onConfirmarYGuardar} disabled={saving} className={`px-3.5 py-2 rounded-lg border text-xs font-bold disabled:opacity-50 ${esFuerte ? "border-red-800/60 text-red-300 hover:bg-red-950/40" : "border-amber-800/60 text-amber-300 hover:bg-amber-950/40"}`}>Sí, es un extintor diferente</button>
-                                )}
-                                {onCerrarAvisoDuplicado && (
-                                    <button type="button" onClick={onCerrarAvisoDuplicado} className="px-3.5 py-2 rounded-lg text-xs font-bold text-zinc-400 hover:text-zinc-200">Seguir editando</button>
-                                )}
-                            </div>
-                        </div>
+                    {coincidencia && onUsarExistente && onConfirmarYGuardar && onCerrarAvisoDuplicado && (
+                        <DuplicadoComparacionModal
+                            coincidencia={coincidencia}
+                            nuevo={form}
+                            saving={saving}
+                            onUsarExistente={() => onUsarExistente(coincidencia.rowIndex)}
+                            onConfirmarNuevo={onConfirmarYGuardar}
+                            onSeguirEditando={onCerrarAvisoDuplicado}
+                        />
                     )}
                     {/* Datos Principales */}
                     <ModalSection title="🧯 Datos Principales">
