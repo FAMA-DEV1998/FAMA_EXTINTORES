@@ -152,15 +152,9 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
 
     const aplicar = () => {
         const detMarca = detFor("marca");
-        if (detMarca && camposBase.marca) {
-            if (camposBase.marca !== detMarca.valor) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca, true);
-            else if (detMarca.confianza < 1) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca, false);
-        }
+        if (detMarca && camposBase.marca) registrarCorreccion("marca", detMarca.textoOido, camposBase.marca, camposBase.marca !== detMarca.valor);
         const detAgente = detFor("agenteExtintor");
-        if (detAgente && camposBase.agenteExtintor) {
-            if (camposBase.agenteExtintor !== detAgente.valor) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, true);
-            else if (detAgente.confianza < 1) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, false);
-        }
+        if (detAgente && camposBase.agenteExtintor) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, camposBase.agenteExtintor !== detAgente.valor);
         onAplicar(camposBase);
         onClose();
     };
