@@ -8,6 +8,8 @@ const TIPO_LABEL: Record<string, string> = {
     estadoExtintor: "Estado",
     mes: "Mes (PH)",
     servicioExtra: "Adicional",
+    peso: "Peso",
+    recarga: "Recarga",
 };
 
 export default function VozAprendizajePage({ socket, catalogs, role }: { socket: Socket | null; catalogs: { marcas: { value: string }[]; agentes: { value: string }[] }; role: string }) {
@@ -70,6 +72,8 @@ export default function VozAprendizajePage({ socket, catalogs, role }: { socket:
                         <option value="estadoExtintor">Estado</option>
                         <option value="mes">Mes (PH)</option>
                         <option value="servicioExtra">Adicional</option>
+                        <option value="peso">Peso</option>
+                        <option value="recarga">Recarga</option>
                     </select>
                     <input value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} placeholder="Texto que se escucha (ej: badier)" className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600" />
                     <input value={nuevoValor} onChange={(e) => setNuevoValor(e.target.value)} placeholder="Valor correcto (ej: Badger)" list="voz-valores-nuevo" className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600" />

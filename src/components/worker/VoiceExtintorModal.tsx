@@ -123,7 +123,7 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
 
     const parsearYActualizar = (texto: string) => {
         if (!texto.trim()) return;
-        const resultado = parsearComandoVoz(texto, { marcas, agentes, recargas, serviciosExtra, unidadActual: camposBase.unidadPeso || unidadActual, correcciones });
+        const resultado = parsearComandoVoz(texto, { marcas, agentes, recargas, serviciosExtra, unidadActual: camposBase.unidadPeso || unidadActual, agenteActual: camposBase.agenteExtintor, correcciones });
         setDetecciones((prev) => {
             const combinadas = new Map(prev.map((d) => [d.campo, d]));
             resultado.detecciones.forEach((d) => combinadas.set(d.campo, d));
@@ -141,7 +141,7 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
 
     useEffect(() => {
         if (!transcripcionFinal.trim()) return;
-        const resultado = parsearComandoVoz(transcripcionFinal, { marcas, agentes, recargas, serviciosExtra, unidadActual: camposBase.unidadPeso || unidadActual, correcciones });
+        const resultado = parsearComandoVoz(transcripcionFinal, { marcas, agentes, recargas, serviciosExtra, unidadActual: camposBase.unidadPeso || unidadActual, agenteActual: camposBase.agenteExtintor, correcciones });
         resultado.detecciones.forEach((d) => {
             if (!d.tipoCorreccion || !d.textoOido || !d.valor) return;
             const clave = `${d.tipoCorreccion}:${d.textoOido}:${d.valor}`;
@@ -171,6 +171,13 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
         if (detAgente && camposBase.agenteExtintor) registrarCorreccion("agenteExtintor", detAgente.textoOido, camposBase.agenteExtintor, camposBase.agenteExtintor !== detAgente.valor);
         const detEstado = detFor("estadoExtintor");
         if (detEstado && camposBase.estadoExtintor) registrarCorreccion("estadoExtintor", detEstado.textoOido, camposBase.estadoExtintor, camposBase.estadoExtintor !== detEstado.valor);
+        const detPeso = detFor("peso");
+        if (detPeso && camposBase.peso && camposBase.unidadPeso) {
+            const valorActual = `${camposBase.peso} ${camposBase.unidadPeso}`;
+            registrarCorreccion("peso", detPeso.textoOido, valorActual, valorActual !== detPeso.valor);
+        }
+        const detRecarga = detFor("recarga");
+        if (detRecarga && camposBase.recarga) registrarCorreccion("recarga", detRecarga.textoOido, camposBase.recarga, camposBase.recarga !== detRecarga.valor);
         onAplicar(camposBase);
         onClose();
     };
