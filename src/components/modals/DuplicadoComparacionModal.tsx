@@ -68,7 +68,7 @@ export default function DuplicadoComparacionModal({ coincidencia, nuevo, saving,
                     <span className="text-2xl shrink-0">{esFuerte ? "🚨" : "⚠️"}</span>
                     <div className="flex flex-col gap-1">
                         <h3 className={`text-sm font-black ${esFuerte ? "text-red-800" : "text-amber-800"}`}>
-                            {esFuerte ? "Posible extintor duplicado" : "Coincidencia sospechosa"}
+                            Posible duplicado de extintores
                         </h3>
                         <p className={`text-xs leading-relaxed ${esFuerte ? "text-red-700" : "text-amber-700"}`}>
                             Coincide en {coincidencia.camposCoincidentes.map((c) => CAMPO_LABEL[c] || c).join(", ")} con un extintor ya registrado en esta misma sede.

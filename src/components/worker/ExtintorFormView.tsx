@@ -481,6 +481,7 @@ export default function ExtintorFormView({
                 recargas={RECARGAS}
                 serviciosExtra={SERVICIOS_EXTRA}
                 unidadActual={form.unidadPeso}
+                socket={socket}
             />
         </div>
     );

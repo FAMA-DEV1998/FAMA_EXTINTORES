@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Socket } from "socket.io-client";
 import type { FormData } from "../../types";
 import { ESTADOS, MESES, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL } from "../../constants";
 import { SiNo } from "../ui/WorkerUI";
@@ -13,6 +14,7 @@ interface VoiceExtintorModalProps {
     recargas: string[];
     serviciosExtra: string[];
     unidadActual: "KG" | "LB" | "LT" | "GAL";
+    socket: Socket | null;
 }
 
 const PESOS_POR_UNIDAD_GUIA: Record<"KG" | "LB" | "LT" | "GAL", readonly string[]> = {
@@ -107,11 +109,10 @@ function ChipSelector({ opciones, valor, onSeleccionar }: { opciones: string[]; 
     );
 }
 
-export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, agentes, recargas, serviciosExtra, unidadActual }: VoiceExtintorModalProps) {
-    const { soportado, escuchando, transcripcion, iniciar, detener, reiniciar, correcciones, registrarCorreccion } = useVoiceDictado();
+export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, agentes, recargas, serviciosExtra, unidadActual, socket }: VoiceExtintorModalProps) {
+    const { soportado, escuchando, transcripcion, iniciar, detener, reiniciar, correcciones, registrarCorreccion } = useVoiceDictado(socket);
     const [detecciones, setDetecciones] = useState<DeteccionVoz[]>([]);
     const [camposBase, setCamposBase] = useState<Partial<FormData>>({});
-    const [guiaAbierta, setGuiaAbierta] = useState(false);
 
     useEffect(() => {
         if (!open) { reiniciar(); setDetecciones([]); setCamposBase({}); }
@@ -161,24 +162,36 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-zinc-50 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
+            <div className="bg-zinc-50 rounded-2xl w-full max-w-5xl h-[94vh] flex flex-col shadow-2xl">
                 <div className="px-5 py-4 border-b border-zinc-200 bg-white rounded-t-2xl flex items-center justify-between shrink-0">
                     <h3 className="text-lg font-black text-zinc-800">🎤 Registro por Voz</h3>
                     <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-500 transition-colors">✕</button>
                 </div>
 
-                <div className="px-5 py-4 flex flex-col gap-4 overflow-y-auto flex-1">
-                    <div className="rounded-xl border-2 border-zinc-200 overflow-hidden shrink-0 bg-white">
-                        <button
-                            type="button"
-                            onClick={() => setGuiaAbierta((v) => !v)}
-                            className="w-full flex items-center justify-between px-4 py-2.5 bg-zinc-50 text-xs font-black text-zinc-600 uppercase tracking-wider"
-                        >
-                            📋 Guía de Dictado
-                            <span className="text-zinc-400">{guiaAbierta ? "▲" : "▼"}</span>
-                        </button>
-                        {guiaAbierta && (
-                            <div className="px-3 py-3 flex flex-col gap-3 max-h-64 overflow-y-auto">
+                <div className="px-5 py-4 flex flex-col gap-3 flex-1 min-h-0">
+                    {!soportado ? (
+                        <div className="px-4 py-3 rounded-xl bg-red-50 border-2 border-red-200 text-red-700 text-sm font-bold shrink-0">
+                            Este dispositivo no soporta reconocimiento de voz.
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-4 bg-white rounded-xl border-2 border-zinc-200 px-4 py-3 shrink-0">
+                            <button
+                                onClick={() => (escuchando ? procesar() : iniciar())}
+                                className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-2xl shadow-lg transition-all active:scale-90 ${escuchando ? "bg-red-600 animate-pulse text-white" : "bg-zinc-900 text-white"}`}
+                            >
+                                🎤
+                            </button>
+                            <div className="flex flex-col gap-1 min-w-0 flex-1">
+                                <p className="text-xs font-black text-zinc-600">{escuchando ? "Escuchando… las tarjetas se actualizan solas" : "Toca para dictar"}</p>
+                                <p className="text-xs text-zinc-500 truncate">{transcripcion || "Di los datos y luego corrige diciendo \"no, es...\""}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-2 md:grid-rows-1 gap-3 flex-1 min-h-0">
+                        <div className="flex flex-col min-h-0 rounded-xl border-2 border-zinc-200 bg-white overflow-hidden">
+                            <p className="px-4 py-2.5 bg-zinc-50 border-b border-zinc-200 shrink-0 text-xs font-black text-zinc-600 uppercase tracking-wider">📋 Guía de Dictado</p>
+                            <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3">
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                     {CATEGORIAS_GUIA.map((c) => (
                                         <div key={c.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-2.5 flex flex-col gap-1.5">
@@ -225,31 +238,17 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
                                     </div>
                                 </div>
                             </div>
-                        )}
-                    </div>
-
-                    {!soportado ? (
-                        <div className="px-4 py-3 rounded-xl bg-red-50 border-2 border-red-200 text-red-700 text-sm font-bold">
-                            Este dispositivo no soporta reconocimiento de voz.
                         </div>
-                    ) : (
-                        <>
-                            <div className="flex items-center gap-4 bg-white rounded-xl border-2 border-zinc-200 px-4 py-3">
-                                <button
-                                    onClick={() => (escuchando ? procesar() : iniciar())}
-                                    className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-2xl shadow-lg transition-all active:scale-90 ${escuchando ? "bg-red-600 animate-pulse text-white" : "bg-zinc-900 text-white"}`}
-                                >
-                                    🎤
-                                </button>
-                                <div className="flex flex-col gap-1 min-w-0 flex-1">
-                                    <p className="text-xs font-black text-zinc-600">{escuchando ? "Escuchando… las tarjetas se actualizan solas" : "Toca para dictar"}</p>
-                                    <p className="text-xs text-zinc-500 truncate">{transcripcion || "Di los datos y luego corrige diciendo \"no, es...\""}</p>
-                                </div>
-                            </div>
 
-                            {hayDatos && (
-                                <div className="flex flex-col gap-2">
-                                    <p className="text-xs font-black text-zinc-500 uppercase tracking-wider px-1">Resumen final — revisa y corrige antes de guardar</p>
+                        <div className="flex flex-col min-h-0 rounded-xl border-2 border-zinc-200 bg-white overflow-hidden">
+                            <p className="px-4 py-2.5 bg-zinc-50 border-b border-zinc-200 shrink-0 text-xs font-black text-zinc-600 uppercase tracking-wider">🎯 Detectado en vivo — revisa y corrige antes de guardar</p>
+                            <div className="flex-1 overflow-y-auto px-3 py-3">
+                                {!hayDatos ? (
+                                    <div className="h-full flex flex-col items-center justify-center gap-2 text-center px-4 py-8">
+                                        <span className="text-3xl opacity-60">🎙️</span>
+                                        <p className="text-xs font-bold text-zinc-400">Los datos detectados aparecerán aquí mientras dictas</p>
+                                    </div>
+                                ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                         {tiene("nSerie") && (
                                             <Tarjeta icono="🔖" titulo="N° Serie">
@@ -367,10 +366,10 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
                                             </Tarjeta>
                                         )}
                                     </div>
-                                </div>
-                            )}
-                        </>
-                    )}
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="px-5 py-4 border-t border-zinc-200 bg-white rounded-b-2xl flex gap-3 shrink-0">

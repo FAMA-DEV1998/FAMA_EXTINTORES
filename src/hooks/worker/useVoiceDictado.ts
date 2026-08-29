@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Socket } from "socket.io-client";
 import { ESTADOS, MESES, PESOS_KG, PESOS_LB, PESOS_LT, PESOS_GAL } from "../../constants";
 import type { FormData } from "../../types";
 
@@ -8,8 +9,6 @@ declare global {
     webkitSpeechRecognition?: any;
   }
 }
-
-const STORAGE_KEY = "fama_voz_correcciones";
 
 type TipoCorreccion = "marca" | "agenteExtintor" | "estadoExtintor";
 
@@ -42,13 +41,43 @@ const similitud = (a: string, b: string): number => {
   return 1 - distancia / Math.max(an.length, bn.length, 1);
 };
 
+const normalizarFonetico = (v: string): string =>
+  normalizarTexto(v)
+    .replace(/h/g, "")
+    .replace(/v/g, "b")
+    .replace(/z/g, "s")
+    .replace(/ll/g, "y")
+    .replace(/qu/g, "k")
+    .replace(/c(?=[ei])/g, "s")
+    .replace(/c/g, "k")
+    .replace(/g(?=[ei])/g, "j")
+    .replace(/y/g, "i")
+    .replace(/([a-z])\1+/g, "$1");
+
+const similitudFonetica = (a: string, b: string): number => {
+  const an = normalizarFonetico(a), bn = normalizarFonetico(b);
+  if (!an || !bn) return 0;
+  const distancia = distanciaLevenshtein(an, bn);
+  return 1 - distancia / Math.max(an.length, bn.length, 1);
+};
+
+const similitudCombinada = (a: string, b: string): number => Math.max(similitud(a, b), similitudFonetica(a, b));
+
 const mejorCoincidencia = (texto: string, opciones: string[], correcciones: Record<string, string>): { valor: string; confianza: number } | null => {
   const normalizado = normalizarTexto(texto);
   if (!normalizado) return null;
   if (correcciones[normalizado]) return { valor: correcciones[normalizado], confianza: 1 };
+
+  let mejorAprendida: { valor: string; confianza: number } | null = null;
+  for (const [clave, valor] of Object.entries(correcciones)) {
+    const score = similitudCombinada(normalizado, clave);
+    if (!mejorAprendida || score > mejorAprendida.confianza) mejorAprendida = { valor, confianza: score };
+  }
+  if (mejorAprendida && mejorAprendida.confianza >= 0.72) return mejorAprendida;
+
   let mejor: { valor: string; confianza: number } | null = null;
   opciones.forEach((opcion) => {
-    const score = similitud(normalizado, opcion);
+    const score = similitudCombinada(normalizado, opcion);
     if (!mejor || score > mejor.confianza) mejor = { valor: opcion, confianza: score };
   });
   return mejor;
@@ -277,7 +306,7 @@ export function parsearComandoVoz(
   return { campos, detecciones: Array.from(ultimaPorCampo.values()) };
 }
 
-export function useVoiceDictado() {
+export function useVoiceDictado(socket: Socket | null) {
   const [soportado] = useState(() => typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   const [escuchando, setEscuchando] = useState(false);
   const [transcripcion, setTranscripcion] = useState("");
@@ -285,11 +314,14 @@ export function useVoiceDictado() {
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
-    try {
-      const guardado = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      setCorrecciones(guardado && typeof guardado === "object" ? guardado : {});
-    } catch { setCorrecciones({}); }
-  }, []);
+    if (!socket) return;
+    socket.emit("voz:correcciones:list", {}, (res: any) => {
+      if (res?.success) setCorrecciones(res.correcciones || {});
+    });
+    const onUpdated = (data: Record<string, Record<string, string>>) => setCorrecciones(data || {});
+    socket.on("voz:correcciones:updated", onUpdated);
+    return () => { socket.off("voz:correcciones:updated", onUpdated); };
+  }, [socket]);
 
   const iniciar = () => {
     if (!soportado) return;
@@ -321,11 +353,8 @@ export function useVoiceDictado() {
   const registrarCorreccion = (tipo: TipoCorreccion, textoOido: string, valorElegido: string) => {
     const clave = normalizarTexto(textoOido);
     if (!clave || !valorElegido) return;
-    setCorrecciones((prev) => {
-      const next = { ...prev, [tipo]: { ...(prev[tipo] || {}), [clave]: valorElegido } };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
+    setCorrecciones((prev) => ({ ...prev, [tipo]: { ...(prev[tipo] || {}), [clave]: valorElegido } }));
+    socket?.emit("voz:correcciones:save", { tipo, clave, valor: valorElegido });
   };
 
   return { soportado, escuchando, transcripcion, iniciar, detener, reiniciar, correcciones, registrarCorreccion };
