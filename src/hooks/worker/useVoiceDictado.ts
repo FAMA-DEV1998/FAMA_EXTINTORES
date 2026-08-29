@@ -63,6 +63,13 @@ const similitudFonetica = (a: string, b: string): number => {
 
 const similitudCombinada = (a: string, b: string): number => Math.max(similitud(a, b), similitudFonetica(a, b));
 
+const colapsarRepeticiones = (texto: string): string => texto.replace(/\b([a-záéíóúñ]+)(\s+\1\b)+/gi, "$1");
+
+const PALABRAS_RELLENO = /\b(es|era|sera|será|creo|que|seria|sería|osea|digamos|diria|diría)\b/g;
+
+const extraerCodigo = (texto: string): string =>
+  normalizarTexto(texto).replace(PALABRAS_RELLENO, " ").replace(/\s+/g, "").toUpperCase();
+
 const mejorCoincidencia = (texto: string, opciones: string[], correcciones: Record<string, string>): { valor: string; confianza: number } | null => {
   const normalizado = normalizarTexto(texto);
   if (!normalizado) return null;
@@ -191,10 +198,11 @@ export interface ResultadoParseoVoz {
 }
 
 const UNIDAD_POR_PALABRA = (texto: string): "KG" | "LB" | "LT" | "GAL" | null => {
-  if (/kilo|kg/.test(texto)) return "KG";
-  if (/libra|lb/.test(texto)) return "LB";
-  if (/litro|lt/.test(texto)) return "LT";
-  if (/galon|gal/.test(texto)) return "GAL";
+  const t = normalizarTexto(texto);
+  if (/\b(kilos?|kilogramos?|kg)\b/.test(t)) return "KG";
+  if (/\b(libras?|lb)\b/.test(t)) return "LB";
+  if (/\b(litros?|lts?|l)\b/.test(t)) return "LT";
+  if (/\b(galones?|galon|gal)\b/.test(t)) return "GAL";
   return null;
 };
 
@@ -202,11 +210,14 @@ const PESOS_POR_UNIDAD: Record<"KG" | "LB" | "LT" | "GAL", readonly string[]> = 
   KG: PESOS_KG, LB: PESOS_LB, LT: PESOS_LT, GAL: PESOS_GAL,
 };
 
-const PATRON_CORRECCION = /\b(?:no,?\s*es|más\s+bien|mejor\s+dicho|corrijo|correccion|corrección)\b/;
+const PATRON_CORRECCION_AMPLIA = /\bno\s+es\b|\bno\b|\bmás\s+bien\b|\bmejor\s+dicho\b|\bcorrijo\b|\bcorreccion\b|\bcorrección\b/;
+const PATRON_CORRECCION_FRASE = /\bno\s+es\b|\bmás\s+bien\b|\bmejor\s+dicho\b|\bcorrijo\b|\bcorreccion\b|\bcorrección\b/;
 
-const aplicarCorreccionInterna = (seg: string): string => {
-  const partes = seg.split(PATRON_CORRECCION);
-  return partes.length > 1 ? partes[partes.length - 1].trim() : seg;
+const aplicarCorreccionInterna = (seg: string, patron: RegExp): string => {
+  const partes = seg.split(patron);
+  if (partes.length <= 1) return seg;
+  const ultima = partes[partes.length - 1].trim();
+  return ultima || seg;
 };
 
 export function parsearComandoVoz(
@@ -218,12 +229,13 @@ export function parsearComandoVoz(
   const detecciones: DeteccionVoz[] = [];
 
   segmentos.forEach(({ campo, texto: segOriginal }) => {
-    const seg = aplicarCorreccionInterna(segOriginal);
+    const usaCorreccionAmplia = campo !== "valvula" && campo !== "manguera" && campo !== "manometro" && campo !== "tobera";
+    const seg = aplicarCorreccionInterna(segOriginal, usaCorreccionAmplia ? PATRON_CORRECCION_AMPLIA : PATRON_CORRECCION_FRASE);
     if (campo === "nSerie") {
-      const valor = seg.replace(/\s+/g, "").toUpperCase();
+      const valor = extraerCodigo(seg);
       if (valor) { campos.nSerie = valor; detecciones.push({ campo, label: "N° Serie", valor, textoOido: seg, confianza: 1, editable: true }); }
     } else if (campo === "nInterno") {
-      const valor = seg.replace(/\s+/g, "").toUpperCase();
+      const valor = extraerCodigo(seg);
       if (valor) { campos.nInterno = valor; detecciones.push({ campo, label: "N° Interno", valor, textoOido: seg, confianza: 1, editable: true }); }
     } else if (campo === "marca") {
       const match = mejorCoincidencia(seg, contexto.marcas, contexto.correcciones.marca || {});
@@ -312,6 +324,9 @@ export function useVoiceDictado(socket: Socket | null) {
   const [transcripcion, setTranscripcion] = useState("");
   const [correcciones, setCorrecciones] = useState<Record<string, Record<string, string>>>({});
   const recognitionRef = useRef<any>(null);
+  const detenerManualRef = useRef(false);
+  const baseRef = useRef("");
+  const actualRef = useRef("");
 
   useEffect(() => {
     if (!socket) return;
@@ -323,8 +338,7 @@ export function useVoiceDictado(socket: Socket | null) {
     return () => { socket.off("voz:correcciones:updated", onUpdated); };
   }, [socket]);
 
-  const iniciar = () => {
-    if (!soportado) return;
+  const construirReconocimiento = (): any => {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new Recognition();
     recognition.lang = "es-PE";
@@ -333,22 +347,48 @@ export function useVoiceDictado(socket: Socket | null) {
     recognition.onresult = (event: any) => {
       let texto = "";
       for (let i = 0; i < event.results.length; i++) texto += event.results[i][0].transcript + " ";
-      setTranscripcion(texto.trim());
+      actualRef.current = texto.trim();
+      setTranscripcion(colapsarRepeticiones(`${baseRef.current} ${actualRef.current}`.trim()));
     };
-    recognition.onend = () => setEscuchando(false);
-    recognition.onerror = () => setEscuchando(false);
-    recognitionRef.current = recognition;
+    recognition.onend = () => {
+      if (!detenerManualRef.current) {
+        baseRef.current = `${baseRef.current} ${actualRef.current}`.trim();
+        actualRef.current = "";
+        recognitionRef.current = construirReconocimiento();
+        recognitionRef.current.start();
+        return;
+      }
+      setEscuchando(false);
+    };
+    recognition.onerror = (e: any) => {
+      if (e?.error === "no-speech" || e?.error === "aborted") return;
+      setEscuchando(false);
+    };
+    return recognition;
+  };
+
+  const iniciar = () => {
+    if (!soportado) return;
+    detenerManualRef.current = false;
+    baseRef.current = "";
+    actualRef.current = "";
     setTranscripcion("");
-    recognition.start();
+    recognitionRef.current = construirReconocimiento();
+    recognitionRef.current.start();
     setEscuchando(true);
   };
 
   const detener = () => {
+    detenerManualRef.current = true;
     recognitionRef.current?.stop();
     setEscuchando(false);
   };
 
-  const reiniciar = () => setTranscripcion("");
+  const reiniciar = () => {
+    baseRef.current = "";
+    actualRef.current = "";
+    setTranscripcion("");
+  };
 
   const registrarCorreccion = (tipo: TipoCorreccion, textoOido: string, valorElegido: string) => {
     const clave = normalizarTexto(textoOido);

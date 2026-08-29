@@ -121,7 +121,7 @@ export default function VoiceExtintorModal({ open, onClose, onAplicar, marcas, a
 
     const parsearYActualizar = (texto: string) => {
         if (!texto.trim()) return;
-        const resultado = parsearComandoVoz(texto, { marcas, agentes, recargas, serviciosExtra, unidadActual, correcciones });
+        const resultado = parsearComandoVoz(texto, { marcas, agentes, recargas, serviciosExtra, unidadActual: camposBase.unidadPeso || unidadActual, correcciones });
         setDetecciones((prev) => {
             const combinadas = new Map(prev.map((d) => [d.campo, d]));
             resultado.detecciones.forEach((d) => combinadas.set(d.campo, d));

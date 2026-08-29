@@ -47,6 +47,8 @@ const CAMPO_LABEL: Record<string, string> = {
 
 const soloPH = (mes?: string, anio?: string) => (anio ? [mes, anio].filter(Boolean).join("/") : "");
 
+const normalizarSerie = (v: string) => (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
 export default function DuplicadoComparacionModal({ coincidencia, nuevo, saving, onUsarExistente, onConfirmarNuevo, onSeguirEditando }: DuplicadoComparacionModalProps) {
     const esFuerte = coincidencia.nivel === "fuerte";
     const coincide = (campo: string) => coincidencia.camposCoincidentes.includes(campo);
@@ -82,7 +84,8 @@ export default function DuplicadoComparacionModal({ coincidencia, nuevo, saving,
                     </div>
                     <div className="flex flex-col gap-1">
                         {filas.map((f) => {
-                            const match = coincide(f.campo) && !!f.existente && f.existente === f.nuevo;
+                            const igual = f.campo === "nSerie" ? !!f.existente && normalizarSerie(f.existente) === normalizarSerie(f.nuevo) : f.existente === f.nuevo;
+                            const match = coincide(f.campo) && !!f.existente && igual;
                             return (
                                 <div key={f.campo} className={`grid grid-cols-3 gap-2 px-3 py-2 rounded-lg text-xs ${match ? (esFuerte ? "bg-red-50" : "bg-amber-50") : "bg-zinc-50"}`}>
                                     <span className="font-bold text-zinc-500">{f.label}</span>
