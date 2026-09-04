@@ -1,4 +1,16 @@
-export const STICKER_TEMPLATE_URL = "/templates/sticker-extintor.svg";
+export const STICKER_TEMPLATE_URL = "/templates/sticker-extintor-v2.svg";
+
+export type StickerData = {
+    uid: string;
+    nSerie: string;
+    nInterno: string;
+    empresaReceptora: string;
+    capacidad: string;
+    marca: string;
+    fechaFab: string;
+    ultimoPh: string;
+    proximoPh: string;
+};
 
 let templateCache: string | null = null;
 
@@ -17,11 +29,36 @@ const svgToDataUri = (svgTexto: string): string => {
     return `data:image/svg+xml;charset=utf-8,${encoded}`;
 };
 
-export const generarStickerPng = async (uid: string): Promise<Blob> => {
-    const [{ default: QRCode }, svgTexto] = await Promise.all([
+const escapeXml = (valor: string): string =>
+    (valor || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+const rellenarPlantilla = (svgTexto: string, data: StickerData): string => {
+    const reemplazos: Record<string, string> = {
+        "{{empresa_receptora}}": escapeXml(data.empresaReceptora || ""),
+        "{{serie}}": escapeXml(data.nSerie || data.nInterno || ""),
+        "{{capacidad}}": escapeXml(data.capacidad || ""),
+        "{{marca}}": escapeXml(data.marca || ""),
+        "{{fecha_fab}}": escapeXml(data.fechaFab || ""),
+        "{{ultimo_ph}}": escapeXml(data.ultimoPh || ""),
+        "{{proximo_ph}}": escapeXml(data.proximoPh || ""),
+    };
+    let resultado = svgTexto;
+    for (const [marcador, valor] of Object.entries(reemplazos)) {
+        resultado = resultado.split(marcador).join(valor);
+    }
+    return resultado;
+};
+
+export const generarStickerPng = async (data: StickerData): Promise<Blob> => {
+    const [{ default: QRCode }, svgTemplate] = await Promise.all([
         import("qrcode"),
         getTemplate(),
     ]);
+
+    const svgTexto = rellenarPlantilla(svgTemplate, data);
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgTexto, "image/svg+xml");
@@ -33,7 +70,7 @@ export const generarStickerPng = async (uid: string): Promise<Blob> => {
     const width = placeholder.getAttribute("width") || "135";
     const height = placeholder.getAttribute("height") || "135";
 
-    const qrDataUrl = await QRCode.toDataURL(uid, { margin: 0, width: 512 });
+    const qrDataUrl = await QRCode.toDataURL(data.uid, { margin: 0, width: 512 });
 
     const image = doc.createElementNS("http://www.w3.org/2000/svg", "image");
     image.setAttribute("x", x);
@@ -93,7 +130,7 @@ export const generarStickerPng = async (uid: string): Promise<Blob> => {
 };
 
 export const generarStickersZip = async (
-    extintores: { uid: string; nSerie: string; nInterno: string }[],
+    extintores: StickerData[],
     onProgreso?: (hecho: number, total: number) => void
 ): Promise<Blob> => {
     const { default: JSZip } = await import("jszip");
@@ -102,7 +139,7 @@ export const generarStickersZip = async (
 
     for (let i = 0; i < extintores.length; i++) {
         const ext = extintores[i];
-        const png = await generarStickerPng(ext.uid);
+        const png = await generarStickerPng(ext);
         let nombre = (ext.nSerie || ext.nInterno || ext.uid).trim().replace(/[\\/:*?"<>|]/g, "-") || ext.uid;
         if (usados.has(nombre)) nombre = `${nombre}-${ext.uid.slice(0, 6)}`;
         usados.add(nombre);

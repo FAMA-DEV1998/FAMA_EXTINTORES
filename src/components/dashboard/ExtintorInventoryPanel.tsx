@@ -423,9 +423,9 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
                                             )}
                                             <td className="px-5 py-3.5 sticky right-0 bg-zinc-950/80 backdrop-blur-md group-hover:bg-zinc-800/90 transition-colors border-l border-zinc-800/40">
                                                 <div className="flex items-center justify-end gap-1.5">
-                                                    {ext.evidencia === "__HAS_EVIDENCIA__" && (
+                                                    {ext.evidencia === "__HAS_EVIDENCIA__" && (variant === "historial" || ext.estadoExtintor === "De Baja") && (
                                                         <button
-                                                            onClick={() => evidencia.open(ext)}
+                                                            onClick={() => evidencia.open(ext, ext.evidenciaFotos)}
                                                             className="w-8 h-8 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/80 text-sm flex items-center justify-center border border-emerald-800/50 hover:border-emerald-600 transition-all hover:shadow-md hover:shadow-emerald-900/20 relative"
                                                             title={`Ver ${ext.evidenciaCount || 1} foto(s)`}
                                                         >
@@ -552,6 +552,8 @@ export default function ExtintorInventoryPanel({ variant, onExportExcel, exporti
             <StickersModal
                 isOpen={stickersModal}
                 extintores={sortedExt}
+                empresaNombre={scope.selectedEmpresa?.razonSocial}
+                sedeNombreById={sedeNameById}
                 onClose={() => setStickersModal(false)}
             />
         </div>

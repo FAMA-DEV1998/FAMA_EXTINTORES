@@ -1,14 +1,17 @@
 import { useState } from "react";
 import type { Extintor } from "../../types";
-import { descargarBlob, generarStickersZip } from "../../utils/stickers";
+import { descargarBlob, generarStickersZip, type StickerData } from "../../utils/stickers";
+import { formatRealizadoPH, formatVencimPH } from "../../utils/helpers";
 
 type Props = {
     isOpen: boolean;
     extintores: Extintor[];
+    empresaNombre?: string;
+    sedeNombreById?: Record<string, string>;
     onClose: () => void;
 };
 
-export default function StickersModal({ isOpen, extintores, onClose }: Props) {
+export default function StickersModal({ isOpen, extintores, empresaNombre, sedeNombreById, onClose }: Props) {
     const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
     const [busqueda, setBusqueda] = useState("");
     const [generando, setGenerando] = useState(false);
@@ -54,13 +57,30 @@ export default function StickersModal({ isOpen, extintores, onClose }: Props) {
         onClose();
     };
 
+    const armarEmpresaReceptora = (ext: Extintor): string => {
+        const empresa = empresaNombre || "";
+        const sede = ext.sedeId ? sedeNombreById?.[ext.sedeId] : undefined;
+        return sede ? `${empresa}-${sede}` : empresa;
+    };
+
     const handleGenerar = async () => {
         const elegidos = extintores.filter((e) => seleccionados.has(e.uid));
         if (elegidos.length === 0) return;
         setGenerando(true);
         setProgreso({ hecho: 0, total: elegidos.length });
         try {
-            const zip = await generarStickersZip(elegidos, (hecho, total) => setProgreso({ hecho, total }));
+            const datos: StickerData[] = elegidos.map((e) => ({
+                uid: e.uid,
+                nSerie: e.nSerie,
+                nInterno: e.nInterno,
+                empresaReceptora: armarEmpresaReceptora(e),
+                capacidad: [e.peso, e.unidadPeso].filter(Boolean).join(" "),
+                marca: e.marca,
+                fechaFab: e.fechaFabricacion,
+                ultimoPh: formatRealizadoPH(e.mesRealizadoPH, e.realizadoPH),
+                proximoPh: formatVencimPH(e.vencimPH),
+            }));
+            const zip = await generarStickersZip(datos, (hecho, total) => setProgreso({ hecho, total }));
             descargarBlob(zip, `stickers-extintores-${Date.now()}.zip`);
             handleClose();
         } catch (err) {

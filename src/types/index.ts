@@ -69,6 +69,7 @@ export type Extintor = {
   motivoBaja: string;
   evidencia?: string; 
   evidenciaCount?: number;
+  evidenciaFotos?: string[];
   uid: string;
   sedeId: string | null;
 };

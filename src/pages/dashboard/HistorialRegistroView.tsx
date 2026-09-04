@@ -4,7 +4,7 @@ import { useEmpresaScope } from "../../context/EmpresaScopeContext";
 import { useExportActions, useServicios, useCertificado } from "../../hooks/dashboard";
 import { WhatsappModal, AsociarExtintorModal, CertificadoModal } from "../../components/modals";
 import ExtintorInventoryPanel from "../../components/dashboard/ExtintorInventoryPanel";
-import { getSnapshotHastaFecha, mesAnioLabel, ordinalServicio, sortExtintoresPersonalizado } from "../../utils/helpers";
+import { getSnapshotHastaFecha, mesAnioLabel, ordinalServicio, parseEvidencias, sortExtintoresPersonalizado } from "../../utils/helpers";
 
 export default function HistorialRegistroView() {
   const { mes, registroId } = useParams<{ mes: string; registroId: string }>();
@@ -39,9 +39,14 @@ export default function HistorialRegistroView() {
     if (saved.isNew && !servicio.extintorUids.includes(saved.uid)) {
       addExtintorToServicio(servicio.id, saved.uid);
     }
-    setExtintorEstado(servicio.id, saved.uid, saved.estado);
+    // La evidencia de este Servicio no se edita desde el Dashboard; se
+    // conserva la que ya tenía el snapshot para no perderla al guardar
+    // otros campos del extintor.
+    const snapPrevio = servicio.extintorEstados?.[saved.uid];
+    const estadoAGuardar = { ...saved.estado, evidencia: snapPrevio?.evidencia ?? saved.estado.evidencia ?? "[]" };
+    setExtintorEstado(servicio.id, saved.uid, estadoAGuardar);
 
-    sincronizarEstadoActual(saved.uid, { servicioId: servicio.id, fecha: servicio.fechaRetiro, estado: saved.estado });
+    sincronizarEstadoActual(saved.uid, { servicioId: servicio.id, fecha: servicio.fechaRetiro, estado: estadoAGuardar });
     extintorForm.clearLastSavedExtintor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extintorForm?.lastSavedExtintor, servicio?.id]);
@@ -67,7 +72,22 @@ export default function HistorialRegistroView() {
       .filter((e: any) => (servicio?.extintorUids ?? []).includes(e.uid))
       .map((e: any) => {
         const snap = servicio?.extintorEstados?.[e.uid];
-        return snap ? { ...e, ...snap } : e;
+        if (!snap) return e;
+        const merged = { ...e, ...snap };
+        // La evidencia de este Servicio vive únicamente en el snapshot
+        // (extintorEstados[uid].evidencia). No se usa la evidencia global
+        // del extintor para no mezclar fotos entre Servicios.
+        if (typeof snap.evidencia === "string") {
+          const fotos = parseEvidencias(snap.evidencia);
+          merged.evidencia = fotos.length > 0 ? "__HAS_EVIDENCIA__" : "";
+          merged.evidenciaCount = fotos.length;
+          merged.evidenciaFotos = fotos;
+        } else {
+          merged.evidencia = "";
+          merged.evidenciaCount = 0;
+          merged.evidenciaFotos = [];
+        }
+        return merged;
       }),
     selectedEmpresa?.servicioWeightOrder,
     selectedEmpresa?.servicioEstadoOrder,

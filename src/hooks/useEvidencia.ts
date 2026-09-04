@@ -9,13 +9,24 @@ export function useEvidencia(socket: Socket | null) {
   const [extInfo, setExtInfo] = useState<string>("");
   const [activeIdx, setActiveIdx] = useState(0);
 
-  const open = (ext: Extintor) => {
-    if (!socket || ext.evidencia !== "__HAS_EVIDENCIA__") return;
-    setLoading(true);
-    setList([]);
+  const open = (ext: Extintor, fotosPrecargadas?: string[]) => {
+    if (ext.evidencia !== "__HAS_EVIDENCIA__") return;
     setActiveIdx(0);
     setExtInfo(`${ext.nSerie || "S-N"}_${ext.marca || ""}`);
     setIsOpen(true);
+
+    // Cuando ya tenemos las fotos del Servicio específico (precargadas desde
+    // el snapshot extintorEstados), las usamos directamente y evitamos
+    // traer la evidencia global (más reciente) del extintor por socket.
+    if (fotosPrecargadas) {
+      setLoading(false);
+      setList(fotosPrecargadas);
+      return;
+    }
+
+    if (!socket) return;
+    setLoading(true);
+    setList([]);
     socket.emit("extintor:evidencia:get", { rowIndex: ext.rowIndex }, (res: any) => {
       setLoading(false);
       if (res?.success && res.evidencia) {
