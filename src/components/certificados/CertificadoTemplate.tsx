@@ -50,10 +50,12 @@ export interface CertificadoDatos {
   accionesTrabajo: { venta: boolean; recarga: boolean; mantenimiento: boolean };
   textoAccion: string;
   etiquetasAdicionales: string[];
+  parrafoPersonalizado?: string;
 }
 
 interface Props {
   datos: CertificadoDatos;
+  id?: string;
 }
 
 const DENOMINACION_TITULO: Record<Denominacion, string> = {
@@ -84,14 +86,65 @@ const tituloCertificado = (tipo: TipoCertificado, denominacion: Denominacion): s
     : `CERTIFICADO DE GARANTIA Y OPERATIVIDAD DE ${nombreExtintores} DE LUCHA CONTRA INCENDIOS Y VIGENCIA DE PRUEBA HIDROSTATICA`;
 };
 
-export default function CertificadoTemplate({ datos }: Props) {
+const construirDenominacionTexto = (datos: CertificadoDatos, esSingular: boolean): string =>
+  esSingular ? DENOMINACION_PARRAFO_SINGULAR[datos.denominacion] : DENOMINACION_PARRAFO[datos.denominacion];
+
+export const sanitizarHtmlBold = (html: string): string => {
+  const contenedor = document.createElement("div");
+  contenedor.innerHTML = html || "";
+  const limpiar = (nodo: Node): string => {
+    let resultado = "";
+    nodo.childNodes.forEach((hijo) => {
+      if (hijo.nodeType === Node.TEXT_NODE) {
+        resultado += (hijo.textContent || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      } else if (hijo.nodeType === Node.ELEMENT_NODE) {
+        const el = hijo as HTMLElement;
+        const tag = el.tagName.toLowerCase();
+        if (tag === "strong" || tag === "b") {
+          resultado += `<strong>${limpiar(el)}</strong>`;
+        } else if (tag === "br") {
+          resultado += "<br>";
+        } else if (tag === "div" || tag === "p") {
+          resultado += `${limpiar(el)}<br>`;
+        } else {
+          resultado += limpiar(el);
+        }
+      }
+    });
+    return resultado;
+  };
+  return limpiar(contenedor).replace(/(<br>)+$/, "");
+};
+
+export const construirParrafoAutomatico = (datos: CertificadoDatos): string => {
+  const esPH = datos.tipoCertificado === "ph";
+  const esPlaca = datos.tipoIdentificacion === "placa";
+  const soloUnidadPlaca = esPlaca && !datos.dniAdicional && !datos.nombre.trim();
+  const esSingular = datos.items.length === 1;
+  const labelIdentificacion = datos.tipoIdentificacion === "ruc" ? "RUC N°" : datos.tipoIdentificacion === "dni" ? "DNI N°" : "Placa N°";
+  const denominacionTexto = construirDenominacionTexto(datos, esSingular);
+  const ubicacionCompleta = `${datos.ubicacion || "—"}${datos.distrito ? ` - ${datos.distrito}` : ""} - Lima`;
+  const etiquetasTexto = ["NTP 350.043.1", "833.030", ...datos.etiquetasAdicionales].join("; ");
+
+  const sujeto = soloUnidadPlaca
+    ? `<strong>UNIDAD PLACA ${datos.numeroIdentificacion || "—"}</strong>`
+    : `<strong>${datos.nombre || "—"}</strong> con <strong>${labelIdentificacion} ${datos.numeroIdentificacion || "—"}${esPlaca && datos.dniAdicional ? ` y DNI N° ${datos.dniAdicional}` : ""}</strong>`;
+  const ubicacionParte = esPlaca ? "" : ` ubicado en <strong>${ubicacionCompleta}</strong>`;
+
+  if (esPH) {
+    return `${sujeto}${ubicacionParte}, se ha efectuado la Prueba Hidrostática ${esSingular ? "al" : "a los"} ${denominacionTexto}${datos.agentesTextoCorto ? ` ${datos.agentesTextoCorto}` : ""}, utilizando la máquina <strong>MARCA KAMEX MAQUINARIAS EIRL</strong>, modelo <strong>KPH-02</strong>, dicho trabajo se ha realizado conforme lo establece la <strong>${etiquetasTexto} según detalle:</strong>`;
+  }
+  return `${sujeto}${ubicacionParte}, se ha efectuado ${datos.textoAccion} ${esSingular ? "del" : "de los"} ${denominacionTexto} de ${datos.agentesTexto}, dicho trabajo se ha realizado conforme lo establece la <strong>${etiquetasTexto} según detalle:</strong>`;
+};
+
+export default function CertificadoTemplate({ datos, id }: Props) {
   const esPH = datos.tipoCertificado === "ph";
   const esPlaca = datos.tipoIdentificacion === "placa";
   const soloUnidadPlaca = esPlaca && !datos.dniAdicional && !datos.nombre.trim();
   const esSingular = datos.items.length === 1;
   const labelIdentificacion = datos.tipoIdentificacion === "ruc" ? "RUC N°" : datos.tipoIdentificacion === "dni" ? "DNI N°" : "Placa N°";
   const mesLabel = MESES.find((m) => m.value === datos.mesFecha)?.label.toLowerCase() || "";
-  const denominacionTexto = esSingular ? DENOMINACION_PARRAFO_SINGULAR[datos.denominacion] : DENOMINACION_PARRAFO[datos.denominacion];
+  const denominacionTexto = construirDenominacionTexto(datos, esSingular);
   const marcaVisible = datos.columnas.marca || esPH;
   const ubicacionCompleta = `${datos.ubicacion || "—"}${datos.distrito ? ` - ${datos.distrito}` : ""} - Lima`;
   const etiquetasTexto = ["NTP 350.043.1", "833.030", ...datos.etiquetasAdicionales].join("; ");
@@ -104,7 +157,7 @@ export default function CertificadoTemplate({ datos }: Props) {
 
   return (
     <div style={{ fontFamily: "Arial, Helvetica, sans-serif" }} className="bg-white text-black">
-      <div className="w-[210mm] min-h-[297mm] px-10 py-15 relative text-[14px]">
+      <div id={id} className="w-[210mm] min-h-[297mm] px-10 py-15 relative text-[14px]">
         <header className="grid grid-cols-[110px_1fr_110px] items-center gap-4 mb-6">
           <div className="h-28 flex items-center justify-center">
             <img src="/images/logo-extintor.png" alt="Extintor" className="max-h-full max-w-full object-contain" />
@@ -146,37 +199,43 @@ export default function CertificadoTemplate({ datos }: Props) {
               {tituloCertificado(datos.tipoCertificado, datos.denominacion)}
             </h3>
 
-            <p className="text-justify mb-5 leading-[1.6]">
-              {soloUnidadPlaca ? (
-                <span className="font-bold">UNIDAD PLACA {datos.numeroIdentificacion || "—"}</span>
+            <p className="text-justify mb-5 leading-[1.6] whitespace-pre-line">
+              {datos.parrafoPersonalizado ? (
+                <span dangerouslySetInnerHTML={{ __html: sanitizarHtmlBold(datos.parrafoPersonalizado) }} />
               ) : (
                 <>
-                  <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
-                  <span className="font-bold">
-                    {labelIdentificacion} {datos.numeroIdentificacion || "—"}
-                    {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
-                  </span>
-                </>
-              )}
-              {!esPlaca && (
-                <>
-                  {" "}ubicado en <span className="font-bold">{ubicacionCompleta}</span>
-                </>
-              )}
-              ,{" "}
-              {esPH ? (
-                <>
-                  se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto}
-                  {datos.agentesTextoCorto ? <> {datos.agentesTextoCorto}</> : null},
-                  utilizando la máquina <span className="font-bold"> MARCA KAMEX MAQUINARIAS EIRL</span>, modelo{" "}
-                  <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
-                  <span className="font-bold">{etiquetasTexto} según detalle:</span>
-                </>
-              ) : (
-                <>
-                  se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
-                  ha realizado conforme lo establece la{" "}
-                  <span className="font-bold">{etiquetasTexto} según detalle:</span>
+                  {soloUnidadPlaca ? (
+                    <span className="font-bold">UNIDAD PLACA {datos.numeroIdentificacion || "—"}</span>
+                  ) : (
+                    <>
+                      <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
+                      <span className="font-bold">
+                        {labelIdentificacion} {datos.numeroIdentificacion || "—"}
+                        {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
+                      </span>
+                    </>
+                  )}
+                  {!esPlaca && (
+                    <>
+                      {" "}ubicado en <span className="font-bold">{ubicacionCompleta}</span>
+                    </>
+                  )}
+                  ,{" "}
+                  {esPH ? (
+                    <>
+                      se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto}
+                      {datos.agentesTextoCorto ? <> {datos.agentesTextoCorto}</> : null},
+                      utilizando la máquina <span className="font-bold"> MARCA KAMEX MAQUINARIAS EIRL</span>, modelo{" "}
+                      <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
+                      <span className="font-bold">{etiquetasTexto} según detalle:</span>
+                    </>
+                  ) : (
+                    <>
+                      se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
+                      ha realizado conforme lo establece la{" "}
+                      <span className="font-bold">{etiquetasTexto} según detalle:</span>
+                    </>
+                  )}
                 </>
               )}
             </p>

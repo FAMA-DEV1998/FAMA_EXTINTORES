@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { Link } from "react-router-dom";
-import { useAlertas, ANTICIPACION_OPCIONES } from "../../hooks/dashboard/useAlertas";
-import { estadoColor } from "../../utils/helpers";
+import { useAlertas } from "../../hooks/dashboard/useAlertas";
+import { estadoColor, CLASIFICACION_FILTROS, type ClasificacionFiltro } from "../../utils/helpers";
+import { MESES } from "../../constants/meses";
 
 const numeroWhatsapp = (celular: string) => {
   let num = (celular || "").replace(/\D/g, "");
@@ -12,6 +13,7 @@ const numeroWhatsapp = (celular: string) => {
 
 const MOSTRAR_ALERTAS_PH = false;
 const MOSTRAR_SERVICIO_PROXIMO = true;
+const ANIO_ALERTAS = new Date().getFullYear() + 1;
 
 const filtrarAlertaVisible = (alertas: any[]) => alertas
   .map((a: any) => ({
@@ -21,6 +23,13 @@ const filtrarAlertaVisible = (alertas: any[]) => alertas
   }))
   .map((a: any) => ({ ...a, vencido: !!(a.revision?.vencido || a.ph?.vencido) }))
   .filter((a: any) => a.revision || a.ph);
+
+const clasificarEmpresa = (empresa: any, filtro: ClasificacionFiltro): boolean => {
+  if (!filtro) return true;
+  if (filtro === "multisede") return empresa.sedes.length > 1;
+  if (filtro === "sin_clasificar") return !empresa.tipoCliente;
+  return empresa.tipoCliente === filtro;
+};
 
 const MotivoBadge = ({ label, vencido, tono }: { label: string; vencido: boolean; tono: "ambar" | "azul" }) => {
   const colores = vencido
@@ -104,6 +113,27 @@ function TablaAlertas({ alertas, onDescartar }: { alertas: any[]; onDescartar: (
           {alertas.map((a: any) => <AlertaRow key={a.uid} a={a} onDescartar={onDescartar} />)}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function TablaAlertasPorMes({ alertas, onDescartar }: { alertas: any[]; onDescartar: (uid: string, motivo: string) => void }) {
+  const grupos = new Map<string, any[]>();
+  alertas.forEach((a: any) => {
+    const clave = a.revision?.vence || "Sin mes definido";
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave)!.push(a);
+  });
+  const entradas = Array.from(grupos.entries()).sort(([, ga], [, gb]) => (ga[0]?.revision?.dias ?? 0) - (gb[0]?.revision?.dias ?? 0));
+
+  return (
+    <div className="flex flex-col gap-3">
+      {entradas.map(([mes, lista]) => (
+        <div key={mes} className="flex flex-col gap-2">
+          <p className="text-xs font-black text-zinc-400 uppercase tracking-wide px-1">🗓️ {mes} <span className="text-zinc-600 font-bold normal-case">({lista.length})</span></p>
+          <TablaAlertas alertas={lista} onDescartar={onDescartar} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -202,13 +232,15 @@ function ExtintoresSilenciadosPanel({ extintores, onReactivar }: { extintores: a
 
 export default function AlertasPage({ socket }: { socket: Socket | null }) {
   const {
-    anticipacionDias, cambiarAnticipacion, empresas, loading, recargar,
+    empresas, loading, recargar,
     descartarAlerta, reactivarAlerta, descartarAlertaEmpresa, reactivarAlertaEmpresa,
     empresasSilenciadas, extintoresSilenciados,
   } = useAlertas(socket);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<"todas" | "vencidas" | "proximas">("todas");
+  const [fTipo, setFTipo] = useState<ClasificacionFiltro>("");
+  const [mesSeleccionado, setMesSeleccionado] = useState<number | "">("");
 
   const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
@@ -220,31 +252,55 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
     return encodeURIComponent(`Hola, le escribimos de FAMA para coordinar el servicio de sus extintores en ${razonSocial}:\n${lineas.join("\n")}`);
   };
 
-  const empresasVisibles = empresas
+  const empresasVisibles = useMemo(() => empresas
     .map((empresa: any) => {
       const sedes = empresa.sedes
         .map((sede: any) => ({ ...sede, alertas: filtrarAlertaVisible(sede.alertas) }))
         .filter((sede: any) => sede.alertas.length > 0);
       return { ...empresa, sedes };
     })
-    .filter((empresa: any) => empresa.sedes.length > 0);
+    .filter((empresa: any) => empresa.sedes.length > 0), [empresas]);
 
-  const todasLasAlertasVisibles = empresasVisibles.flatMap((e: any) => e.sedes.flatMap((s: any) => s.alertas));
-  const totalVencidasVisibles = todasLasAlertasVisibles.filter((a: any) => a.vencido).length;
-  const totalProximasVisibles = todasLasAlertasVisibles.length - totalVencidasVisibles;
+  const empresasPorClasificacionYBusqueda = empresasVisibles
+    .filter((empresa: any) => clasificarEmpresa(empresa, fTipo))
+    .filter((empresa: any) => !busqueda.trim() || empresa.razonSocial.toLowerCase().includes(busqueda.trim().toLowerCase()));
 
-  const empresasFiltradas = empresasVisibles
+  const aplicarFiltroEstado = (alertas: any[]) => alertas.filter((a: any) => filtroEstado === "todas" || (filtroEstado === "vencidas" ? a.vencido : !a.vencido));
+
+  const alertasPorClasificacionYBusqueda = empresasPorClasificacionYBusqueda.flatMap((e: any) => e.sedes.flatMap((s: any) => s.alertas));
+  const poolPorEstado = aplicarFiltroEstado(alertasPorClasificacionYBusqueda);
+  const totalTodosLosMeses = poolPorEstado.length;
+
+  const conteoMeses = useMemo(() => {
+    const conteo: Record<number, number> = {};
+    for (const a of poolPorEstado) {
+      if (a.revision?.anio === ANIO_ALERTAS) {
+        conteo[a.revision.mes] = (conteo[a.revision.mes] || 0) + 1;
+      }
+    }
+    return conteo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresasPorClasificacionYBusqueda, filtroEstado]);
+
+  const poolPorMes = mesSeleccionado === ""
+    ? alertasPorClasificacionYBusqueda
+    : alertasPorClasificacionYBusqueda.filter((a: any) => a.revision?.mes === mesSeleccionado && a.revision?.anio === ANIO_ALERTAS);
+  const totalPoolMes = poolPorMes.length;
+  const vencidasPoolMes = poolPorMes.filter((a: any) => a.vencido).length;
+  const proximasPoolMes = totalPoolMes - vencidasPoolMes;
+
+  const empresasFiltradas = empresasPorClasificacionYBusqueda
     .map((empresa: any) => {
       const sedes = empresa.sedes
         .map((sede: any) => ({
           ...sede,
-          alertas: sede.alertas.filter((a: any) => filtroEstado === "todas" || (filtroEstado === "vencidas" ? a.vencido : !a.vencido)),
+          alertas: aplicarFiltroEstado(sede.alertas)
+            .filter((a: any) => mesSeleccionado === "" || (a.revision?.mes === mesSeleccionado && a.revision?.anio === ANIO_ALERTAS)),
         }))
         .filter((sede: any) => sede.alertas.length > 0);
       return { ...empresa, sedes };
     })
-    .filter((empresa: any) => empresa.sedes.length > 0)
-    .filter((empresa: any) => !busqueda.trim() || empresa.razonSocial.toLowerCase().includes(busqueda.trim().toLowerCase()));
+    .filter((empresa: any) => empresa.sedes.length > 0);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -258,33 +314,70 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
 
       <div className="flex flex-wrap gap-3 mb-4">
         <button onClick={() => setFiltroEstado("todas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "todas" ? "bg-zinc-800 border-zinc-600" : "bg-zinc-900/30 border-zinc-800/60 hover:border-zinc-700"}`}>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Todas</p>
-          <p className="text-2xl font-black text-white">{totalVencidasVisibles + totalProximasVisibles}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{mesSeleccionado === "" ? "Todos" : "Todos · mes"}</p>
+          <p className="text-2xl font-black text-white">{totalPoolMes}</p>
         </button>
         <button onClick={() => setFiltroEstado("vencidas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "vencidas" ? "bg-red-950/40 border-red-700" : "bg-red-950/20 border-red-900/40 hover:border-red-800"}`}>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">🔴 Vencidas</p>
-          <p className="text-2xl font-black text-red-400">{totalVencidasVisibles}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">🔴 Vencidos</p>
+          <p className="text-2xl font-black text-red-400">{vencidasPoolMes}</p>
         </button>
         <button onClick={() => setFiltroEstado("proximas")} className={`px-4 py-3 rounded-2xl border text-left transition-all ${filtroEstado === "proximas" ? "bg-amber-950/40 border-amber-700" : "bg-amber-950/20 border-amber-900/40 hover:border-amber-800"}`}>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400">🟡 Próximas</p>
-          <p className="text-2xl font-black text-amber-400">{totalProximasVisibles}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400">🟡 Próximos</p>
+          <p className="text-2xl font-black text-amber-400">{proximasPoolMes}</p>
         </button>
       </div>
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+      <div className="mb-4 flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">🔎</span>
           <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar empresa..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
         </div>
-        <select value={anticipacionDias} onChange={(e) => cambiarAnticipacion(Number(e.target.value))} className="bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-bold text-zinc-300 focus:outline-none focus:border-red-600">
-          {ANTICIPACION_OPCIONES.map((o) => <option key={o.value} value={o.value}>Avisar con {o.label}</option>)}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {CLASIFICACION_FILTROS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFTipo(f.value)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${fTipo === f.value ? "bg-red-600 border-red-600 text-white" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-600"}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-6 bg-zinc-900/20 p-4 rounded-2xl border border-zinc-800/40">
+        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">Mes de vencimiento {ANIO_ALERTAS}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <button
+            onClick={() => setMesSeleccionado("")}
+            className={`flex flex-col items-start gap-1 px-3.5 py-3 rounded-xl border transition-all ${mesSeleccionado === "" ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-900/30" : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-600"}`}
+          >
+            <span className="text-xs font-black">Todos</span>
+            <span className={`text-lg font-black ${mesSeleccionado === "" ? "text-white" : "text-zinc-500"}`}>{totalTodosLosMeses}</span>
+          </button>
+          {MESES.map((m) => {
+            const mesNum = Number(m.value);
+            const total = conteoMeses[mesNum] || 0;
+            const activo = mesSeleccionado === mesNum;
+            return (
+              <button
+                key={m.value}
+                onClick={() => setMesSeleccionado(mesNum)}
+                disabled={total === 0}
+                className={`flex flex-col items-start gap-1 px-3.5 py-3 rounded-xl border transition-all ${activo ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-900/30" : total === 0 ? "bg-zinc-950/40 border-zinc-900 text-zinc-700 cursor-not-allowed" : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-600"}`}
+              >
+                <span className="text-xs font-black">{m.label}</span>
+                <span className={`text-lg font-black ${activo ? "text-white" : total === 0 ? "text-zinc-800" : "text-zinc-500"}`}>{total}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mb-6 flex items-start gap-2.5 bg-zinc-900/20 px-4 py-3 rounded-xl border border-zinc-800/40">
         <span className="text-sm shrink-0">ℹ️</span>
         <p className="text-[11px] text-zinc-500 leading-relaxed">
-          El servicio/recarga aplica a cualquier trabajo o venta (Recarga, Mantenimiento, etc.) por igual y se considera vencido 1 año después del último servicio.{MOSTRAR_ALERTAS_PH ? " La Prueba Hidrostática vence cada 5 años según el dato ya registrado en el extintor." : ""} Al descartar una alerta, esta deja de mostrarse hasta que se registre un nuevo servicio sobre ese extintor.
+          El servicio/recarga aplica a cualquier trabajo o venta (Recarga, Mantenimiento, etc.) por igual y se considera vencido 1 año después del último servicio. La próxima alerta se calcula con el mismo mes en que corresponde el servicio (ej: servicio en Enero {ANIO_ALERTAS} → próxima alerta Enero {ANIO_ALERTAS + 1}).{MOSTRAR_ALERTAS_PH ? " La Prueba Hidrostática vence cada 5 años según el dato ya registrado en el extintor." : ""} Al descartar una alerta, esta deja de mostrarse hasta que se registre un nuevo servicio sobre ese extintor.
         </p>
       </div>
 
@@ -294,8 +387,8 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
         </div>
       ) : empresasFiltradas.length === 0 ? (
         <div className="text-center py-20 text-zinc-600 bg-zinc-950/20 rounded-2xl border border-dashed border-zinc-800/60">
-          <p className="text-5xl mb-3 opacity-80">{busqueda ? "🔎" : "✅"}</p>
-          <p className="text-sm font-medium">{busqueda ? "Ninguna empresa coincide con la búsqueda" : "No hay vencimientos próximos en el rango seleccionado"}</p>
+          <p className="text-5xl mb-3 opacity-80">{busqueda || fTipo || mesSeleccionado !== "" ? "🔎" : "✅"}</p>
+          <p className="text-sm font-medium">{busqueda || fTipo || mesSeleccionado !== "" ? "Ninguna empresa coincide con los filtros aplicados" : "No hay vencimientos próximos en el rango seleccionado"}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
@@ -346,10 +439,16 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
                             )}
                           </div>
                           <div className="p-3 bg-zinc-950/20">
-                            <TablaAlertas alertas={sede.alertas} onDescartar={descartarAlerta} />
+                            {mesSeleccionado === "" ? (
+                              <TablaAlertasPorMes alertas={sede.alertas} onDescartar={descartarAlerta} />
+                            ) : (
+                              <TablaAlertas alertas={sede.alertas} onDescartar={descartarAlerta} />
+                            )}
                           </div>
                         </div>
                       ))
+                    ) : mesSeleccionado === "" ? (
+                      <TablaAlertasPorMes alertas={todasLasAlertas} onDescartar={descartarAlerta} />
                     ) : (
                       <TablaAlertas alertas={todasLasAlertas} onDescartar={descartarAlerta} />
                     )}

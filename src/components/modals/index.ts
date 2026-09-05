@@ -16,3 +16,4 @@ export { default as TrasladoSedeModal } from "./TrasladoSedeModal";
 export { default as StickersModal } from "./StickersModal";
 export { default as InventarioModal } from "./InventarioModal";
 export { default as CertificadoModal } from "./CertificadoModal";
+export { default as VerCertificadoModal } from "./VerCertificadoModal";

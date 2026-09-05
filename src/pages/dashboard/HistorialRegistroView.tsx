@@ -95,7 +95,7 @@ export default function HistorialRegistroView() {
     extintores
   );
 
-  const certificado = useCertificado(selectedEmpresa, activeSede, servicio, extintoresDelRegistro);
+  const certificado = useCertificado(socket, selectedEmpresa, activeSede, servicio, extintoresDelRegistro);
 
   if (!servicio) {
     return (
@@ -165,7 +165,7 @@ export default function HistorialRegistroView() {
             {exporting ? "⏳ Generando..." : "📥 Exportar Excel"}
           </button>
           <button onClick={certificado.abrir} className="px-4 py-2 rounded-xl bg-sky-950/30 hover:bg-sky-900/40 text-sm font-bold text-sky-400 border border-sky-800/50 transition-all">
-            📄 Descargar Certificados
+            📄 Generar certificados
           </button>
           <button onClick={() => setAsociarModal(true)} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-300 border border-zinc-700 transition-all">
             🔗 Asociar Extintor Existente
@@ -224,7 +224,26 @@ export default function HistorialRegistroView() {
         hayPqs={certificado.hayPqs}
         pqsVariante={certificado.pqsVariante}
         onCambiarPqsVariante={certificado.cambiarPqsVariante}
-        nombreArchivo={`Certificado_${selectedEmpresa?.slug || "fama"}_${servicio.fechaRetiro || "servicio"}.pdf`}
+        plantillas={certificado.plantillas}
+        onCargarPlantilla={certificado.cargarPlantilla}
+        onGuardarPlantilla={certificado.guardarComoPlantilla}
+        guardandoPlantilla={certificado.guardandoPlantilla}
+        hojas={certificado.hojas}
+        hojasMeta={certificado.hojasMeta}
+        hojaActivaIdx={certificado.hojaActivaIdx}
+        onSetHojaActivaIdx={certificado.setHojaActivaIdx}
+        onAgregarHoja={certificado.agregarHoja}
+        onDuplicarHoja={certificado.duplicarHojaActual}
+        onEliminarHoja={certificado.eliminarHoja}
+        plantillaActivaId={certificado.plantillaActivaId}
+        plantillaActivaNombre={certificado.plantillaActivaNombre}
+        onActualizarPlantilla={certificado.actualizarPlantilla}
+        certificadoGuardadoId={certificado.certificadoGuardadoId}
+        guardandoCertificado={certificado.guardandoCertificado}
+        hayCambiosPendientes={certificado.hayCambiosPendientes}
+        onGuardarCertificado={certificado.guardarCertificado}
+        modoEdicion={certificado.modoEdicion}
+        onUsarModoEstandar={certificado.usarModoEstandar}
       />
     </div>
   );

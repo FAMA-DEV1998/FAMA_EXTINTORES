@@ -1,22 +1,27 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Socket } from "socket.io-client";
-import { useDashboardFilters, useEmpresaForm } from "../../hooks/dashboard";
+import { useDashboardFilters, useEmpresaForm, useServiciosRecientes } from "../../hooks/dashboard";
 import { useEmpresaSelection } from "../../hooks/dashboard";
 import { EmpresaModal } from "../../components/modals";
-import { TIPO_CLIENTE_LABELS, esMultisede, iconoEmpresa } from "../../utils/helpers";
+import ScrollableRow from "../../components/ui/ScrollableRow";
+import { TIPO_CLIENTE_LABELS, esMultisede, iconoEmpresa, CLASIFICACION_FILTROS, filtrarPorClasificacion, ordinalServicio, type ClasificacionFiltro } from "../../utils/helpers";
+import { MESES } from "../../constants";
 import type { Catalogs } from "../../hooks/useSocket";
 
-type FiltroTipo = "" | "persona" | "ruc10" | "ruc20" | "multisede" | "sin_clasificar";
+const rutaServicioReciente = (s: any): string => {
+  const [anio, mesNum] = (s.fechaRetiro || "").split("-");
+  const mesLabel = MESES.find((m) => m.value === String(Number(mesNum)))?.label.toLowerCase();
+  const base = s.sedeSlug ? `/dashboard/${s.empresaSlug}/sedes/${s.sedeSlug}` : `/dashboard/${s.empresaSlug}`;
+  if (!anio || !mesLabel) return base;
+  return `${base}/historial/${anio}/${mesLabel}/${s.id}`;
+};
 
-const FILTROS: { value: FiltroTipo; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: "persona", label: "👤 Persona" },
-  { value: "ruc10", label: "🏪 RUC 10" },
-  { value: "ruc20", label: "🏢 RUC 20" },
-  { value: "multisede", label: "🏬 Multisede" },
-  { value: "sin_clasificar", label: "⚠️ Sin clasificar" },
-];
+const mesAnioServicioReciente = (fechaRetiro: string): { mes: string; anio: string } => {
+  const [anio, mesNum] = (fechaRetiro || "").split("-");
+  const mes = MESES.find((m) => m.value === String(Number(mesNum)))?.label || "Sin fecha";
+  return { mes, anio: anio || "" };
+};
 
 /**
  * Vista raíz del Dashboard: listado/búsqueda de empresas. Extraído del
@@ -30,6 +35,7 @@ export default function EmpresasListPage({ socket, role }: { socket: Socket | nu
   // solo el listado — pero reutiliza useEmpresaSelection para obtener
   // `empresas` (ya vive suscrito a "empresa:list").
   const { empresas } = useEmpresaSelection(socket);
+  const { recientes } = useServiciosRecientes(socket, 8);
 
   const [saving, setSaving] = useState(false);
   const noop = () => {};
@@ -42,17 +48,50 @@ export default function EmpresasListPage({ socket, role }: { socket: Socket | nu
   const filters = useDashboardFilters(empresas, [], [], [], []);
   const { search, setSearch, filtered } = filters;
 
-  const [fTipo, setFTipo] = useState<FiltroTipo>("");
-  const filteredFinal = filtered.filter((e) => {
-    if (!fTipo) return true;
-    if (fTipo === "multisede") return esMultisede(e);
-    if (fTipo === "sin_clasificar") return !e.tipoCliente;
-    return e.tipoCliente === fTipo;
-  });
+  const [fTipo, setFTipo] = useState<ClasificacionFiltro>("");
+  const filteredFinal = filtrarPorClasificacion(filtered, fTipo);
 
   return (
     <>
   <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+    {recientes.length > 0 && (
+      <div className="mb-8 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <span className="text-sm">🕓</span>
+          <h2 className="text-xs font-black text-zinc-300 uppercase tracking-wider">Últimos servicios creados</h2>
+        </div>
+        <ScrollableRow className="gap-3" botonesSiempreVisibles={recientes.length > 4}>
+          {recientes.slice(0, 8).map((s: any) => {
+            const { mes, anio } = mesAnioServicioReciente(s.fechaRetiro);
+            return (
+              <button
+                key={s.id}
+                onClick={() => navigate(rutaServicioReciente(s))}
+                className="shrink-0 w-60 flex flex-col gap-2.5 bg-zinc-950/50 hover:bg-zinc-900 border border-zinc-800/60 hover:border-red-800/60 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20"
+              >
+                <span className="w-9 h-9 rounded-xl bg-red-950/40 flex items-center justify-center text-base shrink-0">🧯</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-zinc-100 truncate leading-tight">{s.razonSocial}</p>
+                  {s.sedeNombre && <p className="text-[11px] text-zinc-500 truncate mt-0.5">📍 {s.sedeNombre}</p>}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-800/60">
+                  <span className="px-2 py-1 rounded-md bg-red-950/30 border border-red-900/30 text-[10px] font-bold text-red-300 whitespace-nowrap">
+                    {ordinalServicio(s.posicionEnMes || 1)} servicio del mes
+                  </span>
+                  <span className="px-2 py-1 rounded-md bg-zinc-800/80 text-[10px] font-bold text-zinc-300 whitespace-nowrap">
+                    {mes} {anio}
+                  </span>
+                  <span className="px-2 py-1 rounded-md bg-zinc-800/80 text-[10px] font-bold text-zinc-300 whitespace-nowrap">
+                    {s.extintoresCount ?? 0} extintor{s.extintoresCount === 1 ? "" : "es"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </ScrollableRow>
+      </div>
+    )}
+
     {/* Cabecera y Filtros */}
     <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/30 p-4 rounded-2xl border border-zinc-800/50">
       <div className="flex flex-wrap items-center gap-3 w-full md:w-auto flex-1">
@@ -67,7 +106,7 @@ export default function EmpresasListPage({ socket, role }: { socket: Socket | nu
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {FILTROS.map((f) => (
+          {CLASIFICACION_FILTROS.map((f) => (
             <button
               key={f.value}
               onClick={() => setFTipo(f.value)}

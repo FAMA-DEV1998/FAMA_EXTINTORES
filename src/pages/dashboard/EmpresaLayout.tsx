@@ -93,6 +93,9 @@ function EmpresaLayoutInner({ user }: { user: { role: string } }) {
             <NavLink to="historial" className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
               📜 {sedes.sedes.length === 0 ? "Historial" : "Historial previo a sedes"}
             </NavLink>
+            <NavLink to="certificados" className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
+              📄 Certificados
+            </NavLink>
             <NavLink to="sedes" className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
               🏬 Sedes
               <span className="px-1.5 py-0.5 rounded-full bg-zinc-950/60 text-[10px]">{sedes.sedes.length}</span>
@@ -105,6 +108,9 @@ function EmpresaLayoutInner({ user }: { user: { role: string } }) {
             </NavLink>
             <NavLink to={`sedes/${sedeSlug}/historial`} className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
               📜 Historial
+            </NavLink>
+            <NavLink to={`sedes/${sedeSlug}/certificados`} className={({ isActive }) => `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all focus-visible:outline-2 focus-visible:outline-red-500 ${isActive ? "bg-red-600 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800"}`}>
+              📄 Certificados
             </NavLink>
           </>
         )}

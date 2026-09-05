@@ -135,7 +135,7 @@ export default function ServicioDetailView({
         empresa.servicioAgenteOrder,
         extintores
     );
-    const certificado = useCertificado(empresa, activeSedeInfo, servicio, extintoresDelServicioOrdenados);
+    const certificado = useCertificado(socket, empresa, activeSedeInfo, servicio, extintoresDelServicioOrdenados);
 
     return (
         <div className="scroll-area h-full overflow-y-auto p-4 md:p-8 flex flex-col gap-5 max-w-7xl mx-auto w-full">
@@ -271,8 +271,26 @@ export default function ServicioDetailView({
                 hayPqs={certificado.hayPqs}
                 pqsVariante={certificado.pqsVariante}
                 onCambiarPqsVariante={certificado.cambiarPqsVariante}
-                nombreArchivo={`Certificado_${empresa?.slug || "fama"}_${servicio.fechaRetiro || "servicio"}.pdf`}
-                soloImprimir
+                plantillas={certificado.plantillas}
+                onCargarPlantilla={certificado.cargarPlantilla}
+                onGuardarPlantilla={certificado.guardarComoPlantilla}
+                guardandoPlantilla={certificado.guardandoPlantilla}
+                hojas={certificado.hojas}
+                hojasMeta={certificado.hojasMeta}
+                hojaActivaIdx={certificado.hojaActivaIdx}
+                onSetHojaActivaIdx={certificado.setHojaActivaIdx}
+                onAgregarHoja={certificado.agregarHoja}
+                onDuplicarHoja={certificado.duplicarHojaActual}
+                onEliminarHoja={certificado.eliminarHoja}
+                plantillaActivaId={certificado.plantillaActivaId}
+                plantillaActivaNombre={certificado.plantillaActivaNombre}
+                onActualizarPlantilla={certificado.actualizarPlantilla}
+                certificadoGuardadoId={certificado.certificadoGuardadoId}
+                guardandoCertificado={certificado.guardandoCertificado}
+                hayCambiosPendientes={certificado.hayCambiosPendientes}
+                onGuardarCertificado={certificado.guardarCertificado}
+                modoEdicion={certificado.modoEdicion}
+                onUsarModoEstandar={certificado.usarModoEstandar}
             />
         </div>
     );

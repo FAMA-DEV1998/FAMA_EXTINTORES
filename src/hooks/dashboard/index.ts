@@ -12,3 +12,5 @@ export { useTraslados } from "./useTraslados";
 export { useInventario } from "./useInventario";
 export { useCotizaciones } from "./useCotizaciones";
 export { useCertificado } from "./useCertificado";
+export { useCertificados } from "./useCertificados";
+export { useServiciosRecientes } from "./useServiciosRecientes";

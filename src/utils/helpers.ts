@@ -397,6 +397,27 @@ export const TIPO_CLIENTE_ICONS: Record<string, string> = {
     ruc20: "🏢",
 };
 
+export type ClasificacionFiltro = "" | "persona" | "ruc10" | "ruc20" | "multisede" | "sin_clasificar";
+
+export const CLASIFICACION_FILTROS: { value: ClasificacionFiltro; label: string }[] = [
+    { value: "", label: "Todas" },
+    { value: "persona", label: "👤 Persona" },
+    { value: "ruc10", label: "🏪 RUC 10" },
+    { value: "ruc20", label: "🏢 RUC 20" },
+    { value: "multisede", label: "🏬 Multisede" },
+    { value: "sin_clasificar", label: "⚠️ Sin clasificar" },
+];
+
+export const filtrarPorClasificacion = <T extends { tipoCliente?: string | null; sedes?: Sede[] }>(
+    lista: T[],
+    filtro: ClasificacionFiltro,
+): T[] => {
+    if (!filtro) return lista;
+    if (filtro === "multisede") return lista.filter((e) => esMultisede(e));
+    if (filtro === "sin_clasificar") return lista.filter((e) => !e.tipoCliente);
+    return lista.filter((e) => e.tipoCliente === filtro);
+};
+
 export const esMultisede = (e: { sedes?: Sede[] }): boolean => (e.sedes?.length || 0) > 0;
 
 export const iconoEmpresa = (e: { tipoCliente?: string | null; sedes?: Sede[] }): string => {

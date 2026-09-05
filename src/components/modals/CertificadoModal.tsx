@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import CertificadoTemplate from "../certificados/CertificadoTemplate";
+import CertificadoTemplate, { construirParrafoAutomatico, sanitizarHtmlBold } from "../certificados/CertificadoTemplate";
+import CertificadoPreview from "../certificados/CertificadoPreview";
 import type { CertificadoDatos, Denominacion, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
-import { PQS_TIPO_LABEL, PQS_VARIANTES_75, PQS_VARIANTES_90, ESTADO_NUEVO_VENTA, type PqsVariante, type AccionTrabajo } from "../../hooks/dashboard/useCertificado";
+import { PQS_TIPO_LABEL, PQS_VARIANTES, ESTADO_NUEVO_VENTA, type PqsVariante, type AccionTrabajo } from "../../hooks/dashboard/useCertificado";
+import { construirEtiquetaHoja, type HojaMeta } from "../../utils/certificadoHojas";
 import { MESES, DISTRITOS_LIMA, ETIQUETAS_ADICIONALES_DISPONIBLES } from "../../constants";
-import { exportarElementoPdf } from "../../utils/exportarPdf";
 import { ModalSection, ModalField, modalInput } from "../ui/ModalUI";
 
 interface Props {
@@ -27,22 +28,32 @@ interface Props {
   hayPqs: boolean;
   pqsVariante: PqsVariante;
   onCambiarPqsVariante: (variante: PqsVariante) => void;
-  nombreArchivo: string;
-  soloImprimir?: boolean;
+  plantillas?: { id: string; nombre: string; datos: string }[];
+  onCargarPlantilla?: (plantilla: { id: string; nombre: string; datos: string }) => void;
+  onGuardarPlantilla?: (nombre: string, onDone?: (ok: boolean) => void) => void;
+  guardandoPlantilla?: boolean;
+  hojas: CertificadoDatos[];
+  hojasMeta: HojaMeta[];
+  hojaActivaIdx: number;
+  onSetHojaActivaIdx: (idx: number) => void;
+  onAgregarHoja?: () => void;
+  onDuplicarHoja?: () => void;
+  onEliminarHoja?: (idx: number) => void;
+  plantillaActivaId?: string | null;
+  plantillaActivaNombre?: string;
+  onActualizarPlantilla?: (onDone?: (ok: boolean) => void) => void;
+  certificadoGuardadoId: string | null;
+  guardandoCertificado: boolean;
+  hayCambiosPendientes: boolean;
+  onGuardarCertificado: (onDone?: (ok: boolean) => void) => void;
+  modoEdicion: boolean;
+  onUsarModoEstandar?: () => void;
 }
-
-const A4_WIDTH_PX = 210 * 3.7795275591;
-const A4_HEIGHT_PX = 297 * 3.7795275591;
 
 const formatPlaca = (raw: string) => {
   const limpio = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
   return limpio.length <= 3 ? limpio : `${limpio.slice(0, 3)}-${limpio.slice(3)}`;
 };
-
-// const COLUMNAS_FIJAS = [
-//   "Serie", "Tipo Extintor", "Cap.", "Prueba de Estanqueidad y Fuga",
-//   "Vencimiento Recarga", "Año de Fabr.", "Vencimiento Prueba Hidrostática", "Condición Extintor",
-// ];
 
 const COLUMNAS_OPCIONALES: { key: "item" | "nInterno" | "marca" | "rating" | "tipoServicio"; label: string; ayuda: string }[] = [
   { key: "item", label: "Ítem", ayuda: "Numeración de fila" },
@@ -56,6 +67,16 @@ const ACCIONES_TRABAJO: { key: AccionTrabajo; label: string }[] = [
   { key: "venta", label: "Venta" },
   { key: "recarga", label: "Recarga" },
   { key: "mantenimiento", label: "Mantenimiento" },
+];
+
+const PASOS: { titulo: string }[] = [
+  { titulo: "Tipo" },
+  { titulo: "Cliente" },
+  { titulo: "Extintores" },
+  { titulo: "Texto" },
+  { titulo: "Fecha" },
+  { titulo: "Normas" },
+  { titulo: "Columnas" },
 ];
 
 function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
@@ -91,54 +112,114 @@ function ColumnaChip({ activa, label, ayuda, onToggle }: { activa: boolean; labe
   );
 }
 
+function EditorParrafo({ valorInicial, onChange }: { valorInicial: string; onChange: (html: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [negritaActiva, setNegritaActiva] = useState(false);
+
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== valorInicial) {
+      ref.current.innerHTML = valorInicial;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const actualizarEstadoNegrita = () => {
+    try { setNegritaActiva(document.queryCommandState("bold")); } catch { /* noop */ }
+  };
+
+  const handleInput = () => {
+    if (!ref.current) return;
+    onChange(sanitizarHtmlBold(ref.current.innerHTML));
+    actualizarEstadoNegrita();
+  };
+
+  const aplicarNegrita = () => {
+    ref.current?.focus();
+    document.execCommand("bold");
+    handleInput();
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-1.5 w-fit">
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={aplicarNegrita}
+          title="Negrita (aplica al texto seleccionado)"
+          className={`w-9 h-9 rounded-lg flex items-center justify-center font-serif text-base font-black transition-all ${negritaActiva ? "bg-red-700 text-white" : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"}`}
+        >
+          B
+        </button>
+        <span className="text-[10px] text-zinc-500 px-2">Selecciona texto y pulsa para poner o quitar negrita</span>
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onMouseUp={actualizarEstadoNegrita}
+        onKeyUp={actualizarEstadoNegrita}
+        className="min-h-32 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-sm text-zinc-100 leading-relaxed focus:outline-none focus:border-red-600"
+      />
+    </div>
+  );
+}
+
 export default function CertificadoModal({
   isOpen, onClose, datos, onChange, filtroAgente, onCambiarFiltroAgente, filtroEstado, onCambiarFiltroEstado, estadosDisponibles,
   onCambiarTipoCertificado, onCambiarTipoIdentificacion, onCambiarDenominacion, onActualizarRating, onCambiarColumna, onCambiarAccionTrabajo,
-  familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante, nombreArchivo, soloImprimir,
+  familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante,
+  plantillas, onCargarPlantilla, onGuardarPlantilla, guardandoPlantilla,
+  hojas, hojasMeta, hojaActivaIdx, onSetHojaActivaIdx, onAgregarHoja, onDuplicarHoja, onEliminarHoja,
+  plantillaActivaId, plantillaActivaNombre, onActualizarPlantilla,
+  certificadoGuardadoId, guardandoCertificado, hayCambiosPendientes, onGuardarCertificado, modoEdicion, onUsarModoEstandar,
 }: Props) {
-  const previewRef = useRef<HTMLDivElement>(null);
-  const [baseScale, setBaseScale] = useState(0.4);
-  const [descargando, setDescargando] = useState(false);
   const [vistaMovil, setVistaMovil] = useState<"datos" | "preview">("datos");
+  const [editandoParrafo, setEditandoParrafo] = useState(false);
+  const [nombrePlantilla, setNombrePlantilla] = useState("");
+  const [confirmarActualizarPlantilla, setConfirmarActualizarPlantilla] = useState(false);
+  const [pasoActivo, setPasoActivo] = useState(0);
 
   useEffect(() => {
-    if (!previewRef.current || !isOpen) return;
-    const medir = () => {
-      const ancho = previewRef.current?.clientWidth || 0;
-      if (ancho > 0) setBaseScale(Math.max(0.2, (ancho - 32) / A4_WIDTH_PX));
-    };
-    medir();
-    const obs = new ResizeObserver(medir);
-    obs.observe(previewRef.current);
-    return () => obs.disconnect();
-  }, [isOpen, vistaMovil]);
-
-  useEffect(() => {
-    if (isOpen) setVistaMovil("datos");
+    if (isOpen) {
+      setVistaMovil("datos");
+      setEditandoParrafo(!!datos.parrafoPersonalizado);
+      setNombrePlantilla("");
+      setPasoActivo(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  useEffect(() => {
+    setConfirmarActualizarPlantilla(false);
+  }, [hojaActivaIdx]);
 
   if (!isOpen) return null;
 
-  const handleDescargar = async () => {
-    setDescargando(true);
-    try {
-      await exportarElementoPdf("certificado-print", nombreArchivo);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "No se pudo generar el certificado");
-    } finally {
-      setDescargando(false);
-    }
-  };
+  const puedeImprimir = !!certificadoGuardadoId && !hayCambiosPendientes;
 
   const handleImprimir = () => {
-    const tituloOriginal = document.title;
-    document.title = nombreArchivo.replace(/\.pdf$/i, "");
-    const restaurar = () => {
-      document.title = tituloOriginal;
-      window.removeEventListener("afterprint", restaurar);
-    };
-    window.addEventListener("afterprint", restaurar);
+    if (!puedeImprimir) return;
     requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  };
+
+  const handleClickGuardar = () => onGuardarCertificado();
+
+  const etiquetaHoja = (hoja: CertificadoDatos, i: number) => construirEtiquetaHoja(hoja, hojasMeta[i] || hojasMeta[0], familiasDisponibles);
+
+  const hojasCompartiendoPlantilla = plantillaActivaId
+    ? hojasMeta.filter((m, i) => i !== hojaActivaIdx && m.plantillaId === plantillaActivaId).length
+    : 0;
+
+  const handleClickActualizarPlantilla = () => {
+    if (hojasCompartiendoPlantilla > 0) { setConfirmarActualizarPlantilla(true); return; }
+    onActualizarPlantilla?.();
+  };
+
+  const confirmarActualizacion = () => {
+    setConfirmarActualizarPlantilla(false);
+    onActualizarPlantilla?.();
   };
 
   const esPlaca = datos.tipoIdentificacion === "placa";
@@ -159,15 +240,31 @@ export default function CertificadoModal({
     return onChange({ numeroIdentificacion: formatPlaca(valor) });
   };
 
+  const estadoLabel = guardandoCertificado
+    ? "⏳ Guardando..."
+    : !certificadoGuardadoId
+      ? "⚠️ Sin guardar"
+      : hayCambiosPendientes
+        ? "⚠️ Cambios sin guardar"
+        : "✅ Guardado";
+  const estadoClase = guardandoCertificado
+    ? "text-sky-400 bg-sky-950/30 border-sky-900/40"
+    : !certificadoGuardadoId || hayCambiosPendientes
+      ? "text-amber-400 bg-amber-950/30 border-amber-900/40"
+      : "text-emerald-400 bg-emerald-950/30 border-emerald-900/40";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-400 max-h-[92vh] flex flex-col shadow-2xl">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-340 max-h-[92vh] flex flex-col shadow-2xl">
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div>
-            <h3 className="text-lg font-bold text-white">📄 {soloImprimir ? "Imprimir Certificado" : "Descargar Certificado"}</h3>
-            <p className="text-xs font-medium text-zinc-500 mt-0.5">Edita los datos y previsualiza el resultado final</p>
+            <h3 className="text-lg font-bold text-white">{modoEdicion ? "✏️ Editar certificado" : "📄 Crear certificado"}</h3>
+            <p className="text-xs font-medium text-zinc-500 mt-0.5">{modoEdicion ? "Estás modificando un certificado ya guardado" : "Completa los datos, guarda el certificado y luego imprímelo"}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">✕</button>
+          <div className="flex items-center gap-3">
+            <span className={`px-3 py-1.5 rounded-lg text-xs font-bold border whitespace-nowrap ${estadoClase}`}>{estadoLabel}</span>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">✕</button>
+          </div>
         </div>
 
         <div className="lg:hidden flex border-b border-zinc-800 shrink-0">
@@ -179,9 +276,114 @@ export default function CertificadoModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[440px_1fr]">
-          <div className={`${vistaMovil === "datos" ? "flex" : "hidden"} lg:flex overflow-y-auto p-6 flex-col gap-6 border-b lg:border-b-0 lg:border-r border-zinc-800/60`}>
-            <ModalSection title="1️⃣ Tipo de Certificado">
+        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[460px_1fr]">
+          <div className={`${vistaMovil === "datos" ? "flex" : "hidden"} lg:flex flex-col min-h-0 min-w-0`}>
+            <div className="shrink-0 flex flex-col gap-4 border-b border-zinc-800/60 bg-zinc-950/30">
+              {(onGuardarPlantilla || onCargarPlantilla) && (
+                <div className="flex flex-col gap-3 px-5 pt-5">
+                    <div className="flex flex-col gap-2.5 bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-3">
+                      <span className="text-[11px] font-black text-zinc-400 uppercase tracking-wider">Plantilla</span>
+
+                      {onUsarModoEstandar && (
+                        <div className="grid grid-cols-2 gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
+                          <button
+                            onClick={onUsarModoEstandar}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${!plantillaActivaId ? "bg-red-700 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"}`}
+                          >
+                            ⚙️ Estándar
+                          </button>
+                          <div className={`px-3 py-2 rounded-lg text-xs font-bold text-center truncate transition-all ${plantillaActivaId ? "bg-emerald-800/60 text-emerald-100" : "text-zinc-600"}`}>
+                            {plantillaActivaId ? `📌 ${plantillaActivaNombre}` : "Sin plantilla"}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        {plantillas && plantillas.length > 0 ? (
+                          <select
+                            value={plantillaActivaId || ""}
+                            onChange={(e) => {
+                              const plantilla = plantillas.find((p) => p.id === e.target.value);
+                              if (plantilla) onCargarPlantilla?.(plantilla);
+                            }}
+                            className={`${modalInput} flex-1 min-w-0`}
+                          >
+                            <option value="" disabled>Elegir plantilla guardada...</option>
+                            {plantillas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                          </select>
+                        ) : (
+                          <span className="text-[11px] text-zinc-500 flex-1">Sin plantillas guardadas todavía</span>
+                        )}
+                        {plantillaActivaId && onActualizarPlantilla && !confirmarActualizarPlantilla && (
+                          <button
+                            onClick={handleClickActualizarPlantilla}
+                            disabled={guardandoPlantilla}
+                            className="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-[11px] font-bold text-white disabled:opacity-50 whitespace-nowrap shrink-0"
+                          >
+                            {guardandoPlantilla ? "..." : "💾 Actualizar"}
+                          </button>
+                        )}
+                      </div>
+                      {confirmarActualizarPlantilla && (
+                        <div className="flex flex-col gap-2 bg-amber-950/20 border border-amber-900/40 rounded-xl p-3">
+                          <p className="text-[11px] text-amber-300 font-bold leading-relaxed">
+                            ⚠️ Esta plantilla también se usa en {hojasCompartiendoPlantilla} otra{hojasCompartiendoPlantilla === 1 ? "" : "s"} hoja de este certificado. Actualizarla cambiará la plantilla base para todas.
+                          </p>
+                          <div className="flex gap-2">
+                            <button onClick={confirmarActualizacion} className="flex-1 px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-[11px] font-bold text-white transition-all">
+                              Actualizar de todas formas
+                            </button>
+                            <button onClick={() => setConfirmarActualizarPlantilla(false)} className="flex-1 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[11px] font-bold text-zinc-200 transition-all">
+                              Cancelar
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-zinc-500">Para no afectar las otras hojas, escribe un nombre abajo y usa "Guardar" para crear una plantilla independiente.</p>
+                        </div>
+                      )}
+                      {onGuardarPlantilla && (
+                        <div className="flex gap-2">
+                          <input
+                            value={nombrePlantilla}
+                            onChange={(e) => setNombrePlantilla(e.target.value)}
+                            placeholder="Nombre para guardar como nueva plantilla"
+                            className={`${modalInput} flex-1`}
+                          />
+                          <button
+                            onClick={() => onGuardarPlantilla(nombrePlantilla, (ok) => { if (ok) setNombrePlantilla(""); })}
+                            disabled={!nombrePlantilla.trim() || guardandoPlantilla}
+                            className="px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 disabled:opacity-50 transition-all whitespace-nowrap"
+                          >
+                            💾 Guardar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                </div>
+              )}
+
+              <div className="flex items-stretch justify-between px-5 pb-4">
+                {PASOS.map((paso, i) => {
+                  const activo = pasoActivo === i;
+                  const completado = i < pasoActivo;
+                  return (
+                    <button
+                      key={paso.titulo}
+                      onClick={() => setPasoActivo(i)}
+                      className="flex-1 flex flex-col items-center gap-1.5 group"
+                    >
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${activo ? "bg-red-700 text-white shadow-md shadow-red-900/30" : completado ? "bg-emerald-800/70 text-emerald-100" : "bg-zinc-800 text-zinc-500 group-hover:bg-zinc-700"}`}>
+                        {completado ? "✓" : i + 1}
+                      </span>
+                      <span className={`text-[9px] font-bold leading-tight text-center transition-colors ${activo ? "text-zinc-200" : "text-zinc-600 group-hover:text-zinc-400"}`}>{paso.titulo}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+              {pasoActivo === 0 && (
+            <ModalSection title="Tipo de Certificado">
               <div className="flex flex-col gap-3">
                 <ModalField label="¿Qué certificado necesitas?">
                   <Segmented
@@ -207,100 +409,10 @@ export default function CertificadoModal({
                 </ModalField>
               </div>
             </ModalSection>
+              )}
 
-            <ModalSection title="2️⃣ Extintores a Incluir">
-              <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <ModalField label="Por tipo de agente">
-                    <select value={filtroAgente} onChange={(e) => onCambiarFiltroAgente(e.target.value)} className={modalInput}>
-                      <option value="todos">Todos los extintores</option>
-                      {familiasDisponibles.map((f) => (
-                        <option key={f.key} value={f.key}>Solo {f.label}</option>
-                      ))}
-                    </select>
-                  </ModalField>
-                  <ModalField label="Por estado">
-                    <select value={filtroEstado} onChange={(e) => onCambiarFiltroEstado(e.target.value)} className={modalInput}>
-                      <option value="todos">Todos los estados</option>
-                      {estadosDisponibles.map((e) => (
-                        <option key={e} value={e}>Solo {e}</option>
-                      ))}
-                    </select>
-                  </ModalField>
-                  {!esPH && hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
-                    <ModalField label="Tipo de PQS">
-                      <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={modalInput}>
-                        <optgroup label="PQS 75%">
-                          {PQS_VARIANTES_75.map((v) => <option key={v} value={v}>{PQS_TIPO_LABEL[v]}</option>)}
-                        </optgroup>
-                        <optgroup label="PQS 90%">
-                          {PQS_VARIANTES_90.map((v) => <option key={v} value={v}>{PQS_TIPO_LABEL[v]}</option>)}
-                        </optgroup>
-                      </select>
-                    </ModalField>
-                  )}
-                </div>
-                <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
-                  {datos.items.length === 0 ? "Ningún extintor cumple con el filtro seleccionado" : `✅ ${datos.items.length} extintor${datos.items.length === 1 ? "" : "es"} incluido${datos.items.length === 1 ? "" : "s"} · ${datos.agentesTexto}`}
-                </p>
-              </div>
-            </ModalSection>
-
-            <ModalSection title="3️⃣ Normas y Etiquetas">
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
-                    NTP 350.043.1
-                  </span>
-                  <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
-                    833.030
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-500 -mt-1">Agrega una o varias etiquetas adicionales (opcional)</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {ETIQUETAS_ADICIONALES_DISPONIBLES.map((etq) => (
-                    <ColumnaChip
-                      key={etq}
-                      label={etq}
-                      ayuda={etq}
-                      activa={datos.etiquetasAdicionales.includes(etq)}
-                      onToggle={() => onChange({
-                        etiquetasAdicionales: datos.etiquetasAdicionales.includes(etq)
-                          ? datos.etiquetasAdicionales.filter((e) => e !== etq)
-                          : [...datos.etiquetasAdicionales, etq],
-                      })}
-                    />
-                  ))}
-                </div>
-              </div>
-            </ModalSection>
-
-            {!esPH && (
-              <ModalSection title="4️⃣ Texto del Certificado">
-                <div className="flex flex-col gap-2">
-                  <p className="text-[11px] text-zinc-500 -mt-1">¿Qué trabajo se hizo? Puedes elegir más de uno</p>
-                  <div className={`flex flex-wrap gap-1.5 ${accionesBloqueadas ? "opacity-50 pointer-events-none" : ""}`}>
-                    {ACCIONES_TRABAJO.map((a) => (
-                      <ColumnaChip
-                        key={a.key}
-                        label={a.label}
-                        ayuda={a.label}
-                        activa={datos.accionesTrabajo[a.key]}
-                        onToggle={() => onCambiarAccionTrabajo(a.key, !datos.accionesTrabajo[a.key])}
-                      />
-                    ))}
-                  </div>
-                  {accionesBloqueadas && (
-                    <p className="text-[11px] text-amber-500">⚠️ Al filtrar solo extintores "{ESTADO_NUEVO_VENTA}" el texto queda fijo en venta</p>
-                  )}
-                  <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
-                    "Se ha efectuado {datos.textoAccion} ..."
-                  </p>
-                </div>
-              </ModalSection>
-            )}
-
-            <ModalSection title="5️⃣ Datos del Cliente">
+              {pasoActivo === 1 && (
+            <ModalSection title="Datos del Cliente">
               <div className="flex flex-col gap-3">
                 <ModalField label="Tipo de documento">
                   <Segmented
@@ -359,8 +471,96 @@ export default function CertificadoModal({
                 )}
               </div>
             </ModalSection>
+              )}
 
-            <ModalSection title="6️⃣ Fecha del Certificado">
+              {pasoActivo === 2 && (
+            <ModalSection title="Extintores a Incluir">
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <ModalField label="Por tipo de agente">
+                    <select value={filtroAgente} onChange={(e) => onCambiarFiltroAgente(e.target.value)} className={modalInput}>
+                      <option value="todos">Todos los extintores</option>
+                      {familiasDisponibles.map((f) => (
+                        <option key={f.key} value={f.key}>Solo {f.label}</option>
+                      ))}
+                    </select>
+                  </ModalField>
+                  <ModalField label="Por estado">
+                    <select value={filtroEstado} onChange={(e) => onCambiarFiltroEstado(e.target.value)} className={modalInput}>
+                      <option value="todos">Todos los estados</option>
+                      {estadosDisponibles.map((e) => (
+                        <option key={e} value={e}>Solo {e}</option>
+                      ))}
+                    </select>
+                  </ModalField>
+                  {!esPH && hayPqs && (filtroAgente === "todos" || filtroAgente === "pqs") && (
+                    <ModalField label="Tipo de PQS">
+                      <select value={pqsVariante} onChange={(e) => onCambiarPqsVariante(e.target.value as PqsVariante)} className={modalInput}>
+                        {PQS_VARIANTES.map((v) => <option key={v} value={v}>{PQS_TIPO_LABEL[v]}</option>)}
+                      </select>
+                    </ModalField>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-400 bg-zinc-950/50 border border-zinc-800/60 rounded-xl px-3.5 py-2.5">
+                  {datos.items.length === 0 ? "Ningún extintor cumple con el filtro seleccionado" : `✅ ${datos.items.length} extintor${datos.items.length === 1 ? "" : "es"} incluido${datos.items.length === 1 ? "" : "s"} · ${datos.agentesTexto}`}
+                </p>
+              </div>
+            </ModalSection>
+              )}
+
+              {pasoActivo === 3 && (
+            <ModalSection title="Texto del Certificado">
+              <div className="flex flex-col gap-4">
+                {!esPH && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px] text-zinc-500 -mt-1">¿Qué trabajo se hizo? Puedes elegir más de uno</p>
+                    <div className={`flex flex-wrap gap-1.5 ${accionesBloqueadas ? "opacity-50 pointer-events-none" : ""}`}>
+                      {ACCIONES_TRABAJO.map((a) => (
+                        <ColumnaChip
+                          key={a.key}
+                          label={a.label}
+                          ayuda={a.label}
+                          activa={datos.accionesTrabajo[a.key]}
+                          onToggle={() => onCambiarAccionTrabajo(a.key, !datos.accionesTrabajo[a.key])}
+                        />
+                      ))}
+                    </div>
+                    {accionesBloqueadas && (
+                      <p className="text-[11px] text-amber-500">⚠️ Al filtrar solo extintores "{ESTADO_NUEVO_VENTA}" el texto queda fijo en venta</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-[11px] text-zinc-500">Párrafo entre el título y la tabla</p>
+                  {editandoParrafo ? (
+                    <>
+                      <EditorParrafo
+                        valorInicial={datos.parrafoPersonalizado || construirParrafoAutomatico(datos)}
+                        onChange={(html) => onChange({ parrafoPersonalizado: html })}
+                      />
+                      <button
+                        onClick={() => setEditandoParrafo(false)}
+                        className="self-start text-[11px] font-bold text-zinc-400 hover:text-zinc-200"
+                      >
+                        ↺ Restablecer texto automático
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => { onChange({ parrafoPersonalizado: "" }); setEditandoParrafo(true); }}
+                      className="self-start px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 transition-all"
+                    >
+                      ✏️ Editar texto manualmente
+                    </button>
+                  )}
+                </div>
+              </div>
+            </ModalSection>
+              )}
+
+              {pasoActivo === 4 && (
+            <ModalSection title="Fecha del Certificado">
               <div className="grid grid-cols-3 gap-2">
                 <ModalField label="Día">
                   <input type="number" min={1} max={31} value={datos.diaFecha} onChange={(e) => onChange({ diaFecha: String(Math.min(31, Math.max(1, parseInt(e.target.value) || 1))) })} className={modalInput} />
@@ -375,27 +575,42 @@ export default function CertificadoModal({
                 </ModalField>
               </div>
             </ModalSection>
+              )}
 
-            <ModalSection title="7️⃣ Columnas de la Tabla">
+              {pasoActivo === 5 && (
+            <ModalSection title="Normas y Etiquetas">
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
+                    NTP 350.043.1
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
+                    833.030
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 -mt-1">Agrega una o varias etiquetas adicionales (opcional)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ETIQUETAS_ADICIONALES_DISPONIBLES.map((etq) => (
+                    <ColumnaChip
+                      key={etq}
+                      label={etq}
+                      ayuda={etq}
+                      activa={datos.etiquetasAdicionales.includes(etq)}
+                      onToggle={() => onChange({
+                        etiquetasAdicionales: datos.etiquetasAdicionales.includes(etq)
+                          ? datos.etiquetasAdicionales.filter((e) => e !== etq)
+                          : [...datos.etiquetasAdicionales, etq],
+                      })}
+                    />
+                  ))}
+                </div>
+              </div>
+            </ModalSection>
+              )}
+
+              {pasoActivo === 6 && (
+            <ModalSection title="Columnas de la Tabla">
               <div className="flex flex-col gap-4">
-                {/* <p className="text-[11px] text-zinc-500 -mt-1">Toca una columna opcional para agregarla o quitarla del certificado</p>
-
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Siempre visibles</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {COLUMNAS_FIJAS.map((c) => (
-                      <span key={c} className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-500 border border-dashed border-zinc-800">
-                        {c}
-                      </span>
-                    ))}
-                    {esPH && (
-                      <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-sky-950/40 text-sky-400 border border-dashed border-sky-800">
-                        Presión PSI
-                      </span>
-                    )}
-                  </div>
-                </div> */}
-
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Agregar columnas opcionales</span>
                   <div className="flex flex-wrap gap-1.5">
@@ -425,36 +640,44 @@ export default function CertificadoModal({
                 )}
               </div>
             </ModalSection>
-
-            <div className="mt-auto flex gap-2 pt-1">
-              <button onClick={handleImprimir} className="flex-1 px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 transition-all">
-                🖨️ Imprimir
-              </button>
-              {!soloImprimir && (
-                <button onClick={handleDescargar} disabled={descargando} className="flex-1 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50 transition-all">
-                  {descargando ? "Generando..." : "📥 Descargar"}
-                </button>
               )}
+            </div>
+
+            <div className="shrink-0 flex gap-2 p-4 border-t border-zinc-800/60">
+              <button onClick={handleClickGuardar} disabled={guardandoCertificado} className="flex-1 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50 transition-all">
+                {guardandoCertificado ? "Guardando..." : modoEdicion ? "💾 Guardar cambios" : "💾 Guardar"}
+              </button>
+              <button onClick={handleImprimir} disabled={!puedeImprimir} title={puedeImprimir ? "" : "Guarda el certificado antes de imprimir"} className="flex-1 px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                🖨️ Imprimir {hojas.length > 1 ? `(${hojas.length} hojas)` : ""}
+              </button>
             </div>
           </div>
 
-          <div ref={previewRef} className={`${vistaMovil === "preview" ? "block" : "hidden"} lg:block overflow-auto bg-zinc-950 p-4`}>
-            <div style={{ width: A4_WIDTH_PX * baseScale, height: A4_HEIGHT_PX * baseScale, margin: "0 auto" }}>
-              <div style={{ width: "210mm", transform: `scale(${baseScale})`, transformOrigin: "top left" }}>
-                <CertificadoTemplate datos={datos} />
-              </div>
-            </div>
+          <div className={`${vistaMovil === "preview" ? "flex" : "hidden"} lg:flex flex-col min-h-0 min-w-0`}>
+            <CertificadoPreview
+              hojas={hojas}
+              activeIndex={hojaActivaIdx}
+              onActiveIndexChange={onSetHojaActivaIdx}
+              etiquetaHoja={etiquetaHoja}
+              onAgregarHoja={onAgregarHoja}
+              onDuplicarHoja={onDuplicarHoja}
+              onEliminarHoja={onEliminarHoja ? () => onEliminarHoja(hojaActivaIdx) : undefined}
+            />
           </div>
         </div>
       </div>
 
       {createPortal(
-        <div id="certificado-print" className="fixed -left-750 top-0">
-          <CertificadoTemplate datos={datos} />
+        <div id="certificado-print-container" className="fixed -left-750 top-0">
+          {hojas.map((hoja, i) => (
+            <div key={i} className="certificado-print-page">
+              <CertificadoTemplate datos={hoja} id={`certificado-print-hoja-${i}`} />
+            </div>
+          ))}
         </div>,
         document.body
       )}
-      <style>{"@media print { #root { display: none !important; } #certificado-print { position: static !important; left: auto !important; top: auto !important; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
+      <style>{"@media print { #root { display: none !important; } #certificado-print-container { position: static !important; left: auto !important; top: auto !important; } .certificado-print-page { break-after: page; page-break-after: always; } .certificado-print-page:last-child { break-after: auto; page-break-after: auto; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
     </div>
   );
 }

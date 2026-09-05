@@ -1,17 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { Socket } from "socket.io-client";
 import { MESES } from "../../constants";
 import { formatVencimPH, formatRealizadoPH } from "../../utils/helpers";
 import type { CertificadoDatos, CertificadoItem, Denominacion, TipoCertificado, TipoIdentificacion } from "../../components/certificados/CertificadoTemplate";
+import { normalizarHojasGuardadas, serializarHojas, metaPorDefecto, type HojaGuardada, type HojaMeta } from "../../utils/certificadoHojas";
 
-export type PqsVariante =
-  | "75_fosfato"
-  | "75_nacional"
-  | "75_solo"
-  | "90_fosfato"
-  | "90_nacional"
-  | "90_ul"
-  | "90_certificado_ul"
-  | "90_solo";
+export type PqsVariante = "75_solo" | "90_certificado_ul";
 
 const FAMILIA_LABEL_FIJA: Record<string, string> = {
   co2: "CO2",
@@ -49,29 +43,16 @@ export const clasificarAgente = (agente: string): string => {
 };
 
 const PQS_LABEL: Record<PqsVariante, string> = {
-  "75_fosfato": "polvo químico seco (PQS) al 75% Fosfato Monoamónico",
-  "75_nacional": "polvo químico seco (PQS) al 75% Nacional",
   "75_solo": "polvo químico seco (PQS) al 75%",
-  "90_fosfato": "polvo químico seco (PQS) al 90% Fosfato Monoamónico",
-  "90_nacional": "polvo químico seco (PQS) al 90% Nacional",
-  "90_ul": "polvo químico seco (PQS) al 90% UL",
   "90_certificado_ul": "polvo químico seco (PQS) al 90% Certificado UL",
-  "90_solo": "polvo químico seco (PQS) al 90%",
 };
 
 export const PQS_TIPO_LABEL: Record<PqsVariante, string> = {
-  "75_fosfato": "Fosfato Monoamónico",
-  "75_nacional": "Nacional",
-  "75_solo": "75% solo",
-  "90_fosfato": "Fosfato Monoamónico",
-  "90_nacional": "Nacional",
-  "90_ul": "UL",
-  "90_certificado_ul": "Certificado UL",
-  "90_solo": "90% solo",
+  "75_solo": "75%",
+  "90_certificado_ul": "90% con certificado UL",
 };
 
-export const PQS_VARIANTES_75: PqsVariante[] = ["75_fosfato", "75_nacional", "75_solo"];
-export const PQS_VARIANTES_90: PqsVariante[] = ["90_fosfato", "90_nacional", "90_ul", "90_certificado_ul", "90_solo"];
+export const PQS_VARIANTES: PqsVariante[] = ["90_certificado_ul", "75_solo"];
 
 export const DENOMINACION_LABEL: Record<Denominacion, string> = {
   portatiles_rodantes: "EXTINTORES PORTATILES Y RODANTES",
@@ -215,12 +196,19 @@ interface CacheTab {
   distrito: string;
 }
 
-export function useCertificado(empresa: any, activeSede: any, servicio: any, extintoresDelServicio: any[]) {
+export function useCertificado(socket: Socket | null, empresa: any, activeSede: any, servicio: any, extintoresDelServicio: any[]) {
   const [modal, setModal] = useState(false);
-  const [filtroAgente, setFiltroAgente] = useState<string>("todos");
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
-  const [pqsVariante, setPqsVariante] = useState<PqsVariante>("75_solo");
+  const [hojaActivaIdx, setHojaActivaIdx] = useState(0);
   const [ratingsPorUid, setRatingsPorUid] = useState<Record<string, string>>({});
+  const [plantillas, setPlantillas] = useState<any[]>([]);
+  const [guardandoPlantilla, setGuardandoPlantilla] = useState(false);
+  const [certificadoGuardadoId, setCertificadoGuardadoId] = useState<string | null>(null);
+  const [guardandoCertificado, setGuardandoCertificado] = useState(false);
+  const [ultimoGuardadoSerializado, setUltimoGuardadoSerializado] = useState<string | null>(null);
+  const [modoEdicion, setModoEdicion] = useState(false);
+
+  const empresaId: string | undefined = empresa?.id;
+  const sedeId: string | null = servicio?.sedeId ?? activeSede?.id ?? null;
 
   const familiasDisponibles = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -290,7 +278,9 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
   const ubicacionBase = activeSede?.direccion || empresa?.direccion || "";
   const distritoBase = activeSede?.distrito || empresa?.distrito || "";
 
-  const datosIniciales = useMemo<CertificadoDatos>(() => {
+  const metaInicial = (): HojaMeta => metaPorDefecto();
+
+  const crearDatosBase = (): CertificadoDatos => {
     const tipoIdentificacion: TipoIdentificacion = empresa?.tipoCliente === "persona" ? "dni" : "ruc";
     const hoy = new Date();
     const accionesTrabajo = { venta: false, recarga: true, mantenimiento: false };
@@ -314,11 +304,18 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       accionesTrabajo,
       textoAccion: construirTextoAccion(accionesTrabajo),
       etiquetasAdicionales: [],
+      parrafoPersonalizado: "",
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empresa, activeSede, servicio, extintoresDelServicio]);
+  };
 
-  const [datos, setDatos] = useState<CertificadoDatos>(datosIniciales);
+  const recalcularHoja = (datos: CertificadoDatos, meta: HojaMeta): CertificadoDatos => ({
+    ...datos,
+    items: construirItems(datos.tipoCertificado, meta.filtroAgente, meta.filtroEstado),
+    agentesTexto: construirAgentesTextoPara(datos.tipoCertificado, meta.filtroAgente, meta.pqsVariante, meta.filtroEstado),
+    agentesTextoCorto: construirAgentesTextoCortoPara(datos.tipoCertificado, meta.filtroAgente, meta.filtroEstado),
+  });
+
+  const [hojas, setHojas] = useState<HojaGuardada[]>(() => [{ meta: metaInicial(), datos: crearDatosBase() }]);
 
   const cacheInicial = (): Record<TipoIdentificacion, CacheTab> => ({
     ruc: {
@@ -338,82 +335,212 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
 
   const [cacheIdentificacion, setCacheIdentificacion] = useState<Record<TipoIdentificacion, CacheTab>>(cacheInicial);
 
-  const abrir = () => {
-    setFiltroAgente("todos");
-    setFiltroEstado("todos");
-    setPqsVariante("75_solo");
-    setDatos(datosIniciales);
-    setCacheIdentificacion(cacheInicial());
-    setModal(true);
+  const actualizarHoja = (idx: number, updater: (h: HojaGuardada) => HojaGuardada) => {
+    setHojas((prev) => prev.map((h, i) => (i === idx ? updater(h) : h)));
   };
 
-  const actualizar = (cambios: Partial<CertificadoDatos>) => setDatos((p) => ({ ...p, ...cambios }));
+  const cargarPlantillas = () => {
+    if (!socket || !empresaId) return;
+    socket.emit("certificados:plantillas", { empresaId, sedeId }, (res: any) => {
+      if (res?.success) setPlantillas(res.plantillas || []);
+    });
+  };
 
-  const cambiarTipoCertificado = (tipo: TipoCertificado) => {
-    setDatos((p) => ({
-      ...p,
-      tipoCertificado: tipo,
-      items: construirItems(tipo, filtroAgente, filtroEstado),
-      agentesTexto: construirAgentesTextoPara(tipo, filtroAgente, pqsVariante, filtroEstado),
-      agentesTextoCorto: construirAgentesTextoCortoPara(tipo, filtroAgente, filtroEstado),
+  useEffect(() => {
+    if (!socket) return;
+    cargarPlantillas();
+    socket.on("certificados:changed", cargarPlantillas);
+    return () => { socket.off("certificados:changed", cargarPlantillas); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, empresaId, sedeId]);
+
+  const abrir = () => {
+    setHojas([{ meta: metaInicial(), datos: crearDatosBase() }]);
+    setHojaActivaIdx(0);
+    setCacheIdentificacion(cacheInicial());
+    setCertificadoGuardadoId(null);
+    setUltimoGuardadoSerializado(null);
+    setModoEdicion(false);
+    cargarPlantillas();
+    setModal(true);
+    if (socket && servicio?.id) {
+      socket.emit("certificados:porServicio", { servicioId: servicio.id }, (res: any) => {
+        if (res?.success && res.certificado) cargarCertificadoGenerado(res.certificado);
+      });
+    }
+  };
+
+  const usarModoEstandar = () => {
+    actualizarHoja(hojaActivaIdx, () => ({ meta: metaInicial(), datos: crearDatosBase() }));
+  };
+
+  const agregarHoja = () => {
+    setHojas((prev) => {
+      const nuevas = [...prev, { meta: metaInicial(), datos: crearDatosBase() }];
+      setHojaActivaIdx(nuevas.length - 1);
+      return nuevas;
+    });
+  };
+
+  const duplicarHojaActual = () => {
+    setHojas((prev) => {
+      const actual = prev[hojaActivaIdx];
+      if (!actual) return prev;
+      const nuevas = [...prev, { meta: { ...actual.meta }, datos: { ...actual.datos, items: [...actual.datos.items] } }];
+      setHojaActivaIdx(nuevas.length - 1);
+      return nuevas;
+    });
+  };
+
+  const eliminarHoja = (idx: number) => {
+    if (hojas.length <= 1) return;
+    const nuevas = hojas.filter((_, i) => i !== idx);
+    setHojas(nuevas);
+    setHojaActivaIdx((prevIdx) => Math.min(prevIdx >= idx ? Math.max(0, prevIdx - 1) : prevIdx, nuevas.length - 1));
+  };
+
+  const cargarPlantilla = (plantilla: any) => {
+    const hojasGuardadas = normalizarHojasGuardadas(plantilla.datos);
+    if (hojasGuardadas.length === 0) return;
+    const hg = hojasGuardadas[0];
+    actualizarHoja(hojaActivaIdx, () => ({
+      meta: { ...hg.meta, plantillaId: plantilla.id, plantillaNombre: plantilla.nombre || "" },
+      datos: recalcularHoja(hg.datos, hg.meta),
     }));
   };
+
+  const cargarCertificadoGenerado = (certificadoGuardado: any) => {
+    const hojasGuardadas = normalizarHojasGuardadas(certificadoGuardado.datos);
+    if (hojasGuardadas.length === 0) return false;
+    setHojas(hojasGuardadas.map((hg) => ({ meta: hg.meta, datos: recalcularHoja(hg.datos, hg.meta) })));
+    setHojaActivaIdx(0);
+    setCacheIdentificacion(cacheInicial());
+    setCertificadoGuardadoId(certificadoGuardado.id);
+    setUltimoGuardadoSerializado(serializarHojas(hojasGuardadas));
+    setModoEdicion(true);
+    setModal(true);
+    return true;
+  };
+
+  const guardarComoPlantilla = (nombre: string, onDone?: (ok: boolean) => void) => {
+    if (!socket || !empresaId || !nombre.trim()) return;
+    setGuardandoPlantilla(true);
+    const idxGuardado = hojaActivaIdx;
+    socket.emit("certificados:guardar", {
+      empresaId,
+      sedeId,
+      servicioId: null,
+      tipoCertificado: hojas[idxGuardado]?.datos.tipoCertificado || "garantia",
+      esPlantilla: true,
+      nombre: nombre.trim(),
+      datos: serializarHojas([hojas[idxGuardado]]),
+    }, (res: any) => {
+      setGuardandoPlantilla(false);
+      if (res?.success) {
+        cargarPlantillas();
+        actualizarHoja(idxGuardado, (h) => ({ ...h, meta: { ...h.meta, plantillaId: res.certificado?.id || null, plantillaNombre: nombre.trim() } }));
+      }
+      onDone?.(!!res?.success);
+    });
+  };
+
+  const actualizarPlantilla = (onDone?: (ok: boolean) => void) => {
+    const plantillaId = hojas[hojaActivaIdx]?.meta.plantillaId;
+    if (!socket || !empresaId || !plantillaId) return;
+    setGuardandoPlantilla(true);
+    socket.emit("certificados:guardar", {
+      id: plantillaId,
+      empresaId,
+      sedeId,
+      servicioId: null,
+      tipoCertificado: hojas[hojaActivaIdx]?.datos.tipoCertificado || "garantia",
+      esPlantilla: true,
+      nombre: hojas[hojaActivaIdx]?.meta.plantillaNombre || "",
+      datos: serializarHojas([hojas[hojaActivaIdx]]),
+    }, (res: any) => {
+      setGuardandoPlantilla(false);
+      if (res?.success) cargarPlantillas();
+      onDone?.(!!res?.success);
+    });
+  };
+
+  const serializadoActual = useMemo(() => serializarHojas(hojas), [hojas]);
+  const hayCambiosPendientes = ultimoGuardadoSerializado === null || serializadoActual !== ultimoGuardadoSerializado;
+
+  const guardarCertificado = (onDone?: (ok: boolean) => void) => {
+    if (!socket || !empresaId || guardandoCertificado) return;
+    const activa = hojas[hojaActivaIdx]?.datos;
+    if (!activa) return;
+    setGuardandoCertificado(true);
+    const mesEtiqueta = (servicio?.fechaRetiro || "").slice(0, 7) || new Date().toISOString().slice(0, 7);
+    const nombre = `${activa.tipoCertificado === "ph" ? "Prueba Hidrostática" : "Garantía y Operatividad"} — ${MESES.find((m) => m.value === activa.mesFecha)?.label || ""} ${activa.anioFecha}${hojas.length > 1 ? ` (${hojas.length} hojas)` : ""}`;
+    socket.emit("certificados:guardar", {
+      id: certificadoGuardadoId ?? undefined,
+      empresaId,
+      sedeId,
+      servicioId: servicio?.id ?? null,
+      tipoCertificado: activa.tipoCertificado,
+      esPlantilla: false,
+      nombre,
+      mesEtiqueta,
+      datos: serializadoActual,
+    }, (res: any) => {
+      setGuardandoCertificado(false);
+      if (res?.success) {
+        setCertificadoGuardadoId(res.certificado?.id || null);
+        setUltimoGuardadoSerializado(serializadoActual);
+        setModoEdicion(true);
+      }
+      onDone?.(!!res?.success);
+    });
+  };
+
+  const actualizar = (cambios: Partial<CertificadoDatos>) =>
+    actualizarHoja(hojaActivaIdx, (h) => ({ ...h, datos: { ...h.datos, ...cambios } }));
+
+  const cambiarTipoCertificado = (tipo: TipoCertificado) =>
+    actualizarHoja(hojaActivaIdx, (h) => ({ ...h, datos: recalcularHoja({ ...h.datos, tipoCertificado: tipo }, h.meta) }));
 
   const cambiarDenominacion = (denominacion: Denominacion) => actualizar({ denominacion });
 
-  const cambiarFiltroAgente = (filtro: string) => {
-    setFiltroAgente(filtro);
-    setDatos((p) => ({
-      ...p,
-      items: construirItems(p.tipoCertificado, filtro, filtroEstado),
-      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtro, pqsVariante, filtroEstado),
-      agentesTextoCorto: construirAgentesTextoCortoPara(p.tipoCertificado, filtro, filtroEstado),
-    }));
-  };
-
-  const cambiarFiltroEstado = (filtro: string) => {
-    setFiltroEstado(filtro);
-    setDatos((p) => {
-      const forzarVenta = filtro === ESTADO_NUEVO_VENTA;
-      const accionesTrabajo = forzarVenta ? { venta: true, recarga: false, mantenimiento: false } : p.accionesTrabajo;
-      return {
-        ...p,
-        items: construirItems(p.tipoCertificado, filtroAgente, filtro),
-        agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, pqsVariante, filtro),
-        agentesTextoCorto: construirAgentesTextoCortoPara(p.tipoCertificado, filtroAgente, filtro),
-        accionesTrabajo,
-        textoAccion: construirTextoAccion(accionesTrabajo),
-      };
+  const cambiarFiltroAgente = (filtro: string) =>
+    actualizarHoja(hojaActivaIdx, (h) => {
+      const meta = { ...h.meta, filtroAgente: filtro };
+      return { meta, datos: recalcularHoja(h.datos, meta) };
     });
-  };
 
-  const cambiarPqsVariante = (variante: PqsVariante) => {
-    setPqsVariante(variante);
-    setDatos((p) => ({
-      ...p,
-      items: construirItems(p.tipoCertificado, filtroAgente, filtroEstado),
-      agentesTexto: construirAgentesTextoPara(p.tipoCertificado, filtroAgente, variante, filtroEstado),
-    }));
-  };
+  const cambiarFiltroEstado = (filtro: string) =>
+    actualizarHoja(hojaActivaIdx, (h) => {
+      const meta = { ...h.meta, filtroEstado: filtro };
+      const forzarVenta = filtro === ESTADO_NUEVO_VENTA;
+      const accionesTrabajo = forzarVenta ? { venta: true, recarga: false, mantenimiento: false } : h.datos.accionesTrabajo;
+      const datosBase = { ...h.datos, accionesTrabajo, textoAccion: construirTextoAccion(accionesTrabajo) };
+      return { meta, datos: recalcularHoja(datosBase, meta) };
+    });
+
+  const cambiarPqsVariante = (variante: PqsVariante) =>
+    actualizarHoja(hojaActivaIdx, (h) => {
+      const meta = { ...h.meta, pqsVariante: variante };
+      return { meta, datos: recalcularHoja(h.datos, meta) };
+    });
 
   const actualizarRating = (uid: string, valor: string) => {
     setRatingsPorUid((prev) => ({ ...prev, [uid]: valor }));
-    setDatos((p) => ({ ...p, items: p.items.map((it) => (it.uid === uid ? { ...it, rating: valor } : it)) }));
+    actualizarHoja(hojaActivaIdx, (h) => ({ ...h, datos: { ...h.datos, items: h.datos.items.map((it) => (it.uid === uid ? { ...it, rating: valor } : it)) } }));
   };
 
-  const cambiarColumna = (columna: "item" | "nInterno" | "marca" | "tipoServicio" | "rating", valor: boolean) => {
-    setDatos((p) => ({ ...p, columnas: { ...p.columnas, [columna]: valor } }));
-  };
+  const cambiarColumna = (columna: "item" | "nInterno" | "marca" | "tipoServicio" | "rating", valor: boolean) =>
+    actualizarHoja(hojaActivaIdx, (h) => ({ ...h, datos: { ...h.datos, columnas: { ...h.datos.columnas, [columna]: valor } } }));
 
-  const cambiarAccionTrabajo = (accion: AccionTrabajo, valor: boolean) => {
-    setDatos((p) => {
-      const accionesTrabajo = { ...p.accionesTrabajo, [accion]: valor };
-      return { ...p, accionesTrabajo, textoAccion: construirTextoAccion(accionesTrabajo) };
+  const cambiarAccionTrabajo = (accion: AccionTrabajo, valor: boolean) =>
+    actualizarHoja(hojaActivaIdx, (h) => {
+      const accionesTrabajo = { ...h.datos.accionesTrabajo, [accion]: valor };
+      return { ...h, datos: { ...h.datos, accionesTrabajo, textoAccion: construirTextoAccion(accionesTrabajo) } };
     });
-  };
 
-  const cambiarTipoIdentificacion = (tipo: TipoIdentificacion) => {
-    setDatos((p) => {
+  const cambiarTipoIdentificacion = (tipo: TipoIdentificacion) =>
+    actualizarHoja(hojaActivaIdx, (h) => {
+      const p = h.datos;
       const cacheActualizada: Record<TipoIdentificacion, CacheTab> = {
         ...cacheIdentificacion,
         [p.tipoIdentificacion]: { numero: p.numeroIdentificacion, nombre: p.nombre, ubicacion: p.ubicacion, distrito: p.distrito },
@@ -421,21 +548,29 @@ export function useCertificado(empresa: any, activeSede: any, servicio: any, ext
       setCacheIdentificacion(cacheActualizada);
       const destino = cacheActualizada[tipo];
       return {
-        ...p,
-        tipoIdentificacion: tipo,
-        numeroIdentificacion: destino?.numero || "",
-        nombre: destino?.nombre || "",
-        ubicacion: destino?.ubicacion || ubicacionBase,
-        distrito: destino?.distrito || distritoBase,
+        ...h,
+        datos: {
+          ...p,
+          tipoIdentificacion: tipo,
+          numeroIdentificacion: destino?.numero || "",
+          nombre: destino?.nombre || "",
+          ubicacion: destino?.ubicacion || ubicacionBase,
+          distrito: destino?.distrito || distritoBase,
+        },
       };
     });
-  };
+
+  const hojaActiva = hojas[hojaActivaIdx] || hojas[0];
 
   return {
-    modal, setModal, datos, actualizar, abrir,
-    filtroAgente, cambiarFiltroAgente, cambiarTipoCertificado, cambiarTipoIdentificacion,
-    familiasDisponibles, hayPqs, pqsVariante, cambiarPqsVariante,
+    modal, setModal, datos: hojaActiva.datos, actualizar, abrir,
+    filtroAgente: hojaActiva.meta.filtroAgente, cambiarFiltroAgente, cambiarTipoCertificado, cambiarTipoIdentificacion,
+    familiasDisponibles, hayPqs, pqsVariante: hojaActiva.meta.pqsVariante, cambiarPqsVariante,
     cambiarDenominacion, actualizarRating, cambiarColumna,
-    filtroEstado, cambiarFiltroEstado, estadosDisponibles, cambiarAccionTrabajo,
+    filtroEstado: hojaActiva.meta.filtroEstado, cambiarFiltroEstado, estadosDisponibles, cambiarAccionTrabajo,
+    plantillas, cargarPlantilla, cargarCertificadoGenerado, guardarComoPlantilla, guardandoPlantilla, usarModoEstandar,
+    hojas: hojas.map((h) => h.datos), hojasMeta: hojas.map((h) => h.meta), hojaActivaIdx, setHojaActivaIdx, agregarHoja, duplicarHojaActual, eliminarHoja,
+    plantillaActivaId: hojaActiva.meta.plantillaId, plantillaActivaNombre: hojaActiva.meta.plantillaNombre, actualizarPlantilla,
+    certificadoGuardadoId, guardandoCertificado, hayCambiosPendientes, guardarCertificado, modoEdicion,
   };
 }

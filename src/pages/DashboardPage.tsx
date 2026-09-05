@@ -9,6 +9,7 @@ import ExtintoresView from "./dashboard/ExtintoresView";
 import HistorialMesesView from "./dashboard/HistorialMesesView";
 import HistorialMesRegistrosView from "./dashboard/HistorialMesRegistrosView";
 import HistorialRegistroView from "./dashboard/HistorialRegistroView";
+import CertificadosEmpresaView from "./dashboard/CertificadosEmpresaView";
 import SedesView from "./dashboard/SedesView";
 import InventarioPage from "./dashboard/InventarioPage";
 import CotizacionesPage from "./dashboard/CotizacionesPage";
@@ -183,6 +184,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
             <Route path="historial" element={<HistorialMesesView />} />
             <Route path="historial/:anio/:mes" element={<HistorialMesRegistrosView />} />
             <Route path="historial/:anio/:mes/:registroId" element={<HistorialRegistroView />} />
+            <Route path="certificados" element={<CertificadosEmpresaView />} />
             <Route path="sedes" element={<SedesView />} />
             <Route path="sedes/:sedeSlug">
               <Route index element={<Navigate to="extintores" replace />} />
@@ -190,6 +192,7 @@ export default function DashboardPage({ user, onLogout }: { user: { id: string; 
               <Route path="historial" element={<HistorialMesesView />} />
               <Route path="historial/:anio/:mes" element={<HistorialMesRegistrosView />} />
               <Route path="historial/:anio/:mes/:registroId" element={<HistorialRegistroView />} />
+              <Route path="certificados" element={<CertificadosEmpresaView />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
