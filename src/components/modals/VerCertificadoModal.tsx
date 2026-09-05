@@ -18,13 +18,12 @@ export default function VerCertificadoModal({ isOpen, onClose, hojasGuardadas, n
   if (!isOpen || hojasGuardadas.length === 0) return null;
 
   const hojas = hojasGuardadas.map((h) => h.datos);
-  const idsImpresion = hojas.map((_, i) => `certificado-historico-print-hoja-${i}`);
   const etiquetaHoja = (hoja: typeof hojas[number], i: number) => construirEtiquetaHoja(hoja, hojasGuardadas[i].meta);
 
   const handleDescargar = async () => {
     setDescargando(true);
     try {
-      await exportarHojasPdf(idsImpresion, nombreArchivo);
+      await exportarHojasPdf("certificado-historico-print-container", nombreArchivo);
     } catch (err) {
       alert(err instanceof Error ? err.message : "No se pudo generar el certificado");
     } finally {
@@ -59,14 +58,12 @@ export default function VerCertificadoModal({ isOpen, onClose, hojasGuardadas, n
       {createPortal(
         <div id="certificado-historico-print-container" className="fixed -left-750 top-0">
           {hojas.map((hoja, i) => (
-            <div key={i} className="certificado-print-page">
-              <CertificadoTemplate datos={hoja} id={idsImpresion[i]} />
-            </div>
+            <CertificadoTemplate key={i} datos={hoja} />
           ))}
         </div>,
         document.body
       )}
-      <style>{"@media print { #root { display: none !important; } #certificado-historico-print-container { position: static !important; left: auto !important; top: auto !important; } .certificado-print-page { break-after: page; page-break-after: always; } .certificado-print-page:last-child { break-after: auto; page-break-after: auto; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
+      <style>{"@media print { #root { display: none !important; } #certificado-historico-print-container { position: static !important; left: auto !important; top: auto !important; } .certificado-print-page { break-after: page; page-break-after: always; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
     </div>
   );
 }

@@ -540,7 +540,7 @@ export default function CertificadoModal({
                         onChange={(html) => onChange({ parrafoPersonalizado: html })}
                       />
                       <button
-                        onClick={() => setEditandoParrafo(false)}
+                        onClick={() => { onChange({ parrafoPersonalizado: "" }); setEditandoParrafo(false); }}
                         className="self-start text-[11px] font-bold text-zinc-400 hover:text-zinc-200"
                       >
                         ↺ Restablecer texto automático
@@ -670,14 +670,12 @@ export default function CertificadoModal({
       {createPortal(
         <div id="certificado-print-container" className="fixed -left-750 top-0">
           {hojas.map((hoja, i) => (
-            <div key={i} className="certificado-print-page">
-              <CertificadoTemplate datos={hoja} id={`certificado-print-hoja-${i}`} />
-            </div>
+            <CertificadoTemplate key={i} datos={hoja} id={`certificado-print-hoja-${i}`} />
           ))}
         </div>,
         document.body
       )}
-      <style>{"@media print { #root { display: none !important; } #certificado-print-container { position: static !important; left: auto !important; top: auto !important; } .certificado-print-page { break-after: page; page-break-after: always; } .certificado-print-page:last-child { break-after: auto; page-break-after: auto; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
+      <style>{"@media print { #root { display: none !important; } #certificado-print-container { position: static !important; left: auto !important; top: auto !important; } .certificado-print-page { break-after: page; page-break-after: always; } @page { size: 210mm 297mm; margin: 0; } }"}</style>
     </div>
   );
 }

@@ -16,8 +16,10 @@ export const exportarElementoPdf = async (elementId: string, nombreArchivo: stri
     pdf.save(nombreArchivo);
 };
 
-export const exportarHojasPdf = async (elementIds: string[], nombreArchivo: string) => {
-    const elementos = elementIds.map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
+export const exportarHojasPdf = async (containerId: string, nombreArchivo: string) => {
+    const contenedor = document.getElementById(containerId);
+    if (!contenedor) throw new Error("No se encontró el contenido a exportar");
+    const elementos = Array.from(contenedor.querySelectorAll<HTMLElement>(".certificado-print-page"));
     if (elementos.length === 0) throw new Error("No se encontró el contenido a exportar");
 
     const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
