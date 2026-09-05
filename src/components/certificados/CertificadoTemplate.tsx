@@ -51,6 +51,7 @@ export interface CertificadoDatos {
   textoAccion: string;
   etiquetasAdicionales: string[];
   parrafoPersonalizado?: string;
+  parrafoAutoBase?: string;
 }
 
 interface Props {
@@ -79,9 +80,7 @@ const DENOMINACION_PARRAFO_SINGULAR: Record<Denominacion, string> = {
   extintores: "extintor",
 };
 
-const FILAS_PRIMERA_PAGINA = 18;
-const FILAS_PAGINA_CONTINUACION = 26;
-const FILAS_MAX_ULTIMA_PAGINA = 14;
+const FILAS_POR_PAGINA = 14;
 
 const tituloCertificado = (tipo: TipoCertificado, denominacion: Denominacion): string => {
   const nombreExtintores = DENOMINACION_TITULO[denominacion];
@@ -94,22 +93,10 @@ const construirDenominacionTexto = (datos: CertificadoDatos, esSingular: boolean
   esSingular ? DENOMINACION_PARRAFO_SINGULAR[datos.denominacion] : DENOMINACION_PARRAFO[datos.denominacion];
 
 const construirPaginasItems = (items: CertificadoItem[]): CertificadoItem[][] => {
-  if (items.length <= FILAS_PRIMERA_PAGINA) return [items];
-  const paginas: CertificadoItem[][] = [items.slice(0, FILAS_PRIMERA_PAGINA)];
-  let idx = FILAS_PRIMERA_PAGINA;
-  while (idx < items.length) {
-    const resto = items.length - idx;
-    if (resto <= FILAS_MAX_ULTIMA_PAGINA) {
-      paginas.push(items.slice(idx));
-      break;
-    }
-    if (resto <= FILAS_PAGINA_CONTINUACION) {
-      paginas.push(items.slice(idx, idx + FILAS_MAX_ULTIMA_PAGINA));
-      idx += FILAS_MAX_ULTIMA_PAGINA;
-      continue;
-    }
-    paginas.push(items.slice(idx, idx + FILAS_PAGINA_CONTINUACION));
-    idx += FILAS_PAGINA_CONTINUACION;
+  if (items.length === 0) return [[]];
+  const paginas: CertificadoItem[][] = [];
+  for (let i = 0; i < items.length; i += FILAS_POR_PAGINA) {
+    paginas.push(items.slice(i, i + FILAS_POR_PAGINA));
   }
   return paginas;
 };
@@ -184,189 +171,170 @@ export default function CertificadoTemplate({ datos, id }: Props) {
     + (datos.columnas.tipoServicio ? 1 : 0);
 
   const paginasItems = construirPaginasItems(datos.items);
-  const totalPaginas = paginasItems.length;
 
   return (
     <>
-      {paginasItems.map((itemsPagina, pageIdx) => {
-        const esPrimera = pageIdx === 0;
-        const esUltima = pageIdx === totalPaginas - 1;
-        return (
-          <div key={pageIdx} style={{ fontFamily: "Arial, Helvetica, sans-serif" }} className="bg-white text-black certificado-print-page mb-6 print:mb-0">
-            <div id={esPrimera ? id : undefined} className="w-[210mm] min-h-[297mm] px-10 py-15 relative text-[14px]">
-              {esPrimera && (
-                <header className="grid grid-cols-[110px_1fr_110px] items-center gap-4 mb-6">
-                  <div className="h-28 flex items-center justify-center">
-                    <img src="/images/logo-extintor.png" alt="Extintor" className="max-h-full max-w-full object-contain" />
-                  </div>
+      {paginasItems.map((itemsPagina, pageIdx) => (
+        <div key={pageIdx} style={{ fontFamily: "Arial, Helvetica, sans-serif" }} className="bg-white text-black certificado-print-page mb-6 print:mb-0">
+          <div id={pageIdx === 0 ? id : undefined} className="w-[210mm] min-h-[297mm] px-10 py-15 relative text-[14px]">
+            <header className="grid grid-cols-[110px_1fr_110px] items-center gap-4 mb-6">
+              <div className="h-28 flex items-center justify-center">
+                <img src="/images/logo-extintor.png" alt="Extintor" className="max-h-full max-w-full object-contain" />
+              </div>
 
-                  <div className="text-center leading-tight px-2">
-                    <h1 className="text-red-600 font-bold text-[22px] mb-1">LA FAMA DEL EXTINGUIDOR E.I.R.L</h1>
-                    <h2 className="font-bold text-[14px] mb-1">
-                      VENTA, SERVICIO DE TODO TIPO DE EXTINGUIDORES Y MATERIAL CONTRA INCENDIO
-                    </h2>
-                    <p className="text-[14px]">Jr. M. Aranguri 924 – Urb. Santa Luzmila - Lima 7</p>
-                    <p className="text-red-600 font-bold text-[15px]">Teléfono 536 – 4958 / Celular 999916061 – 941982970</p>
-                    <p className="text-red-600 font-bold text-[15px]">R.U.C N° 20213431022</p>
-                    <a href="http://www.extintoresfama.com" className="text-blue-700 font-bold text-[15px] underline tracking-wide">
-                      www.extintoresfama.com
-                    </a>
-                  </div>
+              <div className="text-center leading-tight px-2">
+                <h1 className="text-red-600 font-bold text-[22px] mb-1">LA FAMA DEL EXTINGUIDOR E.I.R.L</h1>
+                <h2 className="font-bold text-[14px] mb-1">
+                  VENTA, SERVICIO DE TODO TIPO DE EXTINGUIDORES Y MATERIAL CONTRA INCENDIO
+                </h2>
+                <p className="text-[14px]">Jr. M. Aranguri 924 – Urb. Santa Luzmila - Lima 7</p>
+                <p className="text-red-600 font-bold text-[15px]">Teléfono 536 – 4958 / Celular 999916061 – 941982970</p>
+                <p className="text-red-600 font-bold text-[15px]">R.U.C N° 20213431022</p>
+                <a href="http://www.extintoresfama.com" className="text-blue-700 font-bold text-[15px] underline tracking-wide">
+                  www.extintoresfama.com
+                </a>
+              </div>
 
-                  <div className="h-28 flex items-center justify-center">
-                    <img src="/images/logo-sgs.png" alt="SGS" className="max-h-full max-w-full object-contain" />
-                  </div>
-                </header>
-              )}
+              <div className="h-28 flex items-center justify-center">
+                <img src="/images/logo-sgs.png" alt="SGS" className="max-h-full max-w-full object-contain" />
+              </div>
+            </header>
 
-              <main className="flex gap-4 mt-2">
-                <aside className="w-7.5 flex flex-col items-center justify-start pt-2 font-bold text-[17px] leading-[1.1] select-none">
-                  <div className="text-blue-600 flex flex-col items-center mb-8">
-                    {"HONRADEZ".split("").map((c, i) => <span key={i}>{c}</span>)}
-                  </div>
-                  <div className="text-red-600 flex flex-col items-center mb-8">
-                    {"GARANTIA".split("").map((c, i) => <span key={i}>{c}</span>)}
-                  </div>
-                  <div className="text-blue-600 flex flex-col items-center">
-                    {"CUMPLIMIENTO".split("").map((c, i) => <span key={i}>{c}</span>)}
-                  </div>
-                </aside>
+            <main className="flex gap-4 mt-2">
+              <aside className="w-7.5 flex flex-col items-center justify-start pt-2 font-bold text-[17px] leading-[1.1] select-none">
+                <div className="text-blue-600 flex flex-col items-center mb-8">
+                  {"HONRADEZ".split("").map((c, i) => <span key={i}>{c}</span>)}
+                </div>
+                <div className="text-red-600 flex flex-col items-center mb-8">
+                  {"GARANTIA".split("").map((c, i) => <span key={i}>{c}</span>)}
+                </div>
+                <div className="text-blue-600 flex flex-col items-center">
+                  {"CUMPLIMIENTO".split("").map((c, i) => <span key={i}>{c}</span>)}
+                </div>
+              </aside>
 
-                <section className="flex-1 flex flex-col pl-2">
-                  {esPrimera ? (
-                    <>
-                      <h3 className="text-red-600 font-bold text-center text-[16px] mb-5 leading-tight px-6">
-                        {tituloCertificado(datos.tipoCertificado, datos.denominacion)}
-                      </h3>
+              <section className="flex-1 flex flex-col pl-2">
+                <h3 className="text-red-600 font-bold text-center text-[16px] mb-5 leading-tight px-6">
+                  {tituloCertificado(datos.tipoCertificado, datos.denominacion)}
+                </h3>
 
-                      <p className="text-justify mb-5 leading-[1.6] whitespace-pre-line">
-                        {datos.parrafoPersonalizado ? (
-                          <span dangerouslySetInnerHTML={{ __html: sanitizarHtmlBold(datos.parrafoPersonalizado) }} />
-                        ) : (
-                          <>
-                            {soloUnidadPlaca ? (
-                              <span className="font-bold">UNIDAD PLACA {datos.numeroIdentificacion || "—"}</span>
-                            ) : (
-                              <>
-                                <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
-                                <span className="font-bold">
-                                  {labelIdentificacion} {datos.numeroIdentificacion || "—"}
-                                  {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
-                                </span>
-                              </>
-                            )}
-                            {!esPlaca && (
-                              <>
-                                {" "}ubicado en <span className="font-bold">{ubicacionCompleta}</span>
-                              </>
-                            )}
-                            ,{" "}
-                            {esPH ? (
-                              <>
-                                se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto}
-                                {datos.agentesTextoCorto ? <> {datos.agentesTextoCorto}</> : null},
-                                utilizando la máquina <span className="font-bold"> MARCA KAMEX MAQUINARIAS EIRL</span>, modelo{" "}
-                                <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
-                                <span className="font-bold">{etiquetasTexto} según detalle:</span>
-                              </>
-                            ) : (
-                              <>
-                                se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
-                                ha realizado conforme lo establece la{" "}
-                                <span className="font-bold">{etiquetasTexto} según detalle:</span>
-                              </>
-                            )}
-                          </>
-                        )}
-                      </p>
-                    </>
+                <p className="text-justify mb-5 leading-[1.6] whitespace-pre-line">
+                  {datos.parrafoPersonalizado ? (
+                    <span dangerouslySetInnerHTML={{ __html: sanitizarHtmlBold(datos.parrafoPersonalizado) }} />
                   ) : (
-                    <p className="text-red-600 font-bold text-[13px] mb-4">
-                      Continuación — {tituloCertificado(datos.tipoCertificado, datos.denominacion)}
-                    </p>
-                  )}
-
-                  <table className="w-full border-collapse border border-black text-[11px] mb-6 text-center">
-                    <thead className="font-bold">
-                      <tr>
-                        {datos.columnas.item && <th className="border border-black p-1 w-10">Ítem</th>}
-                        <th className="border border-black p-1 w-12.5">Serie</th>
-                        {datos.columnas.nInterno && <th className="border border-black p-1 leading-tight">N°<br />Interno</th>}
-                        {marcaVisible && <th className="border border-black p-1">Marca</th>}
-                        <th className="border border-black p-1 leading-tight">Tipo<br />Extintor</th>
-                        <th className="border border-black p-1">Cap.</th>
-                        {datos.columnas.rating && <th className="border border-black p-1">Rating</th>}
-                        {!esPH && <th className="border border-black p-1 leading-tight">Prueba de<br />Estanqueidad<br />y Fuga</th>}
-                        {!esPH && <th className="border border-black p-1 leading-tight">Vencimiento<br />Recarga</th>}
-                        <th className="border border-black p-1 leading-tight">Año de<br />Fabr.</th>
-                        {esPH && <th className="border border-black p-1 leading-tight">Realizado<br />P.H</th>}
-                        <th className="border border-black p-1 leading-tight">Vencimiento<br />Prueba<br />Hidrostática</th>
-                        {esPH && <th className="border border-black p-1 leading-tight">Presión<br />PSI</th>}
-                        {datos.columnas.tipoServicio && <th className="border border-black p-1 leading-tight">Tipo de<br />Servicio</th>}
-                        <th className="border border-black p-1 leading-tight">Condición<br />Extintor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {itemsPagina.length === 0 ? (
-                        <tr>
-                          <td colSpan={colSpanVacio} className="border border-black p-3 text-gray-500">
-                            {esPH ? "Ningún extintor de este servicio tiene Prueba Hidrostática registrada" : "Este servicio no tiene extintores asociados"}
-                          </td>
-                        </tr>
-                      ) : (
-                        itemsPagina.map((it, i) => (
-                          <tr key={i}>
-                            {datos.columnas.item && <td className="border border-black p-1 py-2">{it.item}</td>}
-                            <td className="border border-black p-1 py-2">{it.serie}</td>
-                            {datos.columnas.nInterno && <td className="border border-black p-1 py-2">{it.nInterno}</td>}
-                            {marcaVisible && <td className="border border-black p-1 py-2">{it.marca}</td>}
-                            <td className="border border-black p-1 py-2">{it.tipo}</td>
-                            <td className="border border-black p-1 py-2">{it.capacidad}</td>
-                            {datos.columnas.rating && <td className="border border-black p-1 py-2">{it.rating || "—"}</td>}
-                            {!esPH && <td className="border border-black p-1 py-2">{it.estanqueidad}</td>}
-                            {!esPH && <td className="border border-black p-1 py-2">{it.vencimientoRecarga}</td>}
-                            <td className="border border-black p-1 py-2">{it.anioFabricacion}</td>
-                            {esPH && <td className="border border-black p-1 py-2">{it.realizadoPH}</td>}
-                            <td className="border border-black p-1 py-2">{it.vencimientoPH}</td>
-                            {esPH && <td className="border border-black p-1 py-2">{it.presionPSI || "—"}</td>}
-                            {datos.columnas.tipoServicio && <td className="border border-black p-1 py-2">{it.tipoServicio}</td>}
-                            <td className="border border-black p-1 py-2">{it.condicion}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-
-                  {esUltima && (
                     <>
-                      <p className="text-justify mb-5 leading-[1.6]">
-                        <span className="font-bold">{esSingular ? "EL EXTINTOR ES ENTREGADO EN CALIDAD DE APROBADO" : "LOS EXTINTORES SON ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
-                        o falla posterior por la mala manipulación, el mal uso (golpes, abolladuras, exposición al calor,
-                        soldaduras y/o modificaciones, intemperie, oxido, corrosión, etc.) o uso distinto para el que está
-                        destinado es de responsabilidad del cliente, después de haber sido entregado, 1 año de garantía del
-                        servicio.
-                      </p>
-
-                      <p className="text-justify mb-8 leading-[1.6]">
-                        De acuerdo a la <span className="font-bold">NORMA TECNICA PERUANA 350.043</span> el Propietario debe
-                        inspeccionar su extintor una vez al mes por si exista la posibilidad de que lo hayan utilizado.
-                      </p>
-
-                      <p className="mb-8">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
-
-                      <div className="flex justify-center w-full mt-6">
-                        <div className="relative w-80 flex flex-col items-center">
-                          <img src="/images/firma.jpg" alt="Firma" className="w-72 h-44 object-contain -mb-3" />
-                        </div>
-                      </div>
+                      {soloUnidadPlaca ? (
+                        <span className="font-bold">UNIDAD PLACA {datos.numeroIdentificacion || "—"}</span>
+                      ) : (
+                        <>
+                          <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
+                          <span className="font-bold">
+                            {labelIdentificacion} {datos.numeroIdentificacion || "—"}
+                            {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
+                          </span>
+                        </>
+                      )}
+                      {!esPlaca && (
+                        <>
+                          {" "}ubicado en <span className="font-bold">{ubicacionCompleta}</span>
+                        </>
+                      )}
+                      ,{" "}
+                      {esPH ? (
+                        <>
+                          se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto}
+                          {datos.agentesTextoCorto ? <> {datos.agentesTextoCorto}</> : null},
+                          utilizando la máquina <span className="font-bold"> MARCA KAMEX MAQUINARIAS EIRL</span>, modelo{" "}
+                          <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
+                          <span className="font-bold">{etiquetasTexto} según detalle:</span>
+                        </>
+                      ) : (
+                        <>
+                          se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
+                          ha realizado conforme lo establece la{" "}
+                          <span className="font-bold">{etiquetasTexto} según detalle:</span>
+                        </>
+                      )}
                     </>
                   )}
-                </section>
-              </main>
-            </div>
+                </p>
+
+                <table className="w-full border-collapse border border-black text-[11px] mb-6 text-center">
+                  <thead className="font-bold">
+                    <tr>
+                      {datos.columnas.item && <th className="border border-black p-1 w-10">Ítem</th>}
+                      <th className="border border-black p-1 w-12.5">Serie</th>
+                      {datos.columnas.nInterno && <th className="border border-black p-1 leading-tight">N°<br />Interno</th>}
+                      {marcaVisible && <th className="border border-black p-1">Marca</th>}
+                      <th className="border border-black p-1 leading-tight">Tipo<br />Extintor</th>
+                      <th className="border border-black p-1">Cap.</th>
+                      {datos.columnas.rating && <th className="border border-black p-1">Rating</th>}
+                      {!esPH && <th className="border border-black p-1 leading-tight">Prueba de<br />Estanqueidad<br />y Fuga</th>}
+                      {!esPH && <th className="border border-black p-1 leading-tight">Vencimiento<br />Recarga</th>}
+                      <th className="border border-black p-1 leading-tight">Año de<br />Fabr.</th>
+                      {esPH && <th className="border border-black p-1 leading-tight">Realizado<br />P.H</th>}
+                      <th className="border border-black p-1 leading-tight">Vencimiento<br />Prueba<br />Hidrostática</th>
+                      {esPH && <th className="border border-black p-1 leading-tight">Presión<br />PSI</th>}
+                      {datos.columnas.tipoServicio && <th className="border border-black p-1 leading-tight">Tipo de<br />Servicio</th>}
+                      <th className="border border-black p-1 leading-tight">Condición<br />Extintor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemsPagina.length === 0 ? (
+                      <tr>
+                        <td colSpan={colSpanVacio} className="border border-black p-3 text-gray-500">
+                          {esPH ? "Ningún extintor de este servicio tiene Prueba Hidrostática registrada" : "Este servicio no tiene extintores asociados"}
+                        </td>
+                      </tr>
+                    ) : (
+                      itemsPagina.map((it, i) => (
+                        <tr key={i}>
+                          {datos.columnas.item && <td className="border border-black p-1 py-2">{it.item}</td>}
+                          <td className="border border-black p-1 py-2">{it.serie}</td>
+                          {datos.columnas.nInterno && <td className="border border-black p-1 py-2">{it.nInterno}</td>}
+                          {marcaVisible && <td className="border border-black p-1 py-2">{it.marca}</td>}
+                          <td className="border border-black p-1 py-2">{it.tipo}</td>
+                          <td className="border border-black p-1 py-2">{it.capacidad}</td>
+                          {datos.columnas.rating && <td className="border border-black p-1 py-2">{it.rating || "—"}</td>}
+                          {!esPH && <td className="border border-black p-1 py-2">{it.estanqueidad}</td>}
+                          {!esPH && <td className="border border-black p-1 py-2">{it.vencimientoRecarga}</td>}
+                          <td className="border border-black p-1 py-2">{it.anioFabricacion}</td>
+                          {esPH && <td className="border border-black p-1 py-2">{it.realizadoPH}</td>}
+                          <td className="border border-black p-1 py-2">{it.vencimientoPH}</td>
+                          {esPH && <td className="border border-black p-1 py-2">{it.presionPSI || "—"}</td>}
+                          {datos.columnas.tipoServicio && <td className="border border-black p-1 py-2">{it.tipoServicio}</td>}
+                          <td className="border border-black p-1 py-2">{it.condicion}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+
+                <p className="text-justify mb-5 leading-[1.6]">
+                  <span className="font-bold">{esSingular ? "EL EXTINTOR ES ENTREGADO EN CALIDAD DE APROBADO" : "LOS EXTINTORES SON ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
+                  o falla posterior por la mala manipulación, el mal uso (golpes, abolladuras, exposición al calor,
+                  soldaduras y/o modificaciones, intemperie, oxido, corrosión, etc.) o uso distinto para el que está
+                  destinado es de responsabilidad del cliente, después de haber sido entregado, 1 año de garantía del
+                  servicio.
+                </p>
+
+                <p className="text-justify mb-8 leading-[1.6]">
+                  De acuerdo a la <span className="font-bold">NORMA TECNICA PERUANA 350.043</span> el Propietario debe
+                  inspeccionar su extintor una vez al mes por si exista la posibilidad de que lo hayan utilizado.
+                </p>
+
+                <p className="mb-8">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
+
+                <div className="flex justify-center w-full mt-6">
+                  <div className="relative w-80 flex flex-col items-center">
+                    <img src="/images/firma.jpg" alt="Firma" className="w-72 h-44 object-contain -mb-3" />
+                  </div>
+                </div>
+              </section>
+            </main>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </>
   );
 }

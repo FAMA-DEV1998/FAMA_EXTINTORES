@@ -3,6 +3,7 @@ import type { Socket } from "socket.io-client";
 import { MESES } from "../../constants";
 import { formatVencimPH, formatRealizadoPH } from "../../utils/helpers";
 import type { CertificadoDatos, CertificadoItem, Denominacion, TipoCertificado, TipoIdentificacion } from "../../components/certificados/CertificadoTemplate";
+import { construirParrafoAutomatico } from "../../components/certificados/CertificadoTemplate";
 import { normalizarHojasGuardadas, serializarHojas, metaPorDefecto, type HojaGuardada, type HojaMeta } from "../../utils/certificadoHojas";
 
 export type PqsVariante = "75_solo" | "90_certificado_ul";
@@ -305,6 +306,7 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
       textoAccion: construirTextoAccion(accionesTrabajo),
       etiquetasAdicionales: [],
       parrafoPersonalizado: "",
+      parrafoAutoBase: "",
     };
   };
 
@@ -336,7 +338,15 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
   const [cacheIdentificacion, setCacheIdentificacion] = useState<Record<TipoIdentificacion, CacheTab>>(cacheInicial);
 
   const actualizarHoja = (idx: number, updater: (h: HojaGuardada) => HojaGuardada) => {
-    setHojas((prev) => prev.map((h, i) => (i === idx ? updater(h) : h)));
+    setHojas((prev) => prev.map((h, i) => {
+      if (i !== idx) return h;
+      const nuevo = updater(h);
+      if (nuevo.datos.parrafoPersonalizado && nuevo.datos.parrafoPersonalizado === nuevo.datos.parrafoAutoBase) {
+        const textoAuto = construirParrafoAutomatico(nuevo.datos);
+        return { ...nuevo, datos: { ...nuevo.datos, parrafoPersonalizado: textoAuto, parrafoAutoBase: textoAuto } };
+      }
+      return nuevo;
+    }));
   };
 
   const cargarPlantillas = () => {

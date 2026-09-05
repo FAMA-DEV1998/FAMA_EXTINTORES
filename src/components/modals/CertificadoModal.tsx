@@ -114,14 +114,15 @@ function ColumnaChip({ activa, label, ayuda, onToggle }: { activa: boolean; labe
 
 function EditorParrafo({ valorInicial, onChange }: { valorInicial: string; onChange: (html: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const ultimoValorPropio = useRef<string | null>(null);
   const [negritaActiva, setNegritaActiva] = useState(false);
 
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== valorInicial) {
-      ref.current.innerHTML = valorInicial;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!ref.current) return;
+    if (ultimoValorPropio.current === valorInicial) return;
+    ref.current.innerHTML = valorInicial;
+    ultimoValorPropio.current = valorInicial;
+  }, [valorInicial]);
 
   const actualizarEstadoNegrita = () => {
     try { setNegritaActiva(document.queryCommandState("bold")); } catch { /* noop */ }
@@ -129,7 +130,9 @@ function EditorParrafo({ valorInicial, onChange }: { valorInicial: string; onCha
 
   const handleInput = () => {
     if (!ref.current) return;
-    onChange(sanitizarHtmlBold(ref.current.innerHTML));
+    const html = sanitizarHtmlBold(ref.current.innerHTML);
+    ultimoValorPropio.current = html;
+    onChange(html);
     actualizarEstadoNegrita();
   };
 
@@ -536,11 +539,12 @@ export default function CertificadoModal({
                   {editandoParrafo ? (
                     <>
                       <EditorParrafo
-                        valorInicial={datos.parrafoPersonalizado || construirParrafoAutomatico(datos)}
+                        valorInicial={datos.parrafoPersonalizado || ""}
                         onChange={(html) => onChange({ parrafoPersonalizado: html })}
                       />
+                      <p className="text-[10px] text-zinc-600 -mt-1">Los cambios en RUC, tipo de trabajo, normas y etiquetas siguen actualizando este texto mientras no lo reescribas manualmente.</p>
                       <button
-                        onClick={() => { onChange({ parrafoPersonalizado: "" }); setEditandoParrafo(false); }}
+                        onClick={() => { onChange({ parrafoPersonalizado: "", parrafoAutoBase: "" }); setEditandoParrafo(false); }}
                         className="self-start text-[11px] font-bold text-zinc-400 hover:text-zinc-200"
                       >
                         ↺ Restablecer texto automático
@@ -548,7 +552,11 @@ export default function CertificadoModal({
                     </>
                   ) : (
                     <button
-                      onClick={() => { onChange({ parrafoPersonalizado: "" }); setEditandoParrafo(true); }}
+                      onClick={() => {
+                        const textoAuto = construirParrafoAutomatico(datos);
+                        onChange({ parrafoPersonalizado: textoAuto, parrafoAutoBase: textoAuto });
+                        setEditandoParrafo(true);
+                      }}
                       className="self-start px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 transition-all"
                     >
                       ✏️ Editar texto manualmente
