@@ -13,7 +13,7 @@ export const ESTADOS_SIN_COMPONENTES = ["Nuevo - Venta"];
 export const ESTADOS_REQUIEREN_DATOS_PH = ["Aprobado", "Nuevo - Venta", "Garantía"];
 
 export const PESOS_KG = ["1", "2", "4", "6", "9", "12", "25", "50", "75", "100"] as const;
-export const PESOS_LB = ["5", "10", "15", "20", "25", "30", "125", "145"] as const;
+export const PESOS_LB = ["2.5", "5", "10", "11", "15", "20", "25", "30", "125", "145"] as const;
 export const PESOS_LT = ["1", "2", "2.5", "3", "4", "6", "9", "10", "12", "25", "50"] as const;
 export const PESOS_GAL = ["1", "2", "2.5", "3", "5", "10", "15", "20", "25", "30", "55"] as const;
 
