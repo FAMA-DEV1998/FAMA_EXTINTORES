@@ -10,7 +10,7 @@ export default function HistorialRegistroView() {
   const { mes, registroId } = useParams<{ mes: string; registroId: string }>();
   const navigate = useNavigate();
   const scope = useEmpresaScope() as any;
-  const { selectedEmpresa, customOrders, activeSede, socket, extintores, extintorForm, catalogLists } = scope;
+  const { selectedEmpresa, customOrdersServicio, activeSede, socket, extintores, extintorForm, catalogLists } = scope;
 
   const { servicios, deleteServicio, addExtintorToServicio, setExtintorEstado } =
     useServicios(socket, selectedEmpresa?.id, activeSede?.id ?? null);
@@ -54,13 +54,14 @@ export default function HistorialRegistroView() {
   const exportActions = useExportActions(
     socket,
     selectedEmpresa,
-    customOrders.customWeightOrder,
-    customOrders.customEstadoOrder,
-    customOrders.customAgenteOrder,
+    customOrdersServicio.customWeightOrder,
+    customOrdersServicio.customEstadoOrder,
+    customOrdersServicio.customAgenteOrder,
     activeSede?.id ?? null,
     "historial",
     servicio?.extintorUids ?? [],
-    servicio?.id
+    servicio?.id,
+    customOrdersServicio.customSedeOrder
   );
   const {
     exporting, whatsappModal, setWhatsappModal, whatsappFormat, setWhatsappFormat,
@@ -89,9 +90,9 @@ export default function HistorialRegistroView() {
         }
         return merged;
       }),
-    selectedEmpresa?.servicioWeightOrder,
-    selectedEmpresa?.servicioEstadoOrder,
-    selectedEmpresa?.servicioAgenteOrder,
+    customOrdersServicio.customWeightOrder,
+    customOrdersServicio.customEstadoOrder,
+    customOrdersServicio.customAgenteOrder,
     extintores
   );
 

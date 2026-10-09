@@ -12,7 +12,8 @@ export function useExportActions(
   sedeId?: string | null,
   mode: "all" | "historial" = "historial",
   extintorUids?: string[],
-  servicioId?: string
+  servicioId?: string,
+  customSedeOrder: string[] = []
 ) {
   const [exporting, setExporting] = useState(false);
 
@@ -29,6 +30,7 @@ export function useExportActions(
       weightOrder: customWeightOrder,
       estadoOrder: customEstadoOrder,
       agenteOrder: customAgenteOrder,
+      sedeOrder: customSedeOrder,
       mode,
       extintorUids,
       servicioId,
@@ -64,6 +66,7 @@ export function useExportActions(
         weightOrder: customWeightOrder,
         estadoOrder: customEstadoOrder,
         agenteOrder: customAgenteOrder,
+        sedeOrder: customSedeOrder,
         mode,
         extintorUids,
         servicioId,
@@ -81,6 +84,7 @@ export function useExportActions(
         weightOrder: customWeightOrder,
         estadoOrder: customEstadoOrder,
         agenteOrder: customAgenteOrder,
+        sedeOrder: customSedeOrder,
         mode,
         extintorUids,
         servicioId,

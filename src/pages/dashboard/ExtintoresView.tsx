@@ -13,7 +13,10 @@ export default function ExtintoresView() {
     customOrders.customEstadoOrder,
     customOrders.customAgenteOrder,
     activeSede?.id ?? null,
-    "all"
+    "all",
+    undefined,
+    undefined,
+    customOrders.customSedeOrder
   );
 
   return <ExtintorInventoryPanel variant="resumen" onExportExcel={exportExcel} exporting={exporting} />;

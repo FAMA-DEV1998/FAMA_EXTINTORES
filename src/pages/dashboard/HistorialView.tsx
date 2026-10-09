@@ -14,7 +14,11 @@ export default function HistorialView() {
     customOrders.customWeightOrder,
     customOrders.customEstadoOrder,
     customOrders.customAgenteOrder,
-    activeSede?.id ?? null
+    activeSede?.id ?? null,
+    "historial",
+    undefined,
+    undefined,
+    customOrders.customSedeOrder
   );
   const {
     exporting, whatsappModal, setWhatsappModal, whatsappFormat, setWhatsappFormat,

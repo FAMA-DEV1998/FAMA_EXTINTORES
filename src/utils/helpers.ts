@@ -255,6 +255,16 @@ export const getCamposFaltantes = (ext: Extintor): string[] => {
     return faltantes;
 };
 
+const compararPorOrden = (valA: string, valB: string, orden: string[], respaldo: (a: string, b: string) => number): number => {
+    if (valA === valB) return 0;
+    const idxA = orden.indexOf(valA);
+    const idxB = orden.indexOf(valB);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return respaldo(valA, valB);
+};
+
 export const sortExtintoresPersonalizado = (
     list: Extintor[],
     weightOrder: string[] = [],
@@ -287,35 +297,20 @@ export const sortExtintoresPersonalizado = (
             if (idxB !== -1 && idxA === -1) return 1;
         }
 
-        if (estadoOrder.length > 0) {
-            const valA = a.estadoExtintor || "Sin definir";
-            const valB = b.estadoExtintor || "Sin definir";
-            const idxA = estadoOrder.indexOf(valA);
-            const idxB = estadoOrder.indexOf(valB);
-            if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
-            if (idxA !== -1 && idxB === -1) return -1;
-            if (idxB !== -1 && idxA === -1) return 1;
-        }
+        const estadoA = a.estadoExtintor || "Sin definir";
+        const estadoB = b.estadoExtintor || "Sin definir";
+        const cmpEstado = compararPorOrden(estadoA, estadoB, estadoOrder, (x, y) => (getEstadoPrioridad(x) - getEstadoPrioridad(y)) || x.localeCompare(y, "es"));
+        if (cmpEstado !== 0) return cmpEstado;
 
-        if (agenteOrder.length > 0) {
-            const valA = a.agenteExtintor || "Sin definir";
-            const valB = b.agenteExtintor || "Sin definir";
-            const idxA = agenteOrder.indexOf(valA);
-            const idxB = agenteOrder.indexOf(valB);
-            if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
-            if (idxA !== -1 && idxB === -1) return -1;
-            if (idxB !== -1 && idxA === -1) return 1;
-        }
+        const agenteA = a.agenteExtintor || "Sin definir";
+        const agenteB = b.agenteExtintor || "Sin definir";
+        const cmpAgente = compararPorOrden(agenteA, agenteB, agenteOrder, (x, y) => x.localeCompare(y, "es"));
+        if (cmpAgente !== 0) return cmpAgente;
 
-        if (weightOrder.length > 0) {
-            const valA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
-            const valB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
-            const idxA = weightOrder.indexOf(valA);
-            const idxB = weightOrder.indexOf(valB);
-            if (idxA !== -1 && idxB !== -1 && idxA !== idxB) return idxA - idxB;
-            if (idxA !== -1 && idxB === -1) return -1;
-            if (idxB !== -1 && idxA === -1) return 1;
-        }
+        const pesoA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
+        const pesoB = b.peso ? `${b.peso} ${b.unidadPeso}` : "Sin definir";
+        const cmpPeso = compararPorOrden(pesoA, pesoB, weightOrder, (x, y) => (getWeightInKg(x) - getWeightInKg(y)) || x.localeCompare(y, "es"));
+        if (cmpPeso !== 0) return cmpPeso;
 
         const pA = a.peso ? `${a.peso} ${a.unidadPeso}` : "Sin definir";
         const mA = a.marca || "Sin definir";
