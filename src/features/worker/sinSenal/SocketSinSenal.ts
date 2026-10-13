@@ -109,10 +109,12 @@ export class SocketSinSenal {
   private guardadoPendiente: ReturnType<typeof setTimeout> | null = null;
   private contadorFilas = 0;
   private readonly clave: string;
+  private readonly real: Socket;
   private resumenCache: ResumenSinSenal | null = null;
   private alTerminarSincronizacion: ((enviados: number, fallidos: number) => void) | null = null;
 
-  constructor(private readonly real: Socket, usuarioId: string) {
+  constructor(real: Socket, usuarioId: string) {
+    this.real = real;
     this.clave = `estado-${usuarioId}`;
     this.real.onAny(this.recibirDelServidor);
     this.real.on("connect", this.alConectar);
