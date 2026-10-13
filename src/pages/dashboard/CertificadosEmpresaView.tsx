@@ -188,7 +188,6 @@ export default function CertificadosEmpresaView() {
         estadosDisponibles={certificado.estadosDisponibles}
         onCambiarTipoCertificado={certificado.cambiarTipoCertificado}
         onCambiarTipoIdentificacion={certificado.cambiarTipoIdentificacion}
-        onCambiarDenominacion={certificado.cambiarDenominacion}
         onActualizarRating={certificado.actualizarRating}
         onCambiarColumna={certificado.cambiarColumna}
         onCambiarAccionTrabajo={certificado.cambiarAccionTrabajo}

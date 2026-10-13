@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CertificadoTemplate, { construirParrafoAutomatico, sanitizarHtmlBold } from "../certificados/CertificadoTemplate";
 import CertificadoPreview from "../certificados/CertificadoPreview";
-import type { CertificadoDatos, Denominacion, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
+import type { CertificadoDatos, TipoCertificado, TipoIdentificacion } from "../certificados/CertificadoTemplate";
 import { PQS_TIPO_LABEL, PQS_VARIANTES, ESTADO_NUEVO_VENTA, type PqsVariante, type AccionTrabajo } from "../../hooks/dashboard/useCertificado";
 import { construirEtiquetaHoja, type HojaMeta } from "../../utils/certificadoHojas";
 import { MESES, DISTRITOS_LIMA } from "../../constants";
@@ -20,7 +20,6 @@ interface Props {
   estadosDisponibles: string[];
   onCambiarTipoCertificado: (tipo: TipoCertificado) => void;
   onCambiarTipoIdentificacion: (tipo: TipoIdentificacion) => void;
-  onCambiarDenominacion: (denominacion: Denominacion) => void;
   onActualizarRating: (uid: string, valor: string) => void;
   onCambiarColumna: (columna: "item" | "nInterno" | "marca" | "tipoServicio" | "rating", valor: boolean) => void;
   onCambiarAccionTrabajo: (accion: AccionTrabajo, valor: boolean) => void;
@@ -175,7 +174,7 @@ function EditorParrafo({ valorInicial, onChange }: { valorInicial: string; onCha
 
 export default function CertificadoModal({
   isOpen, onClose, datos, onChange, filtroAgente, onCambiarFiltroAgente, filtroEstado, onCambiarFiltroEstado, estadosDisponibles,
-  onCambiarTipoCertificado, onCambiarTipoIdentificacion, onCambiarDenominacion, onActualizarRating, onCambiarColumna, onCambiarAccionTrabajo,
+  onCambiarTipoCertificado, onCambiarTipoIdentificacion, onActualizarRating, onCambiarColumna, onCambiarAccionTrabajo,
   familiasDisponibles, hayPqs, pqsVariante, onCambiarPqsVariante,
   plantillas, onCargarPlantilla, onGuardarPlantilla, guardandoPlantilla,
   hojas, hojasMeta, hojaActivaIdx, onSetHojaActivaIdx, onAgregarHoja, onDuplicarHoja, onEliminarHoja,
@@ -402,18 +401,6 @@ export default function CertificadoModal({
                     options={[
                       { value: "garantia", label: "Garantía y Operatividad" },
                       { value: "ph", label: "Prueba Hidrostática" },
-                    ]}
-                  />
-                </ModalField>
-                <ModalField label="Tipo de extintores">
-                  <Segmented
-                    value={datos.denominacion}
-                    onChange={(v) => onCambiarDenominacion(v as Denominacion)}
-                    options={[
-                      { value: "portatiles_rodantes", label: "Portátiles y Rodantes" },
-                      { value: "portatiles", label: "Portátiles" },
-                      { value: "rodantes", label: "Rodantes" },
-                      { value: "extintores", label: "Extintores" },
                     ]}
                   />
                 </ModalField>

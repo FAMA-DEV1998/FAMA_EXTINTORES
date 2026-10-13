@@ -3,7 +3,7 @@ import type { Socket } from "socket.io-client";
 import { MESES } from "../../constants";
 import { formatVencimPH, formatRealizadoPH } from "../../utils/helpers";
 import type { CertificadoDatos, CertificadoItem, Denominacion, TipoCertificado, TipoIdentificacion } from "../../components/certificados/CertificadoTemplate";
-import { sincronizarCamposParrafo } from "../../components/certificados/CertificadoTemplate";
+import { sincronizarCamposParrafo, detectarDenominacion } from "../../components/certificados/CertificadoTemplate";
 import { normalizarHojasGuardadas, serializarHojas, metaPorDefecto, type HojaGuardada, type HojaMeta } from "../../utils/certificadoHojas";
 
 export type PqsVariante = "75_solo" | "90_certificado_ul";
@@ -285,10 +285,11 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
     const tipoIdentificacion: TipoIdentificacion = empresa?.tipoCliente === "persona" ? "dni" : "ruc";
     const hoy = new Date();
     const accionesTrabajo = { venta: false, recarga: true, mantenimiento: false };
+    const items = construirItems("garantia", "todos", "todos");
 
     return {
       tipoCertificado: "garantia",
-      denominacion: "portatiles_rodantes",
+      denominacion: detectarDenominacion(items),
       tipoIdentificacion,
       nombre: empresa?.razonSocial || "",
       numeroIdentificacion: empresa?.ruc || "",
@@ -300,7 +301,7 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
       anioFecha: String(hoy.getFullYear()),
       agentesTexto: construirAgentesTextoPara("garantia", "todos", "75_solo", "todos"),
       agentesTextoCorto: construirAgentesTextoCortoPara("garantia", "todos", "todos"),
-      items: construirItems("garantia", "todos", "todos"),
+      items,
       columnas: { item: false, nInterno: false, marca: false, tipoServicio: false, rating: false },
       accionesTrabajo,
       textoAccion: construirTextoAccion(accionesTrabajo),
@@ -311,12 +312,16 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
     };
   };
 
-  const recalcularHoja = (datos: CertificadoDatos, meta: HojaMeta): CertificadoDatos => ({
+  const recalcularHoja = (datos: CertificadoDatos, meta: HojaMeta): CertificadoDatos => {
+    const items = construirItems(datos.tipoCertificado, meta.filtroAgente, meta.filtroEstado);
+    return {
     ...datos,
-    items: construirItems(datos.tipoCertificado, meta.filtroAgente, meta.filtroEstado),
+    items,
+    denominacion: detectarDenominacion(items),
     agentesTexto: construirAgentesTextoPara(datos.tipoCertificado, meta.filtroAgente, meta.pqsVariante, meta.filtroEstado),
     agentesTextoCorto: construirAgentesTextoCortoPara(datos.tipoCertificado, meta.filtroAgente, meta.filtroEstado),
-  });
+    };
+  };
 
   const [hojas, setHojas] = useState<HojaGuardada[]>(() => [{ meta: metaInicial(), datos: crearDatosBase() }]);
 
@@ -535,8 +540,6 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
       return { ...h, datos: recalcularHoja(datosBase, h.meta) };
     });
 
-  const cambiarDenominacion = (denominacion: Denominacion) => actualizar({ denominacion });
-
   const cambiarFiltroAgente = (filtro: string) =>
     actualizarHoja(hojaActivaIdx, (h) => {
       const meta = { ...h.meta, filtroAgente: filtro };
@@ -600,7 +603,7 @@ export function useCertificado(socket: Socket | null, empresa: any, activeSede: 
     modal, setModal, datos: hojaActiva.datos, actualizar, abrir,
     filtroAgente: hojaActiva.meta.filtroAgente, cambiarFiltroAgente, cambiarTipoCertificado, cambiarTipoIdentificacion,
     familiasDisponibles, hayPqs, pqsVariante: hojaActiva.meta.pqsVariante, cambiarPqsVariante,
-    cambiarDenominacion, actualizarRating, cambiarColumna,
+    actualizarRating, cambiarColumna,
     filtroEstado: hojaActiva.meta.filtroEstado, cambiarFiltroEstado, estadosDisponibles, cambiarAccionTrabajo,
     plantillas, cargarPlantilla, cargarCertificadoGenerado, guardarComoPlantilla, guardandoPlantilla, usarModoEstandar,
     hojas: hojas.map((h) => h.datos), hojasMeta: hojas.map((h) => h.meta), hojaActivaIdx, setHojaActivaIdx, agregarHoja, duplicarHojaActual, eliminarHoja,

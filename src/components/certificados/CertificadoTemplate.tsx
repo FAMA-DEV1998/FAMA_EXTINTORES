@@ -83,6 +83,53 @@ const DENOMINACION_PARRAFO_SINGULAR: Record<Denominacion, string> = {
 
 const FILAS_POR_PAGINA = 14;
 
+const UMBRAL_RODANTE: Record<string, number> = { KG: 25, LB: 125, LT: 25, GAL: 10 };
+
+const normalizarUnidad = (unidad: string): string => {
+  const u = unidad.toUpperCase();
+  if (u.startsWith("KG")) return "KG";
+  if (u.startsWith("LB")) return "LB";
+  if (u.startsWith("GAL") || u.startsWith("GL")) return "GAL";
+  if (u.startsWith("LT") || u === "L") return "LT";
+  return "";
+};
+
+const esRodante = (capacidad: string): boolean | null => {
+  const match = (capacidad || "").match(/(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)/);
+  if (!match) return null;
+  const valor = parseFloat(match[1].replace(",", "."));
+  const umbral = UMBRAL_RODANTE[normalizarUnidad(match[2])];
+  if (isNaN(valor) || umbral === undefined) return null;
+  return valor >= umbral;
+};
+
+export const detectarDenominacion = (items: CertificadoItem[]): Denominacion => {
+  const clasificados = items.map((it) => esRodante(it.capacidad)).filter((v): v is boolean => v !== null);
+  const hayRodantes = clasificados.includes(true);
+  const hayPortatiles = clasificados.includes(false);
+  if (hayRodantes && hayPortatiles) return "portatiles_rodantes";
+  if (hayRodantes) return "rodantes";
+  if (hayPortatiles) return "portatiles";
+  return "extintores";
+};
+
+const soloAnio = (valor: string): string => valor?.match(/\d{4}/)?.[0] || valor;
+
+const estanqueidadItem = (it: CertificadoItem): string =>
+  (it.condicion || "").trim().toLowerCase() === "de baja" ? "—" : it.estanqueidad;
+
+const aplicarDenominacionParrafo = (html: string, texto: string): string => {
+  const contenedor = document.createElement("div");
+  contenedor.innerHTML = html;
+  contenedor.querySelectorAll('[data-campo="denominacion"]').forEach((el) => { el.textContent = texto; });
+  return contenedor.innerHTML;
+};
+
+const LETRAS_LATERALES: { letra: string; color: string }[] = ["HONRADEZ", "GARANTIA", "CUMPLIMIENTO"].flatMap((palabra, idx) => [
+  ...(idx > 0 ? [{ letra: "", color: "" }] : []),
+  ...palabra.split("").map((letra) => ({ letra, color: idx === 1 ? "text-red-600" : "text-blue-600" })),
+]);
+
 const tituloCertificado = (tipo: TipoCertificado, denominacion: Denominacion): string => {
   const nombreExtintores = DENOMINACION_TITULO[denominacion];
   return tipo === "ph"
@@ -90,8 +137,8 @@ const tituloCertificado = (tipo: TipoCertificado, denominacion: Denominacion): s
     : `CERTIFICADO DE GARANTIA Y OPERATIVIDAD DE ${nombreExtintores} DE LUCHA CONTRA INCENDIOS Y VIGENCIA DE PRUEBA HIDROSTATICA`;
 };
 
-const construirDenominacionTexto = (datos: CertificadoDatos, esSingular: boolean): string =>
-  esSingular ? DENOMINACION_PARRAFO_SINGULAR[datos.denominacion] : DENOMINACION_PARRAFO[datos.denominacion];
+const construirDenominacionTexto = (denominacion: Denominacion, esSingular: boolean): string =>
+  esSingular ? DENOMINACION_PARRAFO_SINGULAR[denominacion] : DENOMINACION_PARRAFO[denominacion];
 
 const construirPaginasItems = (items: CertificadoItem[]): CertificadoItem[][] => {
   if (items.length === 0) return [[]];
@@ -154,7 +201,7 @@ const construirSegmentosParrafo = (datos: CertificadoDatos): Record<string, stri
     cliente,
     ubicacion: `<strong>${ubicacionCompleta}</strong>`,
     trabajo: datos.textoAccion,
-    denominacion: construirDenominacionTexto(datos, esSingular),
+    denominacion: construirDenominacionTexto(datos.denominacion, esSingular),
     agentes: esPH ? (datos.agentesTextoCorto || "") : datos.agentesTexto,
     maquina: `<strong>MARCA KAMEX MAQUINARIAS EIRL</strong>, modelo <strong>KPH-02</strong>`,
     normas: `<strong>${etiquetasTexto} según detalle:</strong>`,
@@ -230,7 +277,6 @@ export default function CertificadoTemplate({ datos, id }: Props) {
   const esSingular = datos.items.length === 1;
   const labelIdentificacion = datos.tipoIdentificacion === "ruc" ? "RUC N°" : datos.tipoIdentificacion === "dni" ? "DNI N°" : "Placa N°";
   const mesLabel = MESES.find((m) => m.value === datos.mesFecha)?.label.toLowerCase() || "";
-  const denominacionTexto = construirDenominacionTexto(datos, esSingular);
   const marcaVisible = datos.columnas.marca || esPH;
   const ubicacionCompleta = `${datos.ubicacion || "—"}${datos.distrito ? ` - ${datos.distrito}` : ""} - Lima`;
   const etiquetasTexto = ["NTP 350.043.1", "833.030", ...datos.etiquetasAdicionales].join("; ");
@@ -245,10 +291,13 @@ export default function CertificadoTemplate({ datos, id }: Props) {
 
   return (
     <>
-      {paginasItems.map((itemsPagina, pageIdx) => (
+      {paginasItems.map((itemsPagina, pageIdx) => {
+        const denominacionPagina = detectarDenominacion(itemsPagina);
+        const denominacionTexto = construirDenominacionTexto(denominacionPagina, esSingular);
+        return (
         <div key={pageIdx} style={{ fontFamily: "Arial, Helvetica, sans-serif" }} className="bg-white text-black certificado-print-page mb-6 print:mb-0">
-          <div id={pageIdx === 0 ? id : undefined} className="w-[210mm] min-h-[297mm] px-10 py-15 relative text-[14px]">
-            <header className="grid grid-cols-[110px_1fr_110px] items-center gap-4 mb-6">
+          <div id={pageIdx === 0 ? id : undefined} className="w-[210mm] min-h-[297mm] px-10 pt-10 pb-10 relative text-[14px]">
+            <header className="grid grid-cols-[110px_1fr_110px] items-center gap-4 mb-4">
               <div className="h-28 flex items-center justify-center">
                 <img src="/images/logo-extintor.png" alt="Extintor" className="max-h-full max-w-full object-contain" />
               </div>
@@ -272,26 +321,20 @@ export default function CertificadoTemplate({ datos, id }: Props) {
             </header>
 
             <main className="flex gap-4 mt-2">
-              <aside className="w-7.5 flex flex-col items-center justify-start pt-2 font-bold text-[17px] leading-[1.1] select-none">
-                <div className="text-blue-600 flex flex-col items-center mb-8">
-                  {"HONRADEZ".split("").map((c, i) => <span key={i}>{c}</span>)}
-                </div>
-                <div className="text-red-600 flex flex-col items-center mb-8">
-                  {"GARANTIA".split("").map((c, i) => <span key={i}>{c}</span>)}
-                </div>
-                <div className="text-blue-600 flex flex-col items-center">
-                  {"CUMPLIMIENTO".split("").map((c, i) => <span key={i}>{c}</span>)}
-                </div>
+              <aside className="w-7.5 flex flex-col items-center justify-between pt-2 pb-2 font-bold text-[17px] leading-[1.1] select-none">
+                {LETRAS_LATERALES.map((l, i) => (
+                  <span key={i} className={l.color}>{l.letra || "\u00A0"}</span>
+                ))}
               </aside>
 
               <section className="flex-1 flex flex-col pl-2">
-                <h3 className="text-red-600 font-bold text-center text-[16px] mb-5 leading-tight px-6">
-                  {tituloCertificado(datos.tipoCertificado, datos.denominacion)}
+                <h3 className="text-red-600 font-bold text-center text-[16px] mb-3 leading-tight px-6">
+                  {tituloCertificado(datos.tipoCertificado, denominacionPagina)}
                 </h3>
 
-                <p className="text-justify mb-5 leading-[1.6] whitespace-pre-line">
+                <p className="text-justify mb-4 leading-normal whitespace-pre-line">
                   {datos.parrafoPersonalizado ? (
-                    <span dangerouslySetInnerHTML={{ __html: sanitizarHtmlBold(datos.parrafoPersonalizado) }} />
+                    <span dangerouslySetInnerHTML={{ __html: aplicarDenominacionParrafo(sanitizarHtmlBold(datos.parrafoPersonalizado), denominacionTexto) }} />
                   ) : (
                     <>
                       {soloUnidadPlaca ? (
@@ -330,7 +373,7 @@ export default function CertificadoTemplate({ datos, id }: Props) {
                   )}
                 </p>
 
-                <table className="w-full border-collapse border border-black text-[11px] mb-6 text-center">
+                <table className="w-full border-collapse border border-black text-[11px] mb-4 text-center">
                   <thead className="font-bold">
                     <tr>
                       {datos.columnas.item && <th className="border border-black p-1 w-10">Ítem</th>}
@@ -360,28 +403,28 @@ export default function CertificadoTemplate({ datos, id }: Props) {
                     ) : (
                       itemsPagina.map((it, i) => (
                         <tr key={i}>
-                          {datos.columnas.item && <td className="border border-black p-1 py-2">{it.item}</td>}
-                          <td className="border border-black p-1 py-2">{it.serie}</td>
-                          {datos.columnas.nInterno && <td className="border border-black p-1 py-2">{it.nInterno}</td>}
-                          {marcaVisible && <td className="border border-black p-1 py-2">{it.marca}</td>}
-                          <td className="border border-black p-1 py-2">{it.tipo}</td>
-                          <td className="border border-black p-1 py-2">{it.capacidad}</td>
-                          {datos.columnas.rating && <td className="border border-black p-1 py-2">{it.rating || "—"}</td>}
-                          {!esPH && <td className="border border-black p-1 py-2">{it.estanqueidad}</td>}
-                          {!esPH && <td className="border border-black p-1 py-2">{it.vencimientoRecarga}</td>}
-                          <td className="border border-black p-1 py-2">{it.anioFabricacion}</td>
-                          {esPH && <td className="border border-black p-1 py-2">{it.realizadoPH}</td>}
-                          <td className="border border-black p-1 py-2">{it.vencimientoPH}</td>
-                          {esPH && <td className="border border-black p-1 py-2">{it.presionPSI || "—"}</td>}
-                          {datos.columnas.tipoServicio && <td className="border border-black p-1 py-2">{it.tipoServicio}</td>}
-                          <td className="border border-black p-1 py-2">{it.condicion}</td>
+                          {datos.columnas.item && <td className="border border-black p-1 py-1">{it.item}</td>}
+                          <td className="border border-black p-1 py-1">{it.serie}</td>
+                          {datos.columnas.nInterno && <td className="border border-black p-1 py-1">{it.nInterno}</td>}
+                          {marcaVisible && <td className="border border-black p-1 py-1">{it.marca}</td>}
+                          <td className="border border-black p-1 py-1">{it.tipo}</td>
+                          <td className="border border-black p-1 py-1">{it.capacidad}</td>
+                          {datos.columnas.rating && <td className="border border-black p-1 py-1">{it.rating || "—"}</td>}
+                          {!esPH && <td className="border border-black p-1 py-1">{estanqueidadItem(it)}</td>}
+                          {!esPH && <td className="border border-black p-1 py-1">{it.vencimientoRecarga}</td>}
+                          <td className="border border-black p-1 py-1">{soloAnio(it.anioFabricacion)}</td>
+                          {esPH && <td className="border border-black p-1 py-1">{it.realizadoPH}</td>}
+                          <td className="border border-black p-1 py-1">{soloAnio(it.vencimientoPH)}</td>
+                          {esPH && <td className="border border-black p-1 py-1">{it.presionPSI || "—"}</td>}
+                          {datos.columnas.tipoServicio && <td className="border border-black p-1 py-1">{it.tipoServicio}</td>}
+                          <td className="border border-black p-1 py-1">{it.condicion}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
 
-                <p className="text-justify mb-5 leading-[1.6]">
+                <p className="text-justify mb-4 leading-normal">
                   <span className="font-bold">{esSingular ? "EL EXTINTOR ES ENTREGADO EN CALIDAD DE APROBADO" : "LOS EXTINTORES SON ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
                   o falla posterior por la mala manipulación, el mal uso (golpes, abolladuras, exposición al calor,
                   soldaduras y/o modificaciones, intemperie, oxido, corrosión, etc.) o uso distinto para el que está
@@ -389,23 +432,24 @@ export default function CertificadoTemplate({ datos, id }: Props) {
                   servicio.
                 </p>
 
-                <p className="text-justify mb-8 leading-[1.6]">
+                <p className="text-justify mb-4 leading-normal">
                   De acuerdo a la <span className="font-bold">NORMA TECNICA PERUANA 350.043</span> el Propietario debe
                   inspeccionar su extintor una vez al mes por si exista la posibilidad de que lo hayan utilizado.
                 </p>
 
-                <p className="mb-8">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
+                <p className="mb-1">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>
 
-                <div className="flex justify-center w-full mt-6">
+                <div className="flex justify-center w-full">
                   <div className="relative w-80 flex flex-col items-center">
-                    <img src="/images/firma.jpg" alt="Firma" className="w-72 h-44 object-contain -mb-3" />
+                    <img src="/images/firma.jpg" alt="Firma" className="w-72 h-44 object-contain" />
                   </div>
                 </div>
               </section>
             </main>
           </div>
         </div>
-      ))}
+        );
+      })}
     </>
   );
 }
