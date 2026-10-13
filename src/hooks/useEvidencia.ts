@@ -15,9 +15,6 @@ export function useEvidencia(socket: Socket | null) {
     setExtInfo(`${ext.nSerie || "S-N"}_${ext.marca || ""}`);
     setIsOpen(true);
 
-    // Cuando ya tenemos las fotos del Servicio específico (precargadas desde
-    // el snapshot extintorEstados), las usamos directamente y evitamos
-    // traer la evidencia global (más reciente) del extintor por socket.
     if (fotosPrecargadas) {
       setLoading(false);
       setList(fotosPrecargadas);

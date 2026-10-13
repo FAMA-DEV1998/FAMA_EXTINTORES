@@ -5,4 +5,4 @@ export const MESES = [
     { value: "7", label: "Julio" }, { value: "8", label: "Agosto" },
     { value: "9", label: "Septiembre" }, { value: "10", label: "Octubre" },
     { value: "11", label: "Noviembre" }, { value: "12", label: "Diciembre" },
-];
+];

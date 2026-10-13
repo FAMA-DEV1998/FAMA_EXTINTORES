@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type WheelEvent, type MouseEvent } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -70,8 +71,9 @@ export default function ScrollableRow({ children, className = "", botonesSiempre
           onClick={() => desplazar(-1)}
           disabled={!puedeIzq}
           className={`${botonBase} ${puedeIzq ? "opacity-100" : "opacity-30 pointer-events-none"}`}
+          aria-label="Desplazar a la izquierda"
         >
-          ‹
+          <ChevronLeft className="w-4 h-4" />
         </button>
       )}
       <div
@@ -93,8 +95,9 @@ export default function ScrollableRow({ children, className = "", botonesSiempre
           onClick={() => desplazar(1)}
           disabled={!puedeDer}
           className={`${botonBase} ${puedeDer ? "opacity-100" : "opacity-30 pointer-events-none"}`}
+          aria-label="Desplazar a la derecha"
         >
-          ›
+          <ChevronRight className="w-4 h-4" />
         </button>
       )}
     </div>
