@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { io, Socket } from "socket.io-client";
 import toast from "react-hot-toast";
-import { BACKEND_URL } from "../config/backend";
+import { BACKEND_URL, cargarBackendUrl } from "../config/backend";
 import { tokenSesion } from "../config/sesion";
 
 export type Catalogs = {
@@ -17,14 +17,23 @@ export type Catalogs = {
 
 export function useSocket(userId: string, onLogout: () => void, modoSinSenal = false) {
     const [socket, setSocket] = useState<Socket | null>(null);
+    const [url, setUrl] = useState(BACKEND_URL);
     const [connected, setConnected] = useState(false);
     const [catalogs, setCatalogs] = useState<Catalogs>({ marcas: [], agentes: [], recargas: [], motivosBaja: [], serviciosExtra: [], categoriasInventario: [], capacidades: [], etiquetasCertificado: [] });
 
     useEffect(() => {
-        const s = io(BACKEND_URL, { auth: (cb) => cb({ token: tokenSesion() }) });
+        const s = io(url, { auth: (cb) => cb({ token: tokenSesion() }) });
         setSocket(s);
 
         let seDesconecto = false;
+
+        // Si el servidor se reinició, su túnel tiene otra dirección: se consulta y se reconecta solo
+        let ultimaConsulta = 0;
+        s.on("connect_error", () => {
+            if (Date.now() - ultimaConsulta < 20000) return;
+            ultimaConsulta = Date.now();
+            cargarBackendUrl().then((cambio) => { if (cambio) setUrl(BACKEND_URL); });
+        });
 
         s.on("connect", () => {
             setConnected(true);
@@ -69,7 +78,7 @@ export function useSocket(userId: string, onLogout: () => void, modoSinSenal = f
             toast.dismiss("estado-conexion");
             s.disconnect();
         };
-    }, [userId, onLogout, modoSinSenal]);
+    }, [userId, onLogout, modoSinSenal, url]);
 
     return { socket, connected, catalogs };
 }

@@ -9,6 +9,11 @@ import { marcaCertificado, formatCapacidad, tipoServicioItem, parseFecha, addMon
 import { metaPorDefecto, normalizarHojasGuardadas, serializarHojas } from "../utils/hojas";
 import { MESES } from "../../../constants";
 import { formatVencimPH, formatRealizadoPH } from "../../../utils/pruebaHidrostatica";
+import toast from "react-hot-toast";
+import { consultarCertificadoWeb, publicarCertificadoWeb } from "../utils/web";
+
+/** id del contenedor oculto que usa CertificadoEditorModal para imprimir / generar el PDF */
+export const CONTENEDOR_IMPRESION = "certificado-print-container";
 
 interface CacheTab {
   numero: string;
@@ -27,6 +32,9 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
   const [guardandoCertificado, setGuardandoCertificado] = useState(false);
   const [ultimoGuardadoSerializado, setUltimoGuardadoSerializado] = useState<string | null>(null);
   const [modoEdicion, setModoEdicion] = useState(false);
+  // Publicación en la web pública (descarga por código)
+  const [codigoWeb, setCodigoWeb] = useState<string | null>(null);
+  const [publicandoWeb, setPublicandoWeb] = useState(false);
 
   const empresaId: string | undefined = empresa?.id;
   const sedeId: string | null = servicio?.sedeId ?? activeSede?.id ?? null;
@@ -198,6 +206,7 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
     setCertificadoGuardadoId(null);
     setUltimoGuardadoSerializado(null);
     setModoEdicion(false);
+    setCodigoWeb(null);
     cargarPlantillas();
     setModal(true);
     if (socket && servicio?.id) {
@@ -256,6 +265,8 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
     setUltimoGuardadoSerializado(serializarHojas(hojasGuardadas));
     setModoEdicion(true);
     setModal(true);
+    setCodigoWeb(null);
+    if (socket) consultarCertificadoWeb(socket, certificadoGuardado.id).then((c) => setCodigoWeb(c?.codigo ?? null)).catch(() => {});
     return true;
   };
 
@@ -334,9 +345,35 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
         setCertificadoGuardadoId(res.certificado?.id || null);
         setUltimoGuardadoSerializado(serializadoActual);
         setModoEdicion(true);
+        // Cada vez que se guarda, la copia descargable en la web se actualiza
+        if (res.certificado?.id) publicarEnWeb(res.certificado.id);
       }
       onDone?.(!!res?.success);
     });
+  };
+
+  /** Genera el PDF (con el código impreso) y lo publica para descarga en extintoresfama.com/certificados. */
+  const publicarEnWeb = async (id: string | null = certificadoGuardadoId) => {
+    if (!socket || !id || publicandoWeb) return;
+    setPublicandoWeb(true);
+    const aviso = toast.loading("Publicando certificado en la web…");
+    const codigoAnterior = codigoWeb;
+    try {
+      const codigo = await publicarCertificadoWeb({
+        socket,
+        certificadoId: id,
+        hojas: hojas.map((h) => h.datos),
+        containerId: CONTENEDOR_IMPRESION,
+        aplicarCodigo: setCodigoWeb,
+      });
+      setCodigoWeb(codigo);
+      toast.success(`Disponible en la web con el código ${codigo}`, { id: aviso, duration: 6000 });
+    } catch (err) {
+      setCodigoWeb(codigoAnterior);
+      toast.error(`No se pudo publicar en la web: ${err instanceof Error ? err.message : "error"}`, { id: aviso });
+    } finally {
+      setPublicandoWeb(false);
+    }
   };
 
   const actualizar = (cambios: Partial<CertificadoDatos>) =>
@@ -430,5 +467,6 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
     plantillaActivaId: hojaActiva.meta.plantillaId, plantillaActivaNombre: hojaActiva.meta.plantillaNombre, actualizarPlantilla,
     certificadoGuardadoId, guardandoCertificado, hayCambiosPendientes, guardarCertificado, modoEdicion,
     crearEtiquetaCertificado,
+    web: { codigo: codigoWeb, publicando: publicandoWeb, publicar: () => publicarEnWeb() },
   };
 }

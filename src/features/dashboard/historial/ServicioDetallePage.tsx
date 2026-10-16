@@ -263,6 +263,7 @@ export default function ServicioDetallePage() {
         guardandoCertificado={certificado.guardandoCertificado}
         hayCambiosPendientes={certificado.hayCambiosPendientes}
         onGuardarCertificado={certificado.guardarCertificado}
+        web={certificado.web}
         modoEdicion={certificado.modoEdicion}
         etiquetasDisponibles={catalogLists.ETIQUETAS_CERTIFICADO}
         onCrearEtiqueta={certificado.crearEtiquetaCertificado}

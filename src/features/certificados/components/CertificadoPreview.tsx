@@ -15,9 +15,10 @@ interface Props {
   onAgregarHoja?: () => void;
   onDuplicarHoja?: () => void;
   onEliminarHoja?: () => void;
+  codigoWeb?: string | null;
 }
 
-export default function CertificadoPreview({ hojas, activeIndex, onActiveIndexChange, etiquetaHoja, onAgregarHoja, onDuplicarHoja, onEliminarHoja }: Props) {
+export default function CertificadoPreview({ hojas, activeIndex, onActiveIndexChange, etiquetaHoja, onAgregarHoja, onDuplicarHoja, onEliminarHoja, codigoWeb }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
   const idx = Math.min(activeIndex, Math.max(0, hojas.length - 1));
@@ -80,7 +81,7 @@ export default function CertificadoPreview({ hojas, activeIndex, onActiveIndexCh
         {hojas[idx] && (
           <div style={{ width: A4_WIDTH_PX * scale, height: A4_HEIGHT_PX * scale }}>
             <div style={{ width: "210mm", transform: `scale(${scale})`, transformOrigin: "top left" }}>
-              <CertificadoTemplate datos={hojas[idx]} />
+              <CertificadoTemplate datos={hojas[idx]} codigoWeb={codigoWeb} />
             </div>
           </div>
         )}

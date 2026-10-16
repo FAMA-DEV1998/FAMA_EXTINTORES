@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Socket } from "socket.io-client";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
-import { Download, FileText, LoaderCircle, Printer, X } from "lucide-react";
+import { Copy, Download, FileText, Globe, LoaderCircle, Printer, X } from "lucide-react";
+import { consultarCertificadoWeb, enlaceWeb, publicarCertificadoWeb } from "../utils/web";
 import { useTeclaEscape } from "../../../hooks/useTeclaEscape";
 import CertificadoTemplate from "./CertificadoTemplate";
 import CertificadoPreview from "./CertificadoPreview";
@@ -14,13 +16,44 @@ interface Props {
   onClose: () => void;
   hojasGuardadas: HojaGuardada[];
   nombreArchivo: string;
+  socket?: Socket | null;
+  certificadoId?: string | null;
 }
 
-export default function CertificadoGuardadoModal({ isOpen, onClose, hojasGuardadas, nombreArchivo }: Props) {
+export default function CertificadoGuardadoModal({ isOpen, onClose, hojasGuardadas, nombreArchivo, socket, certificadoId }: Props) {
   const [descargando, setDescargando] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [codigoWeb, setCodigoWeb] = useState<string | null>(null);
+  const [publicando, setPublicando] = useState(false);
   useTeclaEscape(isOpen, onClose);
+
+  useEffect(() => {
+    setCodigoWeb(null);
+    if (!isOpen || !socket || !certificadoId) return;
+    consultarCertificadoWeb(socket, certificadoId).then((c) => setCodigoWeb(c?.codigo ?? null)).catch(() => {});
+  }, [isOpen, socket, certificadoId]);
+
   if (!isOpen || hojasGuardadas.length === 0) return null;
+
+  const handlePublicar = async () => {
+    if (!socket || !certificadoId) return;
+    setPublicando(true);
+    const aviso = toast.loading("Publicando certificado en la web…");
+    const codigoAnterior = codigoWeb;
+    try {
+      const codigo = await publicarCertificadoWeb({
+        socket, certificadoId, hojas: hojasGuardadas.map((h) => h.datos),
+        containerId: "certificado-historico-print-container", aplicarCodigo: setCodigoWeb,
+      });
+      setCodigoWeb(codigo);
+      toast.success(`Disponible en la web con el código ${codigo}`, { id: aviso, duration: 6000 });
+    } catch (err) {
+      setCodigoWeb(codigoAnterior);
+      toast.error(`No se pudo publicar: ${err instanceof Error ? err.message : "error"}`, { id: aviso });
+    } finally {
+      setPublicando(false);
+    }
+  };
 
   const hojas = hojasGuardadas.map((h) => h.datos);
   const etiquetaHoja = (hoja: typeof hojas[number], i: number) => construirEtiquetaHoja(hoja, hojasGuardadas[i].meta);
@@ -48,8 +81,26 @@ export default function CertificadoGuardadoModal({ isOpen, onClose, hojasGuardad
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors" aria-label="Cerrar"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 min-h-0">
-          <CertificadoPreview hojas={hojas} activeIndex={activeIndex} onActiveIndexChange={setActiveIndex} etiquetaHoja={etiquetaHoja} />
+          <CertificadoPreview hojas={hojas} activeIndex={activeIndex} onActiveIndexChange={setActiveIndex} etiquetaHoja={etiquetaHoja} codigoWeb={codigoWeb} />
         </div>
+        {socket && certificadoId && (
+          <div className="px-6 pt-3 flex items-center gap-2 text-xs shrink-0">
+            <Globe className={`w-4 h-4 ${codigoWeb ? "text-emerald-400" : "text-zinc-500"}`} />
+            {codigoWeb ? (
+              <>
+                <span className="text-zinc-400">Código web:</span>
+                <span className="font-black text-emerald-400 tracking-wide">{codigoWeb}</span>
+                <button onClick={() => { navigator.clipboard?.writeText(enlaceWeb(codigoWeb)); toast.success("Enlace de descarga copiado"); }} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold"><Copy className="w-3.5 h-3.5" />Enlace</button>
+                <button onClick={handlePublicar} disabled={publicando} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold disabled:opacity-40">{publicando ? "Publicando…" : "Actualizar"}</button>
+              </>
+            ) : (
+              <>
+                <span className="text-zinc-500">No publicado en la web</span>
+                <button onClick={handlePublicar} disabled={publicando} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-300 font-bold disabled:opacity-40">{publicando ? "Publicando…" : "Publicar en la web"}</button>
+              </>
+            )}
+          </div>
+        )}
         <div className="px-6 py-4 border-t border-zinc-800 flex gap-2 shrink-0">
           <button onClick={handleImprimir} className="flex-1 px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-bold text-zinc-200 transition-all flex items-center justify-center gap-2">
             <Printer className="w-4 h-4" />Imprimir
@@ -64,7 +115,7 @@ export default function CertificadoGuardadoModal({ isOpen, onClose, hojasGuardad
       {createPortal(
         <div id="certificado-historico-print-container" className="fixed -left-750 top-0">
           {hojas.map((hoja, i) => (
-            <CertificadoTemplate key={i} datos={hoja} />
+            <CertificadoTemplate key={i} datos={hoja} codigoWeb={codigoWeb} />
           ))}
         </div>,
         document.body

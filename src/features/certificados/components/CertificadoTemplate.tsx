@@ -6,6 +6,8 @@ import { MESES } from "../../../constants";
 interface Props {
   datos: CertificadoDatos;
   id?: string;
+  /** Código de descarga en la web (p. ej. IMS-CEN-2610-02-K7QX9M). Se imprime al pie de cada hoja. */
+  codigoWeb?: string | null;
 }
 
 const FILAS_POR_PAGINA = 14;
@@ -29,7 +31,7 @@ const LETRAS_LATERALES: { letra: string; color: string }[] = ["HONRADEZ", "GARAN
   ...palabra.split("").map((letra) => ({ letra, color: idx === 1 ? "text-red-600" : "text-blue-600" })),
 ]);
 
-export default function CertificadoTemplate({ datos, id }: Props) {
+export default function CertificadoTemplate({ datos, id, codigoWeb }: Props) {
   const esPH = datos.tipoCertificado === "ph";
   const esPlaca = datos.tipoIdentificacion === "placa";
   const soloUnidadPlaca = esPlaca && !datos.dniAdicional && !datos.nombre.trim();
@@ -205,6 +207,12 @@ export default function CertificadoTemplate({ datos, id }: Props) {
                 </div>
               </section>
             </main>
+            {codigoWeb && (
+              <p className="absolute bottom-4 left-10 right-10 text-center text-[10.5px] leading-tight text-gray-700">
+                Código de verificación: <span className="font-bold text-black tracking-wide">{codigoWeb}</span>
+                {" "}· Consulte y descargue este certificado en <span className="font-bold text-blue-700">www.extintoresfama.com/certificados</span>
+              </p>
+            )}
           </div>
         </div>
         );

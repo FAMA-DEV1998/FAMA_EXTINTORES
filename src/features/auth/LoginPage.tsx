@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { io } from "socket.io-client";
-import { BACKEND_URL } from "../../config/backend";
+import { BACKEND_URL, cargarBackendUrl } from "../../config/backend";
 import { guardarSesion } from "../../config/sesion";
 import type { Usuario } from "../../types";
 
@@ -10,11 +10,12 @@ export default function LoginPage({ onLogin }: { onLogin: (user: Usuario) => voi
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!username || !password) return;
     setLoading(true);
     setError("");
 
+    await cargarBackendUrl(); // dirección actual del servidor
     const s = io(BACKEND_URL);
     s.on("connect", () => {
       s.emit("auth:login", { username, password }, (res: any) => {

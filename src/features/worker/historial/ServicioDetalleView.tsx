@@ -304,6 +304,7 @@ export default function ServicioDetalleView({
                 guardandoCertificado={certificado.guardandoCertificado}
                 hayCambiosPendientes={certificado.hayCambiosPendientes}
                 onGuardarCertificado={certificado.guardarCertificado}
+                web={certificado.web}
                 modoEdicion={certificado.modoEdicion}
                 etiquetasDisponibles={etiquetasDisponibles}
                 onCrearEtiqueta={certificado.crearEtiquetaCertificado}

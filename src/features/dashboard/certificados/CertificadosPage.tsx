@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { CalendarDays, ChevronDown, Eye, FileText, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronDown, Eye, FileText, Globe, Pencil, Trash2 } from "lucide-react";
 import { confirmar } from "../../../components/ui/Notificaciones";
 import { useEmpresaScope } from "../empresas/EmpresaScopeContext";
 import { useCertificadosGuardados } from "../../certificados/hooks/useCertificadosGuardados";
@@ -30,6 +30,20 @@ export default function CertificadosPage() {
   const [editandoServicio, setEditandoServicio] = useState<any | null>(null);
   const [certificadoParaCargar, setCertificadoParaCargar] = useState<any | null>(null);
   const [mesAbierto, setMesAbierto] = useState<string | null>(null);
+  // Código con el que cada certificado se descarga en extintoresfama.com/certificados
+  const [codigosWeb, setCodigosWeb] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!socket || !selectedEmpresa?.id) return;
+    const cargar = () => socket.emit("web:certificados:list", { empresaId: selectedEmpresa.id }, (res: any) => {
+      if (!res?.success) return;
+      const m: Record<string, string> = {};
+      for (const c of res.certificados || []) if (c.certificadoId && c.activo) m[c.certificadoId] = c.codigo;
+      setCodigosWeb(m);
+    });
+    cargar();
+    socket.on("web:certificados:changed", cargar);
+    return () => { socket.off("web:certificados:changed", cargar); };
+  }, [socket, selectedEmpresa?.id]);
 
   const extintoresDelServicio = useMemo(() => {
     if (!editandoServicio) return [];
@@ -158,6 +172,7 @@ export default function CertificadosPage() {
                           <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Nombre</th>
                           <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Tipo</th>
                           <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Generado</th>
+                          <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-zinc-500">Código web</th>
                           <th className="px-4 py-2.5"></th>
                         </tr>
                       </thead>
@@ -167,6 +182,7 @@ export default function CertificadosPage() {
                             <td className="px-4 py-3 text-xs text-zinc-300">{c.nombre || "—"}</td>
                             <td className="px-4 py-3 text-xs text-zinc-400">{c.tipoCertificado === "ph" ? "Prueba Hidrostática" : "Garantía y Operatividad"}</td>
                             <td className="px-4 py-3 text-xs text-zinc-500 whitespace-nowrap">{c.createdAt ? new Date(c.createdAt).toLocaleDateString("es-PE") : "—"}</td>
+                            <td className="px-4 py-3 text-xs whitespace-nowrap">{codigosWeb[c.id] ? <span className="inline-flex items-center gap-1 font-bold text-emerald-400"><Globe className="w-3.5 h-3.5" />{codigosWeb[c.id]}</span> : <span className="text-zinc-600">—</span>}</td>
                             <td className="px-4 py-3 text-right whitespace-nowrap">
                               <button onClick={() => abrirVista(c)} className="text-xs font-bold text-sky-400 hover:text-sky-300 px-3 py-1.5 rounded-lg bg-sky-950/30 hover:bg-sky-900/40 border border-sky-900/40 mr-1.5 inline-flex items-center gap-1"><Eye className="w-3.5 h-3.5" />Ver</button>
                               <button onClick={() => handleEditar(c)} className="text-xs font-bold text-amber-400 hover:text-amber-300 px-3 py-1.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/40 border border-amber-900/40 mr-1.5 inline-flex items-center gap-1"><Pencil className="w-3.5 h-3.5" />Editar</button>
@@ -189,6 +205,8 @@ export default function CertificadosPage() {
         onClose={() => setViendo(null)}
         hojasGuardadas={viendo?.hojasGuardadas || []}
         nombreArchivo={`Certificado_${selectedEmpresa?.slug || "fama"}_${viendo?.mesEtiqueta || "historico"}.pdf`}
+        socket={socket}
+        certificadoId={viendo?.id}
       />
 
       <CertificadoEditorModal
@@ -228,6 +246,7 @@ export default function CertificadosPage() {
         guardandoCertificado={certificado.guardandoCertificado}
         hayCambiosPendientes={certificado.hayCambiosPendientes}
         onGuardarCertificado={certificado.guardarCertificado}
+        web={certificado.web}
         modoEdicion={certificado.modoEdicion}
         etiquetasDisponibles={catalogLists.ETIQUETAS_CERTIFICADO}
         onCrearEtiqueta={certificado.crearEtiquetaCertificado}

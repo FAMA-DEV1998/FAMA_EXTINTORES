@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, CircleCheck, Eye, FilePen, FilePlus2, LoaderCircle, Pencil, Pin, Printer, RotateCcw, Save, Settings2, TriangleAlert, X } from "lucide-react";
+import { Check, CircleCheck, Copy, Eye, FilePen, FilePlus2, Globe, LoaderCircle, Pencil, Pin, Printer, RotateCcw, Save, Settings2, TriangleAlert, X } from "lucide-react";
+import toast from "react-hot-toast";
+import { enlaceWeb } from "../utils/web";
+import { CONTENEDOR_IMPRESION } from "../hooks/useCertificadoEditor";
 import CertificadoTemplate from "./CertificadoTemplate";
 import { construirParrafoAutomatico, sanitizarHtmlBold } from "../utils/parrafo";
 import CertificadoPreview from "./CertificadoPreview";
@@ -54,6 +57,8 @@ interface Props {
   onUsarModoEstandar?: () => void;
   etiquetasDisponibles: string[];
   onCrearEtiqueta?: (valor: string, onDone?: (ok: boolean) => void) => void;
+  /** Publicación en extintoresfama.com/certificados (descarga por código) */
+  web?: { codigo: string | null; publicando: boolean; publicar: () => void };
 }
 
 const formatPlaca = (raw: string) => {
@@ -185,7 +190,7 @@ export default function CertificadoEditorModal({
   hojas, hojasMeta, hojaActivaIdx, onSetHojaActivaIdx, onAgregarHoja, onDuplicarHoja, onEliminarHoja,
   plantillaActivaId, plantillaActivaNombre, onActualizarPlantilla,
   certificadoGuardadoId, guardandoCertificado, hayCambiosPendientes, onGuardarCertificado, modoEdicion, onUsarModoEstandar,
-  etiquetasDisponibles, onCrearEtiqueta,
+  etiquetasDisponibles, onCrearEtiqueta, web,
 }: Props) {
   const [vistaMovil, setVistaMovil] = useState<"datos" | "preview">("datos");
   const [editandoParrafo, setEditandoParrafo] = useState(false);
@@ -678,6 +683,32 @@ export default function CertificadoEditorModal({
               )}
             </div>
 
+            {web && certificadoGuardadoId && (
+              <div className="shrink-0 flex items-center gap-2 px-4 pt-3 text-xs">
+                <Globe className={`w-4 h-4 shrink-0 ${web.codigo ? "text-emerald-400" : "text-zinc-500"}`} />
+                {web.publicando ? (
+                  <span className="text-sky-400 font-bold flex items-center gap-1.5"><LoaderCircle className="w-3.5 h-3.5 animate-spin" />Publicando en la web…</span>
+                ) : web.codigo ? (
+                  <>
+                    <span className="text-zinc-400">Código web:</span>
+                    <span className="font-black text-emerald-400 tracking-wide">{web.codigo}</span>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard?.writeText(enlaceWeb(web.codigo!)); toast.success("Enlace de descarga copiado"); }}
+                      className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold"
+                      title="Copiar enlace para enviar al cliente"
+                    ><Copy className="w-3.5 h-3.5" />Enlace</button>
+                    <button type="button" onClick={web.publicar} disabled={hayCambiosPendientes} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold disabled:opacity-40" title="Volver a subir el PDF a la web">Actualizar</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-zinc-500">Aún no está publicado en la web</span>
+                    <button type="button" onClick={web.publicar} disabled={hayCambiosPendientes} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-300 font-bold disabled:opacity-40">Publicar</button>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="shrink-0 flex gap-2 p-4 border-t border-zinc-800/60">
               <button onClick={handleClickGuardar} disabled={guardandoCertificado} className="flex-1 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-sm font-bold text-white disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                 {guardandoCertificado ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -698,15 +729,16 @@ export default function CertificadoEditorModal({
               onAgregarHoja={onAgregarHoja}
               onDuplicarHoja={onDuplicarHoja}
               onEliminarHoja={onEliminarHoja ? () => onEliminarHoja(hojaActivaIdx) : undefined}
+              codigoWeb={web?.codigo}
             />
           </div>
         </div>
       </div>
 
       {createPortal(
-        <div id="certificado-print-container" className="fixed -left-750 top-0">
+        <div id={CONTENEDOR_IMPRESION} className="fixed -left-750 top-0">
           {hojas.map((hoja, i) => (
-            <CertificadoTemplate key={i} datos={hoja} id={`certificado-print-hoja-${i}`} />
+            <CertificadoTemplate key={i} datos={hoja} id={`certificado-print-hoja-${i}`} codigoWeb={web?.codigo} />
           ))}
         </div>,
         document.body
