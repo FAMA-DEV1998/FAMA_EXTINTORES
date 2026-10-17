@@ -1,15 +1,19 @@
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { FolderClock, History } from "lucide-react";
+import { Combine, FolderClock, History } from "lucide-react";
 import { MESES } from "../../../constants";
 import { useEmpresaScope } from "../empresas/EmpresaScopeContext";
 import { useServicios } from "../../../hooks/useServicios";
 import { anioFromFecha, mesFromFecha } from "../../../utils/fechas";
+import FusionServiciosModal from "./FusionServiciosModal";
 
 const ANIO_DEFAULT = new Date().getFullYear();
 
 export default function HistorialPage() {
   const scope = useEmpresaScope() as any;
-  const { selectedEmpresa, activeSede, socket, sedes } = scope;
+  const { selectedEmpresa, activeSede, socket, sedes, role } = scope;
+  const [fusionModal, setFusionModal] = useState(false);
+  const puedeUnificar = role === "admin" || role === "boss";
 
   const { servicios } = useServicios(socket, selectedEmpresa?.id, activeSede?.id ?? null);
 
@@ -46,6 +50,14 @@ export default function HistorialPage() {
           {esHistorialPreviAsedes ? "Historial previo a sedes" : "Historial de Servicios"}
         </h3>
         <div className="flex items-center gap-3">
+          {puedeUnificar && servicios.length > 1 && (
+            <button
+              onClick={() => setFusionModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-sm font-bold text-zinc-200 transition-all active:scale-95"
+            >
+              <Combine className="w-4 h-4" />Unificar servicios
+            </button>
+          )}
           <span className="text-xs font-bold text-zinc-500">{serviciosDelAnio.length} registro{serviciosDelAnio.length === 1 ? "" : "s"} en {anio}</span>
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Año</span>
@@ -89,6 +101,9 @@ export default function HistorialPage() {
           );
         })}
       </div>
+      {puedeUnificar && (
+        <FusionServiciosModal isOpen={fusionModal} onClose={() => setFusionModal(false)} socket={socket} empresaId={selectedEmpresa?.id} sedeId={activeSede?.id ?? null} servicios={servicios} />
+      )}
     </div>
   );
 }
