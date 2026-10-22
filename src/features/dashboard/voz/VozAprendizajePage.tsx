@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { ArrowRight, LoaderCircle, Lock, Mic, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Cpu, LoaderCircle, Lock, Mic, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ESTADOS, MESES, PESOS_GAL, PESOS_KG, PESOS_LB, PESOS_LT } from "../../../constants";
+import type { EstadoServicioVoz } from "../../worker/voz/seccionesVoz";
 import { confirmar } from "../../../components/ui/Notificaciones";
 import { useVozAprendizaje } from "./useVozAprendizaje";
 
@@ -12,9 +14,43 @@ const TIPO_LABEL: Record<string, string> = {
     servicioExtra: "Adicional",
     peso: "Peso",
     recarga: "Recarga",
+    motivoBaja: "Motivo de baja",
 };
 
-export default function VozAprendizajePage({ socket, catalogs, role }: { socket: Socket | null; catalogs: { marcas: { value: string }[]; agentes: { value: string }[] }; role: string }) {
+type Lista = { value: string }[];
+
+const PESOS_TODOS = [
+    ...PESOS_KG.map((p) => `${p} KG`), ...PESOS_LB.map((p) => `${p} LB`), ...PESOS_LT.map((p) => `${p} LT`), ...PESOS_GAL.map((p) => `${p} GAL`),
+];
+
+function EstadoServicio({ socket }: { socket: Socket | null }) {
+    const [estado, setEstado] = useState<EstadoServicioVoz | null>(null);
+    const consultar = () => {
+        setEstado(null);
+        socket?.timeout(5000).emit("voz:estado", {}, (err: unknown, r: EstadoServicioVoz) => {
+            setEstado(err || !r ? { disponible: false, listo: false, cargando: false, error: "El backend no respondió" } : r);
+        });
+    };
+    useEffect(consultar, [socket]);
+    const color = !estado ? "bg-zinc-600" : !estado.disponible ? "bg-red-500" : estado.listo ? "bg-emerald-500" : "bg-amber-400";
+    const texto = !estado ? "Consultando…"
+        : !estado.disponible ? "Apagado: el dictado no funcionará hasta que se encienda (se enciende solo con el backend)."
+            : estado.listo ? `Encendido · modelo «${estado.modelo}» en ${estado.dispositivo === "cuda" ? "tarjeta de video NVIDIA" : "procesador"}`
+                : estado.cargando ? "Encendido · cargando el modelo de voz (mientras tanto se usa el reconocimiento del teléfono)"
+                    : `Encendido, pero el modelo no cargó: ${estado.error ?? "error desconocido"}`;
+    return (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center gap-3">
+            <Cpu className="w-5 h-5 text-zinc-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white flex items-center gap-2"><span className={`w-2.5 h-2.5 rounded-full ${color}`} />Servicio de reconocimiento</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{texto}</p>
+            </div>
+            <button onClick={consultar} className="w-9 h-9 shrink-0 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center" aria-label="Actualizar estado"><RefreshCw className="w-4 h-4" /></button>
+        </div>
+    );
+}
+
+export default function VozAprendizajePage({ socket, catalogs, role }: { socket: Socket | null; catalogs: { marcas: Lista; agentes: Lista; recargas: Lista; motivosBaja: Lista; serviciosExtra: Lista }; role: string }) {
     const { lista, loading, saving, actualizarValor, eliminar, crear } = useVozAprendizaje(socket, role);
     const [filtroTipo, setFiltroTipo] = useState<string>("todos");
     const [editandoId, setEditandoId] = useState<number | null>(null);
@@ -35,8 +71,19 @@ export default function VozAprendizajePage({ socket, catalogs, role }: { socket:
     const filas = lista.filter((f) => filtroTipo === "todos" || f.tipo === filtroTipo);
     const tipos = Array.from(new Set(lista.map((f) => f.tipo)));
 
-    const opcionesPara = (tipo: string) =>
-        tipo === "marca" ? catalogs.marcas.map((m) => m.value) : tipo === "agenteExtintor" ? catalogs.agentes.map((a) => a.value) : [];
+    const opcionesPara = (tipo: string): string[] => {
+        switch (tipo) {
+            case "marca": return catalogs.marcas.map((m) => m.value);
+            case "agenteExtintor": return catalogs.agentes.map((a) => a.value);
+            case "estadoExtintor": return ESTADOS;
+            case "mes": return MESES.map((m) => m.label);
+            case "servicioExtra": return catalogs.serviciosExtra.map((s) => s.value.toUpperCase());
+            case "motivoBaja": return catalogs.motivosBaja.map((s) => s.value.toUpperCase());
+            case "peso": return PESOS_TODOS;
+            case "recarga": return catalogs.recargas.map((r) => r.value);
+            default: return [];
+        }
+    };
 
     const iniciarEdicion = (id: number, valorActual: string) => {
         setEditandoId(id);
@@ -63,24 +110,23 @@ export default function VozAprendizajePage({ socket, catalogs, role }: { socket:
     return (
         <div className="flex flex-col gap-6 max-w-4xl">
             <div className="flex flex-col gap-1">
-                <h1 className="text-xl font-black text-white flex items-center gap-2.5"><Mic className="w-5 h-5 text-red-500" />Aprendizaje de Dictado por Voz</h1>
+                <h1 className="text-xl font-black text-white flex items-center gap-2.5"><Mic className="w-5 h-5 text-red-500" />Dictado por Voz</h1>
                 <p className="text-sm text-zinc-400">
-                    Aquí puedes revisar y corregir lo que el sistema ha asociado de las transcripciones de voz de los trabajadores.
-                    Cada corrección que hagas aquí refuerza directamente el aprendizaje para todos los dispositivos.
+                    Es la memoria del dictado. Cuando un trabajador dicta y corrige un dato (por ejemplo, el sistema oyó «badier» y él eligió Badger),
+                    esa relación se guarda aquí y desde ese momento se reconoce sola en todos los teléfonos.
+                </p>
+                <p className="text-sm text-zinc-400">
+                    Revísala de vez en cuando: si algo se aprendió mal, corrígelo o elimínalo. También puedes enseñar palabras nuevas antes de que alguien las dicte.
                 </p>
             </div>
 
+            <EstadoServicio socket={socket} />
+
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3">
-                <p className="text-sm font-bold text-white flex items-center gap-2"><Plus className="w-4 h-4 text-red-500" />Agregar asociación manual</p>
+                <p className="text-sm font-bold text-white flex items-center gap-2"><Plus className="w-4 h-4 text-red-500" />Enseñar una palabra</p>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <select value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white">
-                        <option value="marca">Marca</option>
-                        <option value="agenteExtintor">Agente</option>
-                        <option value="estadoExtintor">Estado</option>
-                        <option value="mes">Mes (PH)</option>
-                        <option value="servicioExtra">Adicional</option>
-                        <option value="peso">Peso</option>
-                        <option value="recarga">Recarga</option>
+                        {Object.entries(TIPO_LABEL).map(([valor, etiqueta]) => <option key={valor} value={valor}>{etiqueta}</option>)}
                     </select>
                     <input value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} placeholder="Texto que se escucha (ej: badier)" className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600" />
                     <input value={nuevoValor} onChange={(e) => setNuevoValor(e.target.value)} placeholder="Valor correcto (ej: Badger)" list="voz-valores-nuevo" onKeyDown={(e) => e.key === "Enter" && crearManual()} className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600" />

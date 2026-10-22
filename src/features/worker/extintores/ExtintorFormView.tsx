@@ -10,9 +10,8 @@ import { Card, Field, SiNo, Toggle, inputCls } from "../components/FormularioUI"
 import { CreatableSelect } from "../../../components/ui/CreatableSelect";
 import { MultiSelect } from "../../../components/ui/MultiSelect";
 import DictadoVozModal from "../voz/DictadoVozModal";
+import { SECCION_DE_PASO } from "../voz/seccionesVoz";
 import DuplicadoComparacionModal from "../../../components/extintores/DuplicadoComparacionModal";
-
-const DICTADO_VOZ_HABILITADO = false;
 
 const PASOS = [
     { titulo: "Datos", icono: FireExtinguisher, ayuda: "Copia los datos de la etiqueta del extintor. Si no los ves, déjalos en blanco." },
@@ -37,6 +36,27 @@ const leerPasoGuardado = () => {
     } catch {
         return 0;
     }
+};
+
+const conEstado = (p: ExtintorFormData, nuevoEstado: string): ExtintorFormData => {
+    const next = { ...p, estadoExtintor: nuevoEstado };
+    if (estadoSoloPermiteRecarga(nuevoEstado)) {
+        next.ma = false; next.ph = false;
+    } else if (estadoBloqueaServicio(nuevoEstado)) {
+        next.ma = false; next.ph = false; next.recarga = "";
+    }
+    if (estadoBloqueaServicioExtra(nuevoEstado)) {
+        next.servicioExtra = "";
+    }
+    if (p.estadoExtintor === "De Baja" && nuevoEstado !== "De Baja") {
+        next.motivoBaja = "";
+    }
+    return next;
+};
+
+const conAgente = (p: ExtintorFormData, agente: string, recargas: string[]): ExtintorFormData => {
+    const permitidas = getRecargasPermitidas(agente, recargas);
+    return { ...p, agenteExtintor: agente, recarga: permitidas.includes(p.recarga) ? p.recarga : "" };
 };
 
 interface ExtintorFormViewProps {
@@ -152,15 +172,41 @@ export default function ExtintorFormView({
         clearFormBackup();
     };
 
-    const aplicarDictado = (campos: Partial<ExtintorFormData>) => {
-        setForm((p) => {
-            const next = { ...p, ...campos };
-            if (campos.mesRealizadoPH !== undefined || campos.realizadoPH !== undefined) {
-                next.vencimPH = calcularVencimientoPH(next.mesRealizadoPH, next.realizadoPH);
-            }
-            return next;
-        });
+    const activarPH = async (base: ExtintorFormData) => {
+        const hoy = new Date();
+        const mesActual = String(hoy.getMonth() + 1);
+        const anioActual = String(hoy.getFullYear());
+        if (!(await confirmarCambioPH(base.mesRealizadoPH, base.realizadoPH, mesActual, anioActual))) return;
+        setForm((p) => ({
+            ...p, ph: true, ma: false,
+            mesRealizadoPH: mesActual,
+            realizadoPH: anioActual,
+            vencimPH: calcularVencimientoPH(mesActual, anioActual),
+        }));
     };
+
+    const aplicarDictado = async (campos: Partial<ExtintorFormData>) => {
+        const { estadoExtintor, agenteExtintor, ma, ph, recarga, mesRealizadoPH, realizadoPH, servicioExtra, motivoBaja, ...resto } = campos;
+        let next: ExtintorFormData = { ...form, ...resto };
+        if (estadoExtintor !== undefined) next = conEstado(next, estadoExtintor);
+        if (agenteExtintor !== undefined) next = conAgente(next, agenteExtintor, RECARGAS);
+        const solo = estadoSoloPermiteRecarga(next.estadoExtintor);
+        const sinServicio = estadoBloqueaServicio(next.estadoExtintor) && !solo;
+        if (estadoBloqueaComponentes(next.estadoExtintor)) COMP_KEYS.forEach((k) => { next[k] = form[k]; });
+        if (motivoBaja !== undefined && next.estadoExtintor === "De Baja") next.motivoBaja = motivoBaja;
+        if (servicioExtra !== undefined && !estadoBloqueaServicioExtra(next.estadoExtintor)) next.servicioExtra = servicioExtra;
+        if (ma && !sinServicio && !solo) next = { ...next, ma: true, ph: false, recarga: "" };
+        if (recarga && !sinServicio && getRecargasPermitidas(next.agenteExtintor, RECARGAS).includes(recarga)) next = { ...next, recarga, ma: false };
+        if (!next.ph && (mesRealizadoPH !== undefined || realizadoPH !== undefined)) {
+            next.mesRealizadoPH = mesRealizadoPH ?? next.mesRealizadoPH;
+            next.realizadoPH = realizadoPH ?? next.realizadoPH;
+            next.vencimPH = calcularVencimientoPH(next.mesRealizadoPH, next.realizadoPH);
+        }
+        setForm(next);
+        if (ph && !next.ph && !sinServicio && !solo) await activarPH(next);
+    };
+
+    const seccionVoz = SECCION_DE_PASO[paso];
 
     return (
         <div ref={contenedorRef} className="scroll-area h-full overflow-y-auto flex flex-col">
@@ -209,14 +255,14 @@ export default function ExtintorFormView({
                         <p className="text-[11px] font-black text-red-700 uppercase tracking-widest">Paso {paso + 1} de {PASOS.length} · {editingRow !== null ? "Editando extintor" : "Nuevo extintor"}</p>
                         <p className="text-sm font-bold text-zinc-500 mt-1">{PASOS[paso].ayuda}</p>
                     </div>
-                    {DICTADO_VOZ_HABILITADO && (
+                    {seccionVoz && connected && !sinSenal && (
                         <button
                             type="button"
                             onClick={() => setVoiceModalOpen(true)}
                             className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-black shadow-md active:scale-95 transition-all"
                         >
                             <Mic className="w-4 h-4" />
-                            Registrar por Voz
+                            Dictar
                         </button>
                     )}
                 </div>
@@ -255,22 +301,7 @@ export default function ExtintorFormView({
                             <div className="flex flex-col gap-5">
                                 <div className="flex flex-col gap-4">
                                     <Field label="Estado" faltante={falta("Estado")}>
-                                        <select className={inputCls} value={form.estadoExtintor} onChange={(e) => setForm((p) => {
-                                            const nuevoEstado = e.target.value;
-                                            const next = { ...p, estadoExtintor: nuevoEstado };
-                                            if (estadoSoloPermiteRecarga(nuevoEstado)) {
-                                                next.ma = false; next.ph = false;
-                                            } else if (estadoBloqueaServicio(nuevoEstado)) {
-                                                next.ma = false; next.ph = false; next.recarga = "";
-                                            }
-                                            if (estadoBloqueaServicioExtra(nuevoEstado)) {
-                                                next.servicioExtra = "";
-                                            }
-                                            if (p.estadoExtintor === "De Baja" && nuevoEstado !== "De Baja") {
-                                                next.motivoBaja = "";
-                                            }
-                                            return next;
-                                        })}>
+                                        <select className={inputCls} value={form.estadoExtintor} onChange={(e) => setForm((p) => conEstado(p, e.target.value))}>
                                             <option value="">Seleccionar...</option>
                                             {ESTADOS.map((o) => <option key={o}>{o}</option>)}
                                         </select>
@@ -278,10 +309,7 @@ export default function ExtintorFormView({
                                     <Field label="Agente" faltante={falta("Agente")}>
                                         <CreatableSelect
                                             value={form.agenteExtintor}
-                                            onChange={(v) => setForm((p) => {
-                                                const permitidas = getRecargasPermitidas(v, RECARGAS);
-                                                return { ...p, agenteExtintor: v, recarga: permitidas.includes(p.recarga) ? p.recarga : "" };
-                                            })}
+                                            onChange={(v) => setForm((p) => conAgente(p, v, RECARGAS))}
                                             options={AGENTES}
                                             placeholder="Seleccionar..."
                                             catalogType="agente"
@@ -357,16 +385,7 @@ export default function ExtintorFormView({
                                                         setForm((p) => ({ ...p, ph: false }));
                                                         return;
                                                     }
-                                                    const hoy = new Date();
-                                                    const mesActual = String(hoy.getMonth() + 1);
-                                                    const anioActual = String(hoy.getFullYear());
-                                                    if (!(await confirmarCambioPH(form.mesRealizadoPH, form.realizadoPH, mesActual, anioActual))) return;
-                                                    setForm((p) => ({
-                                                        ...p, ph: true, ma: false,
-                                                        mesRealizadoPH: mesActual,
-                                                        realizadoPH: anioActual,
-                                                        vencimPH: calcularVencimientoPH(mesActual, anioActual),
-                                                    }));
+                                                    await activarPH(form);
                                                 }} />
                                             </>
                                         )}
@@ -611,17 +630,17 @@ export default function ExtintorFormView({
                 {sinSenal && <p className="max-w-3xl mx-auto text-[11px] font-bold text-amber-700 mt-2 text-center">Sin señal: se guardará en este teléfono y se enviará solo cuando vuelva la conexión.</p>}
             </div>
 
-            <DictadoVozModal
-                open={voiceModalOpen}
-                onClose={() => setVoiceModalOpen(false)}
-                onAplicar={aplicarDictado}
-                marcas={MARCAS}
-                agentes={AGENTES}
-                recargas={RECARGAS}
-                serviciosExtra={SERVICIOS_EXTRA}
-                unidadActual={form.unidadPeso}
-                socket={socket}
-            />
+            {seccionVoz && (
+                <DictadoVozModal
+                    open={voiceModalOpen}
+                    seccion={seccionVoz}
+                    form={form}
+                    catalogos={{ marcas: MARCAS, agentes: AGENTES, recargas: recargasPermitidas, serviciosExtra: SERVICIOS_EXTRA, motivosBaja: MOTIVOS_BAJA }}
+                    socket={socket}
+                    onClose={() => setVoiceModalOpen(false)}
+                    onAplicar={aplicarDictado}
+                />
+            )}
         </div>
     );
 }
