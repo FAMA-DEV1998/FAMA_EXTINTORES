@@ -165,7 +165,16 @@ export default function DictadoVozModal({ open, seccion, form, catalogos, socket
         switch (campo) {
             case "nSerie":
             case "nInterno":
-                return <input className={inputCls} value={(c[campo] as string) || ""} onChange={(e) => editar(campo, { [campo]: e.target.value.toUpperCase() })} />;
+                return (
+                    <div className="flex flex-col gap-2">
+                        {alternativas.length > 1 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {alternativas.map((a) => <button key={a.valor} type="button" className={chip(c[campo] === a.valor)} onClick={() => editar(campo, { [campo]: a.valor })}>{a.valor}</button>)}
+                            </div>
+                        )}
+                        <input className={inputCls} value={(c[campo] as string) || ""} onChange={(e) => editar(campo, { [campo]: e.target.value.toUpperCase() })} />
+                    </div>
+                );
             case "fechaFabricacion":
                 return <input className={inputCls} value={c.fechaFabricacion || ""} inputMode="numeric" maxLength={4} onChange={(e) => editar(campo, { fechaFabricacion: e.target.value.replace(/\D/g, "") })} />;
             case "marca":

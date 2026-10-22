@@ -56,6 +56,7 @@ export default function GuiaDictado({ seccion, form, opciones, detectados }: Pro
         recarga: opciones.recargas.length ? "" : "Primero elige el agente en el paso Tipo: la recarga depende de él.",
     };
     return (
+        <>
         <ul className="divide-y divide-zinc-100">
             {GUIA_SECCION[seccion].campos.map((c) => {
                 const actual = valorActual(c.id, form);
@@ -77,5 +78,9 @@ export default function GuiaDictado({ seccion, form, opciones, detectados }: Pro
                 );
             })}
         </ul>
+        <p className="pt-2 pb-1 border-t border-zinc-100 text-[11px] font-bold text-zinc-500">
+            ¿Te equivocaste? Sigue hablando: «no, …», «perdón, …» o «me equivoqué, …». Se queda lo último que digas.
+        </p>
+        </>
     );
 }
