@@ -2,6 +2,8 @@ export type TipoCertificado = "garantia" | "ph";
 
 export type TipoIdentificacion = "ruc" | "dni" | "placa";
 
+export type DisenoCertificado = "clasico" | "moderno";
+
 export type Denominacion = "portatiles_rodantes" | "portatiles" | "rodantes" | "extintores";
 
 export interface CertificadoItem {
@@ -33,6 +35,7 @@ export interface CertificadoColumnas {
 
 export interface CertificadoDatos {
   tipoCertificado: TipoCertificado;
+  diseno?: DisenoCertificado;
   denominacion: Denominacion;
   tipoIdentificacion: TipoIdentificacion;
   nombre: string;

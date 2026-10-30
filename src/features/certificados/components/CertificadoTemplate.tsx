@@ -1,7 +1,7 @@
-import type { CertificadoItem, CertificadoDatos } from "../types";
+import type { CertificadoDatos } from "../types";
 import { detectarDenominacion, tituloCertificado, construirDenominacionTexto } from "../utils/denominacion";
-import { aplicarDenominacionParrafo, sanitizarHtmlBold } from "../utils/parrafo";
-import { MESES } from "../../../constants";
+import { construirPaginasItems, datosCertificado, ParrafoCertificado, TablaItems, TextoGarantia, TextoInspeccion, type EstiloTabla } from "./CertificadoPartes";
+import CertificadoTemplateModerno from "./CertificadoTemplateModerno";
 
 interface Props {
   datos: CertificadoDatos;
@@ -9,43 +9,22 @@ interface Props {
   codigoWeb?: string | null;
 }
 
-const FILAS_POR_PAGINA = 14;
-
-const construirPaginasItems = (items: CertificadoItem[]): CertificadoItem[][] => {
-  if (items.length === 0) return [[]];
-  const paginas: CertificadoItem[][] = [];
-  for (let i = 0; i < items.length; i += FILAS_POR_PAGINA) {
-    paginas.push(items.slice(i, i + FILAS_POR_PAGINA));
-  }
-  return paginas;
-};
-
-const soloAnio = (valor: string): string => valor?.match(/\d{4}/)?.[0] || valor;
-
-const estanqueidadItem = (it: CertificadoItem): string =>
-  (it.condicion || "").trim().toLowerCase() === "de baja" ? "—" : it.estanqueidad;
-
 const LETRAS_LATERALES: { letra: string; color: string }[] = ["HONRADEZ", "GARANTIA", "CUMPLIMIENTO"].flatMap((palabra, idx) => [
   ...(idx > 0 ? [{ letra: "", color: "" }] : []),
   ...palabra.split("").map((letra) => ({ letra, color: idx === 1 ? "text-red-600" : "text-blue-600" })),
 ]);
 
+const ESTILO_TABLA: EstiloTabla = {
+  tabla: "w-full border-collapse border border-black text-[11px] mb-4 text-center",
+  thead: "font-bold",
+  th: "border border-black p-1",
+  td: "border border-black p-1 py-1",
+  vacio: "border border-black p-3 text-gray-500",
+};
+
 export default function CertificadoTemplate({ datos, id, codigoWeb }: Props) {
-  const esPH = datos.tipoCertificado === "ph";
-  const esPlaca = datos.tipoIdentificacion === "placa";
-  const soloUnidadPlaca = esPlaca && !datos.dniAdicional && !datos.nombre.trim();
-  const esSingular = datos.items.length === 1;
-  const labelIdentificacion = datos.tipoIdentificacion === "ruc" ? "RUC N°" : datos.tipoIdentificacion === "dni" ? "DNI N°" : "Placa N°";
-  const mesLabel = MESES.find((m) => m.value === datos.mesFecha)?.label.toLowerCase() || "";
-  const marcaVisible = datos.columnas.marca || esPH;
-  const ubicacionCompleta = `${datos.ubicacion || "—"}${datos.distrito ? ` - ${datos.distrito}` : ""} - Lima`;
-  const etiquetasTexto = ["NTP 350.043.1", "833.030", ...datos.etiquetasAdicionales].join("; ");
-  const colSpanVacio = 8
-    + (datos.columnas.item ? 1 : 0)
-    + (datos.columnas.nInterno ? 1 : 0)
-    + (marcaVisible ? 1 : 0)
-    + (datos.columnas.rating ? 1 : 0)
-    + (datos.columnas.tipoServicio ? 1 : 0);
+  if (datos.diseno === "moderno") return <CertificadoTemplateModerno datos={datos} id={id} codigoWeb={codigoWeb} />;
+  const { esSingular, mesLabel } = datosCertificado(datos);
 
   const paginasItems = construirPaginasItems(datos.items);
 
@@ -93,108 +72,17 @@ export default function CertificadoTemplate({ datos, id, codigoWeb }: Props) {
                 </h3>
 
                 <p className="text-justify mb-4 leading-normal whitespace-pre-line">
-                  {datos.parrafoPersonalizado ? (
-                    <span dangerouslySetInnerHTML={{ __html: aplicarDenominacionParrafo(sanitizarHtmlBold(datos.parrafoPersonalizado), denominacionTexto) }} />
-                  ) : (
-                    <>
-                      {soloUnidadPlaca ? (
-                        <span className="font-bold">UNIDAD PLACA {datos.numeroIdentificacion || "—"}</span>
-                      ) : (
-                        <>
-                          <span className="font-bold">{datos.nombre || "—"}</span> con{" "}
-                          <span className="font-bold">
-                            {labelIdentificacion} {datos.numeroIdentificacion || "—"}
-                            {esPlaca && datos.dniAdicional && <> y DNI N° {datos.dniAdicional}</>}
-                          </span>
-                        </>
-                      )}
-                      {!esPlaca && (
-                        <>
-                          {" "}ubicado en <span className="font-bold">{ubicacionCompleta}</span>
-                        </>
-                      )}
-                      ,{" "}
-                      {esPH ? (
-                        <>
-                          se ha efectuado la Prueba Hidrostática {esSingular ? "al" : "a los"} {denominacionTexto}
-                          {datos.agentesTextoCorto ? <> {datos.agentesTextoCorto}</> : null},
-                          utilizando la máquina <span className="font-bold"> MARCA KAMEX MAQUINARIAS EIRL</span>, modelo{" "}
-                          <span className="font-bold">KPH-02</span>, dicho trabajo se ha realizado conforme lo establece la{" "}
-                          <span className="font-bold">{etiquetasTexto} según detalle:</span>
-                        </>
-                      ) : (
-                        <>
-                          se ha efectuado {datos.textoAccion} {esSingular ? "del" : "de los"} {denominacionTexto} de {datos.agentesTexto}, dicho trabajo se
-                          ha realizado conforme lo establece la{" "}
-                          <span className="font-bold">{etiquetasTexto} según detalle:</span>
-                        </>
-                      )}
-                    </>
-                  )}
+                  <ParrafoCertificado datos={datos} denominacionTexto={denominacionTexto} />
                 </p>
 
-                <table className="w-full border-collapse border border-black text-[11px] mb-4 text-center">
-                  <thead className="font-bold">
-                    <tr>
-                      {datos.columnas.item && <th className="border border-black p-1 w-10">Ítem</th>}
-                      <th className="border border-black p-1 w-12.5">Serie</th>
-                      {datos.columnas.nInterno && <th className="border border-black p-1 leading-tight">N°<br />Interno</th>}
-                      {marcaVisible && <th className="border border-black p-1">Marca</th>}
-                      <th className="border border-black p-1 leading-tight">Tipo<br />Extintor</th>
-                      <th className="border border-black p-1">Cap.</th>
-                      {datos.columnas.rating && <th className="border border-black p-1">Rating</th>}
-                      {!esPH && <th className="border border-black p-1 leading-tight">Prueba de<br />Estanqueidad<br />y Fuga</th>}
-                      {!esPH && <th className="border border-black p-1 leading-tight">Vencimiento<br />Recarga</th>}
-                      <th className="border border-black p-1 leading-tight">Año de<br />Fabr.</th>
-                      {esPH && <th className="border border-black p-1 leading-tight">Realizado<br />P.H</th>}
-                      <th className="border border-black p-1 leading-tight">Vencimiento<br />Prueba<br />Hidrostática</th>
-                      {esPH && <th className="border border-black p-1 leading-tight">Presión<br />PSI</th>}
-                      {datos.columnas.tipoServicio && <th className="border border-black p-1 leading-tight">Tipo de<br />Servicio</th>}
-                      <th className="border border-black p-1 leading-tight">Condición<br />Extintor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itemsPagina.length === 0 ? (
-                      <tr>
-                        <td colSpan={colSpanVacio} className="border border-black p-3 text-gray-500">
-                          {esPH ? "Ningún extintor de este servicio tiene Prueba Hidrostática registrada" : "Este servicio no tiene extintores asociados"}
-                        </td>
-                      </tr>
-                    ) : (
-                      itemsPagina.map((it, i) => (
-                        <tr key={i}>
-                          {datos.columnas.item && <td className="border border-black p-1 py-1">{it.item}</td>}
-                          <td className="border border-black p-1 py-1">{it.serie}</td>
-                          {datos.columnas.nInterno && <td className="border border-black p-1 py-1">{it.nInterno}</td>}
-                          {marcaVisible && <td className="border border-black p-1 py-1">{it.marca}</td>}
-                          <td className="border border-black p-1 py-1">{it.tipo}</td>
-                          <td className="border border-black p-1 py-1">{it.capacidad}</td>
-                          {datos.columnas.rating && <td className="border border-black p-1 py-1">{it.rating || "—"}</td>}
-                          {!esPH && <td className="border border-black p-1 py-1">{estanqueidadItem(it)}</td>}
-                          {!esPH && <td className="border border-black p-1 py-1">{it.vencimientoRecarga}</td>}
-                          <td className="border border-black p-1 py-1">{soloAnio(it.anioFabricacion)}</td>
-                          {esPH && <td className="border border-black p-1 py-1">{it.realizadoPH}</td>}
-                          <td className="border border-black p-1 py-1">{soloAnio(it.vencimientoPH)}</td>
-                          {esPH && <td className="border border-black p-1 py-1">{it.presionPSI || "—"}</td>}
-                          {datos.columnas.tipoServicio && <td className="border border-black p-1 py-1">{it.tipoServicio}</td>}
-                          <td className="border border-black p-1 py-1">{it.condicion}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                <TablaItems datos={datos} items={itemsPagina} estilo={ESTILO_TABLA} />
 
                 <p className="text-justify mb-4 leading-normal">
-                  <span className="font-bold">{esSingular ? "EL EXTINTOR ES ENTREGADO EN CALIDAD DE APROBADO" : "LOS EXTINTORES SON ENTREGADOS EN CALIDAD DE APROBADOS"}</span>, cualquier evento
-                  o falla posterior por la mala manipulación, el mal uso (golpes, abolladuras, exposición al calor,
-                  soldaduras y/o modificaciones, intemperie, oxido, corrosión, etc.) o uso distinto para el que está
-                  destinado es de responsabilidad del cliente, después de haber sido entregado, 1 año de garantía del
-                  servicio.
+                  <TextoGarantia esSingular={esSingular} />
                 </p>
 
                 <p className="text-justify mb-4 leading-normal">
-                  De acuerdo a la <span className="font-bold">NORMA TECNICA PERUANA 350.043</span> el Propietario debe
-                  inspeccionar su extintor una vez al mes por si exista la posibilidad de que lo hayan utilizado.
+                  <TextoInspeccion />
                 </p>
 
                 <p className="mb-1">Lima, {datos.diaFecha} de {mesLabel} del {datos.anioFecha}</p>

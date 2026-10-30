@@ -7,7 +7,7 @@ import { CONTENEDOR_IMPRESION } from "../hooks/useCertificadoEditor";
 import CertificadoTemplate from "./CertificadoTemplate";
 import { construirParrafoAutomatico, sanitizarHtmlBold } from "../utils/parrafo";
 import CertificadoPreview from "./CertificadoPreview";
-import type { CertificadoDatos, TipoCertificado, TipoIdentificacion } from "../types";
+import type { CertificadoDatos, DisenoCertificado, TipoCertificado, TipoIdentificacion } from "../types";
 import { PQS_TIPO_LABEL, PQS_VARIANTES } from "../utils/agentes";
 import { ESTADO_NUEVO_VENTA } from "../utils/trabajo";
 import { type PqsVariante, type AccionTrabajo } from "../types";
@@ -411,6 +411,16 @@ export default function CertificadoEditorModal({
                     options={[
                       { value: "garantia", label: "Garantía y Operatividad" },
                       { value: "ph", label: "Prueba Hidrostática" },
+                    ]}
+                  />
+                </ModalField>
+                <ModalField label="Diseño">
+                  <Segmented
+                    value={datos.diseno || "clasico"}
+                    onChange={(v) => onChange({ diseno: v as DisenoCertificado })}
+                    options={[
+                      { value: "clasico", label: "Clásico" },
+                      { value: "moderno", label: "Moderno con QR de opiniones" },
                     ]}
                   />
                 </ModalField>
