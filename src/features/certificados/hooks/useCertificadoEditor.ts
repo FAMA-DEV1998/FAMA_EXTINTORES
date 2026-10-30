@@ -12,7 +12,6 @@ import { formatVencimPH, formatRealizadoPH } from "../../../utils/pruebaHidrosta
 import toast from "react-hot-toast";
 import { consultarCertificadoWeb, publicarCertificadoWeb } from "../utils/web";
 
-/** id del contenedor oculto que usa CertificadoEditorModal para imprimir / generar el PDF */
 export const CONTENEDOR_IMPRESION = "certificado-print-container";
 
 interface CacheTab {
@@ -32,7 +31,6 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
   const [guardandoCertificado, setGuardandoCertificado] = useState(false);
   const [ultimoGuardadoSerializado, setUltimoGuardadoSerializado] = useState<string | null>(null);
   const [modoEdicion, setModoEdicion] = useState(false);
-  // Publicación en la web pública (descarga por código)
   const [codigoWeb, setCodigoWeb] = useState<string | null>(null);
   const [publicandoWeb, setPublicandoWeb] = useState(false);
 
@@ -345,14 +343,12 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
         setCertificadoGuardadoId(res.certificado?.id || null);
         setUltimoGuardadoSerializado(serializadoActual);
         setModoEdicion(true);
-        // Cada vez que se guarda, la copia descargable en la web se actualiza
         if (res.certificado?.id) publicarEnWeb(res.certificado.id);
       }
       onDone?.(!!res?.success);
     });
   };
 
-  /** Genera el PDF (con el código impreso) y lo publica para descarga en extintoresfama.com/certificados. */
   const publicarEnWeb = async (id: string | null = certificadoGuardadoId) => {
     if (!socket || !id || publicandoWeb) return;
     setPublicandoWeb(true);

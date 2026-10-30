@@ -27,7 +27,6 @@ export function useSocket(userId: string, onLogout: () => void, modoSinSenal = f
 
         let seDesconecto = false;
 
-        // Si el servidor se reinició, su túnel tiene otra dirección: se consulta y se reconecta solo
         let ultimaConsulta = 0;
         s.on("connect_error", () => {
             if (Date.now() - ultimaConsulta < 20000) return;

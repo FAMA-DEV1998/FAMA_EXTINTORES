@@ -33,7 +33,6 @@ export default function UsuariosModal({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Formulario crear/editar */}
           <div className="px-6 py-5 border-b border-zinc-800/60 bg-zinc-950/30">
             <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-3">
               {editingUserId ? "Editar Usuario" : "Nuevo Usuario"}

@@ -15,7 +15,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: Usuario) => voi
     setLoading(true);
     setError("");
 
-    await cargarBackendUrl(); // dirección actual del servidor
+    await cargarBackendUrl();
     const s = io(BACKEND_URL);
     s.on("connect", () => {
       s.emit("auth:login", { username, password }, (res: any) => {

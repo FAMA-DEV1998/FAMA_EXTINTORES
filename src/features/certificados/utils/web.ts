@@ -2,12 +2,6 @@ import type { Socket } from "socket.io-client";
 import type { CertificadoDatos } from "../types";
 import { hojasPdfBase64 } from "../../../utils/pdf";
 
-/**
- * Publicación de certificados en la web pública (extintoresfama.com/certificados).
- * El backend guarda el PDF con un código (EMPRESA-SEDE-AAMM-NN-XXXXXX) que el cliente
- * ingresa en la web para descargarlo.
- */
-
 export const URL_WEB_CERTIFICADOS = "https://extintoresfama.com/certificados/";
 export const enlaceWeb = (codigo: string) => `${URL_WEB_CERTIFICADOS}?codigo=${encodeURIComponent(codigo)}`;
 
@@ -28,13 +22,11 @@ const emitir = <T,>(socket: Socket, evento: string, datos: unknown) =>
     });
   });
 
-/** Certificado web ya publicado para este certificado del sistema (o null). */
 export const consultarCertificadoWeb = async (socket: Socket, certificadoId: string): Promise<CertificadoWeb | null> => {
   const r = await emitir<{ certificado: CertificadoWeb | null }>(socket, "web:certificado:porCertificado", { certificadoId });
   return r.certificado;
 };
 
-/** Código que tendrá el certificado en la web (el que ya tiene o el siguiente libre). */
 export const obtenerCodigoWeb = async (socket: Socket, certificadoId: string): Promise<string> => {
   const r = await emitir<{ codigo: string }>(socket, "web:certificado:codigo", { certificadoId });
   return r.codigo;
@@ -62,11 +54,6 @@ const servicioTexto = (d: CertificadoDatos) => {
   return partes.length ? `${partes.join(", ").replace(/, ([^,]*)$/, " y $1")} de extintores` : "Garantía y operatividad";
 };
 
-/**
- * Publica (o actualiza) el certificado en la web.
- * `aplicarCodigo` debe poner el código en las plantillas que están dentro de
- * `containerId` (para que salga impreso en el PDF) antes de generarlo.
- */
 export async function publicarCertificadoWeb(opts: {
   socket: Socket;
   certificadoId: string;

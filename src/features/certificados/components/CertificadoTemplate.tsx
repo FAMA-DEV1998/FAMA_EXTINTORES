@@ -6,7 +6,6 @@ import { MESES } from "../../../constants";
 interface Props {
   datos: CertificadoDatos;
   id?: string;
-  /** Código de descarga en la web (p. ej. IMS-CEN-2610-02-K7QX9M). Se imprime al pie de cada hoja. */
   codigoWeb?: string | null;
 }
 

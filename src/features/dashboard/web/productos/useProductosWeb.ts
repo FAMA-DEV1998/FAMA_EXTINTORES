@@ -98,7 +98,6 @@ export const productoVacio = (): ProductoWeb => ({
   imagenes: [], aplicaciones: [],
 });
 
-/** URL para ver una imagen del catálogo desde el sistema. */
 export const urlImagen = (src: string | null | undefined) => {
   if (!src) return "";
   if (/^https?:/.test(src)) return src;
@@ -116,7 +115,6 @@ export const emitir = <T,>(socket: Socket, evento: string, datos: unknown = {}, 
     });
   });
 
-/** Convierte cualquier foto (JPG, PNG, WebP…) al formato de la tienda: WebP 800×1050 con fondo blanco. */
 export async function prepararImagen(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("El archivo no es una imagen");
   const url = URL.createObjectURL(file);
@@ -171,7 +169,6 @@ export function useProductosWeb(socket: Socket | null) {
   return { productos, taxonomias, loading, recargar: cargar };
 }
 
-/** Estado de la publicación de la web y su registro en vivo. */
 export function useSitioWeb(socket: Socket | null) {
   const [estado, setEstado] = useState<EstadoSitio | null>(null);
   useEffect(() => {

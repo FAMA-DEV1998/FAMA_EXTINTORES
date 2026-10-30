@@ -13,11 +13,9 @@ export function useEmpresaForm(
   onCreated?: (slug: string) => void
 ) {
 
-  // ── Modal editar empresa ──
   const [editingEmpresa, setEditingEmpresa] = useState(false);
   const [empresaForm, setEmpresaForm] = useState<EmpresaData | null>(null);
 
-  // ── Archivar empresa ──
   const [deleteModal, setDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 

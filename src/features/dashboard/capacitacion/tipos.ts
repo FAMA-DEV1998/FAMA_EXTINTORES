@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 
-/** Igual que backend/src/capacitacion/cap.plantilla.ts (medidas en mm sobre A4 horizontal 297 × 210). */
 export type Fuente = "sans" | "sans-bold" | "serif" | "serif-bold" | "serif-italic" | "serif-bold-italic";
 export type Alineacion = "izquierda" | "centro" | "derecha";
 export interface CampoTexto {

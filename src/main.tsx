@@ -10,7 +10,6 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
   });
 }
 
-// Primero se averigua la dirección actual del servidor (cambia cada vez que se enciende el túnel)
 cargarBackendUrl().finally(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

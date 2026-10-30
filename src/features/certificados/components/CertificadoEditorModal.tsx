@@ -57,7 +57,6 @@ interface Props {
   onUsarModoEstandar?: () => void;
   etiquetasDisponibles: string[];
   onCrearEtiqueta?: (valor: string, onDone?: (ok: boolean) => void) => void;
-  /** Publicación en extintoresfama.com/certificados (descarga por código) */
   web?: { codigo: string | null; publicando: boolean; publicar: () => void };
 }
 

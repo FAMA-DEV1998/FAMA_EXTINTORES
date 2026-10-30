@@ -48,7 +48,6 @@ export const exportarHojasPdf = async (containerId: string, nombreArchivo: strin
     pdf.save(nombreArchivo);
 };
 
-/** PDF de las hojas en base64 (sin el prefijo data:), para publicarlo en la web. */
 export const hojasPdfBase64 = async (containerId: string): Promise<string> => {
     const pdf = await generarHojasPdf(containerId);
     return pdf.output("datauristring").split(",")[1];

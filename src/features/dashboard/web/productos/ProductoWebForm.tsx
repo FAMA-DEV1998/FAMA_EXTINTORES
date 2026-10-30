@@ -62,7 +62,7 @@ function Interruptor({ activo, onChange, label }: { activo: boolean; onChange: (
 interface Props {
   socket: Socket;
   taxonomias: Taxonomias;
-  productoId: number | null; // null = nuevo
+  productoId: number | null;
   onClose: () => void;
   onSaved: (id: number) => void;
 }

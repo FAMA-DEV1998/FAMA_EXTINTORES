@@ -23,7 +23,6 @@ export function useEmpresaWorker(
         setActiveId(name);
     }, []);
 
-    // ── Socket ──
     useEffect(() => {
         if (!socket) return;
 

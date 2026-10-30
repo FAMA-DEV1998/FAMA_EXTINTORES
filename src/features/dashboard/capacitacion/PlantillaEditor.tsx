@@ -7,7 +7,6 @@ import {
   type CampoTexto, type ClaveTexto, type Fuente, type ImagenPos, type PlantillaCertificado,
 } from "./tipos";
 
-/** Datos de ejemplo para ver el diseño. */
 const EJEMPLO: Record<string, string> = {
   nombre: "MARÍA FERNANDA QUISPE ROJAS", dni: "45678912", cargo: "Asistente administrativa",
   empresa: "Inversiones Moderna del Sur S.A.C.", puntaje: "92", fecha: "18/10/2026", fecha_larga: "18 de octubre de 2026",
@@ -39,7 +38,7 @@ export default function PlantillaEditor({ socket }: { socket: Socket }) {
   const [vista, setVista] = useState<string | null>(null);
   const [cargandoVista, setCargandoVista] = useState(false);
   const hoja = useRef<HTMLDivElement>(null);
-  const [escala, setEscala] = useState(3); // px por mm
+  const [escala, setEscala] = useState(3);
 
   useEffect(() => {
     emitir<{ plantilla: PlantillaCertificado }>(socket, "cap:plantilla:get").then((r) => setP(r.plantilla)).catch((e) => toast.error(e.message));
@@ -67,7 +66,6 @@ export default function PlantillaEditor({ socket }: { socket: Socket }) {
 
   const reemplazar = (t: string) => t.replace(/\{(\w+)\}/g, (m, k) => (k === "curso" ? p?.curso ?? m : EJEMPLO[k] ?? m));
 
-  // ── Arrastrar elementos sobre la hoja ──
   const arrastrar = (e: React.PointerEvent, s: Exclude<Seleccion, null>, x0: number, y0: number) => {
     e.preventDefault();
     e.stopPropagation();

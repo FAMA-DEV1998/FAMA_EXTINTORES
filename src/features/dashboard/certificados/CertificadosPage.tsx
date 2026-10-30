@@ -30,7 +30,6 @@ export default function CertificadosPage() {
   const [editandoServicio, setEditandoServicio] = useState<any | null>(null);
   const [certificadoParaCargar, setCertificadoParaCargar] = useState<any | null>(null);
   const [mesAbierto, setMesAbierto] = useState<string | null>(null);
-  // Código con el que cada certificado se descarga en extintoresfama.com/certificados
   const [codigosWeb, setCodigosWeb] = useState<Record<string, string>>({});
   useEffect(() => {
     if (!socket || !selectedEmpresa?.id) return;

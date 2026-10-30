@@ -20,7 +20,6 @@ export interface SolicitudWeb {
   createdAt: string;
 }
 
-/** Cotizaciones y mensajes enviados desde extintoresfama.com (tabla mk_leads). */
 export function useSolicitudesWeb(socket: Socket | null) {
   const [solicitudes, setSolicitudes] = useState<SolicitudWeb[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,7 +55,6 @@ export function useSolicitudesWeb(socket: Socket | null) {
   return { solicitudes, loading, cambiarEstado, recargar: cargar };
 }
 
-/** Número de solicitudes web sin atender (para el menú). Avisa cuando llega una nueva. */
 export function useSolicitudesWebBadge(socket: Socket | null) {
   const [nuevos, setNuevos] = useState(0);
   useEffect(() => {
