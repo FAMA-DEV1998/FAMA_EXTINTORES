@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { Check, ChevronDown, ChevronUp, CircleAlert, ListChecks, LoaderCircle, Mic, RotateCcw, Square, TriangleAlert, Wand2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, CircleAlert, Headphones, ListChecks, LoaderCircle, Mic, RotateCcw, Square, TriangleAlert, Wand2, X } from "lucide-react";
 import type { ExtintorFormData } from "../../../types";
 import { COMP_KEYS, COMP_LABELS, ESTADOS, MESES, PESOS_GAL, PESOS_KG, PESOS_LB, PESOS_LT } from "../../../constants";
 import { useDictadoVoz, type ModoDictado } from "./useDictadoVoz";
@@ -295,7 +295,22 @@ export default function DictadoVozModal({ open, seccion, form, catalogos, socket
                             {fase === "grabando" && modo.current === "audio" && (
                                 <div className="h-2 rounded-full bg-zinc-100 overflow-hidden"><div className="h-full bg-red-500 transition-[width] duration-75" style={{ width: `${Math.round(voz.nivel * 100)}%` }} /></div>
                             )}
+                            {fase === "grabando" && modo.current === "audio" && voz.enUso && <p className="text-[11px] font-bold text-zinc-500 truncate">Usando: {voz.enUso.nombre}</p>}
                             {fase === "grabando" && modo.current === "navegador" && <p className="text-xs text-zinc-500 line-clamp-2">{voz.textoVivo || "…"}</p>}
+                            {avanzado && fase !== "grabando" && fase !== "procesando" && (
+                                <label className="flex items-center gap-2 text-[11px] font-bold text-zinc-500">
+                                    <Headphones className="w-3.5 h-3.5 shrink-0" />
+                                    <select
+                                        className="flex-1 min-w-0 border border-zinc-200 rounded-md px-2 py-1 text-xs font-bold text-zinc-700 bg-white"
+                                        value={voz.microfonos.some((m) => m.id === voz.elegido) ? voz.elegido : "auto"}
+                                        onChange={(e) => voz.elegirMicrofono(e.target.value)}
+                                        aria-label="Micrófono"
+                                    >
+                                        <option value="auto">Automático: externo si está conectado</option>
+                                        {voz.microfonos.map((m) => <option key={m.id} value={m.id}>{m.nombre}{m.externo ? " · externo" : ""}</option>)}
+                                    </select>
+                                </label>
+                            )}
                             {ultimo && fase !== "grabando" && <p className="text-xs text-zinc-500 line-clamp-3">Entendí: «{ultimo.texto}»</p>}
                         </div>
                     </div>

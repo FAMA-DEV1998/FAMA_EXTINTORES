@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { abrirMicrofono, guardarElegido, leerElegido, listarMicrofonos, type Microfono } from "./microfonos";
 
 declare global {
     interface Window {
@@ -27,6 +28,9 @@ export function useDictadoVoz() {
     const [segundos, setSegundos] = useState(0);
     const [textoVivo, setTextoVivo] = useState("");
     const [error, setError] = useState("");
+    const [microfonos, setMicrofonos] = useState<Microfono[]>([]);
+    const [elegido, setElegido] = useState(leerElegido);
+    const [enUso, setEnUso] = useState<Microfono | null>(null);
     const recorder = useRef<MediaRecorder | null>(null);
     const trozos = useRef<Blob[]>([]);
     const flujo = useRef<MediaStream | null>(null);
@@ -48,6 +52,20 @@ export function useDictadoVoz() {
         contexto.current?.close().catch(() => undefined);
         contexto.current = null;
         setNivel(0);
+    }, []);
+
+    useEffect(() => {
+        const md = navigator.mediaDevices;
+        if (!md?.enumerateDevices) return;
+        const refrescar = () => { listarMicrofonos().then(setMicrofonos).catch(() => setMicrofonos([])); };
+        refrescar();
+        md.addEventListener?.("devicechange", refrescar);
+        return () => md.removeEventListener?.("devicechange", refrescar);
+    }, []);
+
+    const elegirMicrofono = useCallback((id: string) => {
+        setElegido(id);
+        guardarElegido(id);
     }, []);
 
     useEffect(() => () => {
@@ -116,7 +134,9 @@ export function useDictadoVoz() {
         detenido.current = false;
         try {
             if (modo === "audio") {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+                const { stream, microfono, lista } = await abrirMicrofono(elegido);
+                setMicrofonos(lista);
+                setEnUso(microfono);
                 flujo.current = stream;
                 const mime = TIPOS_AUDIO.find((t) => MediaRecorder.isTypeSupported?.(t)) || "";
                 const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
@@ -143,7 +163,7 @@ export function useDictadoVoz() {
             setError(nombre === "NotAllowedError" ? "Permite el uso del micrófono para dictar." : nombre === "NotFoundError" ? "No se encontró un micrófono." : "No se pudo iniciar el micrófono.");
             return false;
         }
-    }, [crearReconocedor, limpiar, medir]);
+    }, [crearReconocedor, elegido, limpiar, medir]);
 
     const detener = useCallback(async (): Promise<Grabacion> => {
         detenido.current = true;
@@ -178,5 +198,5 @@ export function useDictadoVoz() {
         limpiar();
     }, [limpiar]);
 
-    return { soporte, grabando, nivel, segundos, textoVivo, error, iniciar, detener, cancelar, autoDetener, maxSegundos: MAX_SEGUNDOS };
+    return { soporte, grabando, nivel, segundos, textoVivo, error, iniciar, detener, cancelar, autoDetener, maxSegundos: MAX_SEGUNDOS, microfonos, elegido, elegirMicrofono, enUso };
 }
