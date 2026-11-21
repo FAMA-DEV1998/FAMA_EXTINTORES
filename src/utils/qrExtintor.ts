@@ -1,4 +1,4 @@
-export const URL_EXTINTOR_PUBLICO = `${(import.meta.env.VITE_URL_WEB || "https://extintoresfama.com").replace(/\/$/, "")}/e/`;
+export const URL_EXTINTOR_PUBLICO = `${("https://extintoresfama.com").replace(/\/$/, "")}/e/`;
 
 const UUID = /[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/i;
 
