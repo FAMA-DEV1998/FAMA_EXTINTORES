@@ -137,9 +137,15 @@ export default function ExtintorCard({
                         )}
                     </div>
                     {hasSedes && (
-                        <div className="flex flex-col gap-0.5 col-span-2">
+                        <div className={`flex flex-col gap-0.5 ${ext.area ? "" : "col-span-2"}`}>
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Sede</span>
                             <span className="font-bold text-zinc-800 text-sm truncate">{ext.sedeId ? ((sedeNameById || {})[ext.sedeId] || "—") : "Sin sede"}</span>
+                        </div>
+                    )}
+                    {ext.area && (
+                        <div className={`flex flex-col gap-0.5 ${hasSedes ? "" : "col-span-2"}`}>
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Área</span>
+                            <span className="w-fit max-w-full font-black text-[11px] px-2 py-0.5 rounded-md border truncate bg-sky-50 text-sky-700 border-sky-200">{ext.area}</span>
                         </div>
                     )}
                     {ext.motivoBaja && (

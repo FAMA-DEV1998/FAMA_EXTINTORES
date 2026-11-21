@@ -121,6 +121,31 @@ function TablaAlertas({ alertas, onDescartar }: { alertas: any[]; onDescartar: (
   );
 }
 
+const SIN_AREA = "__sin_area__";
+
+function AlertasPorArea({ alertas, onDescartar }: { alertas: any[]; onDescartar: (uid: string, motivo: string) => void }) {
+  const grupos = new Map<string, any[]>();
+  for (const a of alertas) {
+    const k = (a.area || "").trim() || SIN_AREA;
+    grupos.set(k, [...(grupos.get(k) || []), a]);
+  }
+  if (grupos.size === 1 && grupos.has(SIN_AREA)) return <TablaAlertasPorMes alertas={alertas} onDescartar={onDescartar} />;
+  const orden = [...grupos.keys()].sort((a, b) => (a === SIN_AREA ? 1 : b === SIN_AREA ? -1 : a.localeCompare(b, "es")));
+  return (
+    <div className="flex flex-col gap-4">
+      {orden.map((k) => (
+        <div key={k} className="flex flex-col gap-2">
+          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider">
+            <span className={k === SIN_AREA ? "text-zinc-500" : "px-2 py-0.5 rounded-md bg-sky-950/40 border border-sky-900/50 text-sky-300"}>{k === SIN_AREA ? "Sin área" : `Área: ${k}`}</span>
+            <span className="text-zinc-600 font-bold normal-case tracking-normal">{grupos.get(k)!.length} extintor{grupos.get(k)!.length === 1 ? "" : "es"}</span>
+          </p>
+          <TablaAlertasPorMes alertas={grupos.get(k)!} onDescartar={onDescartar} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TablaAlertasPorMes({ alertas, onDescartar }: { alertas: any[]; onDescartar: (uid: string, motivo: string) => void }) {
   const grupos = new Map<string, any[]>();
   alertas.forEach((a: any) => {
@@ -332,12 +357,12 @@ function EmpresaAlertas({ empresa, abierto, onToggle, expanded, toggle, seguimie
                       <a href={whatsapp(sede.alertas)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40 inline-flex items-center gap-1.5"><MessageCircle className="w-3.5 h-3.5" />Contactar</a>
                     )}
                   </button>
-                  {sedeAbierta && <div className="p-3 bg-zinc-950/20"><TablaAlertasPorMes alertas={sede.alertas} onDescartar={onDescartar} /></div>}
+                  {sedeAbierta && <div className="p-3 bg-zinc-950/20"><AlertasPorArea alertas={sede.alertas} onDescartar={onDescartar} /></div>}
                 </div>
               );
             })
           ) : (
-            <TablaAlertasPorMes alertas={todas} onDescartar={onDescartar} />
+            <AlertasPorArea alertas={todas} onDescartar={onDescartar} />
           )}
         </div>
       )}
@@ -385,7 +410,7 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
   const texto = busqueda.trim().toLowerCase();
   const filtradas = base
     .filter((e: any) => clasificarEmpresa(e, fTipo))
-    .filter((e: any) => !texto || e.razonSocial.toLowerCase().includes(texto) || (e.nombresApellidos || "").toLowerCase().includes(texto))
+    .filter((e: any) => !texto || e.razonSocial.toLowerCase().includes(texto) || (e.nombresApellidos || "").toLowerCase().includes(texto) || e.sedes.some((s: any) => (s.nombre || "").toLowerCase().includes(texto) || s.alertas.some((a: any) => (a.area || "").toLowerCase().includes(texto))))
     .map((e: any) => ({
       ...e,
       sedes: e.sedes
@@ -466,7 +491,7 @@ export default function AlertasPage({ socket }: { socket: Socket | null }) {
       <div className="mb-5 flex flex-col xl:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar empresa o contacto..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar empresa, contacto, sede o área..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-red-600" />
           {busqueda && (
             <button onClick={() => setBusqueda("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800" aria-label="Limpiar búsqueda"><X className="w-3.5 h-3.5" /></button>
           )}

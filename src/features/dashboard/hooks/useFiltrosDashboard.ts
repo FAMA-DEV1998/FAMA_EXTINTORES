@@ -24,11 +24,13 @@ export function useFiltrosDashboard(
     const [fComponente, setFComponente] = useState("");
     const [fPeso, setFPeso] = useState("");
     const [fSede, setFSede] = useState("");
+    const [fArea, setFArea] = useState("");
 
     const availableYears = getAvailableYears(empresas);
     const filtered = filterEmpresas(empresas, search, fMonth, fYear);
 
-    const filteredExt = filterExtintores(extintores, fMarca, fAgente, fEstado, fPeso, fServicio, fComponente, fSede);
+    const filteredExt = filterExtintores(extintores, fMarca, fAgente, fEstado, fPeso, fServicio, fComponente, fSede).filter((e) => !fArea || (e.area || "").trim() === fArea);
+    const areasDisponibles = [...new Set(extintores.map((e) => (e.area || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
 
     const sortedExt = sortExtintoresPersonalizado(
         filteredExt,
@@ -41,7 +43,7 @@ export function useFiltrosDashboard(
     );
 
     const totalExtintores = extintores.length;
-    const hasFilters = !!(fMarca || fAgente || fEstado || fServicio || fComponente || fSede);
+    const hasFilters = !!(fMarca || fAgente || fEstado || fServicio || fComponente || fSede || fArea);
 
     return {
         search, setSearch,
@@ -56,6 +58,8 @@ export function useFiltrosDashboard(
         fComponente, setFComponente,
         fPeso, setFPeso,
         fSede, setFSede,
+        fArea, setFArea,
+        areasDisponibles,
         filteredExt,
         sortedExt,
         totalExtintores,

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { areasDe } from "../../../components/extintores/CampoArea";
 import toast from "react-hot-toast";
 import { ArrowRightLeft, Building, ChartColumn, ChevronDown, ChevronUp, Camera, Download, Flame, FireExtinguisher, History, ListOrdered, LoaderCircle, Pencil, Plus, Scale, Tags, Trash2, TriangleAlert } from "lucide-react";
 import { COMP_LABELS } from "../../../constants";
@@ -76,6 +77,7 @@ export default function TablaExtintoresPanel({ variant, onExportExcel, exporting
     const {
         fMarca, setFMarca, fAgente, setFAgente, fEstado, setFEstado, fPeso, setFPeso,
         fServicio, setFServicio, fComponente, setFComponente, fSede, setFSede,
+        fArea, setFArea, areasDisponibles,
         filteredExt, sortedExt, totalExtintores, hasFilters,
     } = filters;
 
@@ -205,6 +207,9 @@ export default function TablaExtintoresPanel({ variant, onExportExcel, exporting
                                 ]}
                             />
                         )}
+                        {(areasDisponibles.length > 0 || fArea) && (
+                            <FilterSelect label="Área" value={fArea} onChange={setFArea} options={areasDisponibles} />
+                        )}
                         {variant === "historial" && (
                             <FilterSelect label="Servicio" value={fServicio} onChange={setFServicio} options={["Mantenimiento", "Recarga", "Prueba Hidrostatica"]} />
                         )}
@@ -220,7 +225,7 @@ export default function TablaExtintoresPanel({ variant, onExportExcel, exporting
                         {hasFilters && (
                             <button
                                 onClick={() => {
-                                    setFMarca(""); setFAgente(""); setFEstado(""); setFSede("");
+                                    setFMarca(""); setFAgente(""); setFEstado(""); setFSede(""); setFArea("");
                                     setFServicio(""); setFComponente(""); setFPeso("");
                                 }}
                                 className="px-3.5 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/20 border border-red-900/30 hover:bg-red-900/40 transition-all ml-auto sm:ml-0"
@@ -323,6 +328,7 @@ export default function TablaExtintoresPanel({ variant, onExportExcel, exporting
                                                     {esInternoDuplicado && <TriangleAlert className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />}
                                                     {ext.nInterno || "—"}
                                                 </span>
+                                                {ext.area && <span className="block w-fit mt-1 px-1.5 py-0.5 rounded-md bg-sky-950/40 border border-sky-900/50 text-[10px] font-bold text-sky-300 whitespace-nowrap" title="Área">{ext.area}</span>}
                                             </td>
                                             <td className="px-5 py-3.5 font-medium text-zinc-300">
                                                 {ext.marca || "—"}
@@ -488,7 +494,7 @@ export default function TablaExtintoresPanel({ variant, onExportExcel, exporting
 
             {/* Modales del inventario */}
             {extintorModal && (
-                <ExtintorModal form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} coincidencias={coincidencias} onUsarExistente={handleUsarExtintorExistente} onCerrarAvisoDuplicado={cerrarAvisoDuplicado} onConfirmarYGuardar={confirmarYGuardar} />
+                <ExtintorModal areas={areasDe(baseExtintores, extintorForm.sedeId ?? null)} form={extintorForm} setForm={setExtintorForm} isEditing={editingRowIndex !== null} onClose={() => setExtintorModal(false)} onSave={saveExtintor} saving={saving} marcas={MARCAS} agentes={AGENTES} recargas={RECARGAS} motivosBaja={MOTIVOS_BAJA} serviciosExtra={SERVICIOS_EXTRA} socket={scope.socket} userRole={scope.role} coincidencias={coincidencias} onUsarExistente={handleUsarExtintorExistente} onCerrarAvisoDuplicado={cerrarAvisoDuplicado} onConfirmarYGuardar={confirmarYGuardar} />
             )}
             <ObservacionModal observation={obsModal} onClose={() => setObsModal(null)} />
             <EvidenciaModal

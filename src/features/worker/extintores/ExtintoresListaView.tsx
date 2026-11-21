@@ -33,6 +33,9 @@ interface ExtintoresListaViewProps {
     agentesDisponibles: string[];
     pesosDisponibles: string[];
     estadosDisponibles: string[];
+    fArea: string;
+    setFArea: (v: string) => void;
+    areasDisponibles: string[];
     extintoresOrdenados: Extintor[];
 
     handleDelete: (rowIndex: number) => void;
@@ -63,6 +66,8 @@ export default function ExtintoresListaView({
     agentesDisponibles,
     pesosDisponibles,
     estadosDisponibles,
+    fArea, setFArea,
+    areasDisponibles,
     extintoresOrdenados,
     handleDelete,
     hasSedes,
@@ -152,6 +157,9 @@ export default function ExtintoresListaView({
                         fSede={fSede}
                         setFSede={agruparPorSede ? setFSede : undefined}
                         sedesFiltroDisponibles={sedesFiltroDisponibles}
+                        fArea={fArea}
+                        setFArea={setFArea}
+                        areasDisponibles={areasDisponibles}
                     />
 
                     {extintoresFiltrados.length === 0 ? (

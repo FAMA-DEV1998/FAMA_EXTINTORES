@@ -26,6 +26,8 @@ import { useSedes } from "../../hooks/useSedes";
 import { useServicios } from "../../hooks/useServicios";
 import { useTraslados } from "../../hooks/useTraslados";
 import TrasladoSedeModal from "../../components/extintores/TrasladoSedeModal";
+import { areasDe } from "../../components/extintores/CampoArea";
+import { useDirectorioEmpresas } from "./hooks/useDirectorioEmpresas";
 import Notificaciones, { confirmar } from "../../components/ui/Notificaciones";
 import { useSocketSinSenal } from "./sinSenal/useSocketSinSenal";
 import EstadoSincronizacion from "./sinSenal/EstadoSincronizacion";
@@ -93,12 +95,19 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
     handleCameraCapture, removeEvidencia, MAX_EVIDENCIAS,
   } = photoCapture;
 
+  const directorio = useDirectorioEmpresas(socketReal, connected);
+  const abrirEmpresa = (id: string, sedeId?: string | null) => {
+    selectEmpresa(id);
+    if (sedeId) changeActiveSede(sedeId);
+  };
+
   const filters = useFiltrosExtintores(extintores, empresa);
   const {
     search, setSearch, fMarca, setFMarca, fAgente, setFAgente,
     fPeso, setFPeso, fEstado, setFEstado, soloIncompletos, setSoloIncompletos,
     incompletosCount, marcasDisponibles, agentesDisponibles,
     pesosDisponibles, estadosDisponibles, extintoresOrdenados,
+    fArea, setFArea, areasDisponibles,
   } = filters;
 
   const sedesHook = useSedes(socket, activeId);
@@ -347,7 +356,8 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
             empresas={empresas}
             connected={connected || estadoSinSenal.listo}
             disponiblesSinSenal={connected ? null : estadoSinSenal.empresasDisponibles}
-            selectEmpresa={selectEmpresa}
+            directorio={directorio}
+            selectEmpresa={abrirEmpresa}
             onCreateNew={() => { setEmpresa(emptyEmpresa()); changeActiveId(""); setView("empresa"); }}
             onEscanearQR={() => setQrModal(true)}
           />
@@ -361,6 +371,7 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
             saving={saving}
             connected={puedeGuardar}
             empresasExistentes={empresas}
+            onUsarEmpresa={abrirEmpresa}
           />
         )}
 
@@ -446,6 +457,9 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
             agentesDisponibles={agentesDisponibles}
             pesosDisponibles={pesosDisponibles}
             estadosDisponibles={estadosDisponibles}
+            fArea={fArea}
+            setFArea={setFArea}
+            areasDisponibles={areasDisponibles}
             extintoresOrdenados={extintoresOrdenados}
             handleDelete={handleDelete}
             hasSedes={hasSedes}
@@ -472,6 +486,7 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
             RECARGAS={RECARGAS}
             MOTIVOS_BAJA={MOTIVOS_BAJA}
             SERVICIOS_EXTRA={SERVICIOS_EXTRA}
+            AREAS={areasDe(extintoresGlobal?.length ? extintoresGlobal : extintores, form.sedeId ?? activeSedeId ?? null)}
             saving={saving}
             connected={puedeGuardar}
             sinSenal={!connected}

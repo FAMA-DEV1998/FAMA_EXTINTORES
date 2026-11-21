@@ -12,6 +12,7 @@ import { MultiSelect } from "../../../components/ui/MultiSelect";
 import DictadoVozModal from "../voz/DictadoVozModal";
 import { SECCION_DE_PASO } from "../voz/seccionesVoz";
 import DuplicadoComparacionModal from "../../../components/extintores/DuplicadoComparacionModal";
+import CampoArea from "../../../components/extintores/CampoArea";
 
 const PASOS = [
     { titulo: "Datos", icono: FireExtinguisher, ayuda: "Copia los datos de la etiqueta del extintor. Si no los ves, déjalos en blanco." },
@@ -95,6 +96,7 @@ interface ExtintorFormViewProps {
     onUsarExistente?: (rowIndex: number) => void;
     onCerrarAvisoDuplicado?: () => void;
     onConfirmarYGuardar?: () => void;
+    AREAS?: string[];
 }
 
 export default function ExtintorFormView({
@@ -128,6 +130,7 @@ export default function ExtintorFormView({
     onUsarExistente,
     onCerrarAvisoDuplicado,
     onConfirmarYGuardar,
+    AREAS = [],
 }: ExtintorFormViewProps) {
     const recargasPermitidas = getRecargasPermitidas(form.agenteExtintor, RECARGAS);
     const soloRecarga = estadoSoloPermiteRecarga(form.estadoExtintor);
@@ -290,6 +293,9 @@ export default function ExtintorFormView({
                             </Field>
                             <Field label="Año de Fabricación" faltante={falta("Fabricación")}>
                                 <input className={inputCls} value={form.fechaFabricacion} onChange={setF("fechaFabricacion")} placeholder="Ej: 2020" inputMode="numeric" maxLength={4} />
+                            </Field>
+                            <Field label="Área (opcional)">
+                                <CampoArea value={form.area || ""} onChange={(v) => setForm((p) => ({ ...p, area: v }))} sugerencias={AREAS} className={inputCls} />
                             </Field>
                         </div>
                     </Card>

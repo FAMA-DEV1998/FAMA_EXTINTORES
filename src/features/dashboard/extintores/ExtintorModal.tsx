@@ -8,6 +8,7 @@ import { calcularVencimientoPH, confirmarCambioPH, formatVencimPH, phVenceEsteAn
 import { CreatableSelect } from "../../../components/ui/CreatableSelect";
 import { MultiSelect } from "../../../components/ui/MultiSelect";
 import DuplicadoComparacionModal from "../../../components/extintores/DuplicadoComparacionModal";
+import CampoArea from "../../../components/extintores/CampoArea";
 import type { Socket } from "socket.io-client";
 
 type Coincidencia = { uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; mesRealizadoPH: string; realizadoPH: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "sospechosa"; camposCoincidentes: string[] };
@@ -30,9 +31,10 @@ type Props = {
     onUsarExistente?: (rowIndex: number) => void;
     onCerrarAvisoDuplicado?: () => void;
     onConfirmarYGuardar?: () => void;
+    areas?: string[];
 };
 
-export default function ExtintorModal({ form, setForm, isEditing, onClose, onSave, saving, marcas, agentes, recargas, motivosBaja, serviciosExtra, socket, userRole, coincidencias, onUsarExistente, onCerrarAvisoDuplicado, onConfirmarYGuardar }: Props) {
+export default function ExtintorModal({ form, setForm, isEditing, onClose, onSave, saving, marcas, agentes, recargas, motivosBaja, serviciosExtra, socket, userRole, coincidencias, onUsarExistente, onCerrarAvisoDuplicado, onConfirmarYGuardar, areas = [] }: Props) {
     const setEF = (k: string, v: string) => {
         setForm((p) => {
             const next = { ...p, [k]: v };
@@ -98,6 +100,7 @@ export default function ExtintorModal({ form, setForm, isEditing, onClose, onSav
                                 className={modalInput}
                             />
                             <ModalField label="Año Fab."><input className={modalInput} value={form.fechaFabricacion || ""} onChange={(e) => setEF("fechaFabricacion", e.target.value)} maxLength={4} placeholder="Ej: 2020" /></ModalField>
+                            <ModalField label="Área"><CampoArea value={form.area || ""} onChange={(v) => setEF("area", v)} sugerencias={areas} className={modalInput} /></ModalField>
                         </div>
                     </ModalSection>
 

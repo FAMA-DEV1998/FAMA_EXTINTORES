@@ -5,14 +5,14 @@ export const emptyExtintorForm = (): ExtintorFormData => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "", realizadoPH: "", mesRealizadoPH: "",
     vencimPH: "", estadoExtintor: "", agenteExtintor: "", peso: "", unidadPeso: "KG",
     ma: false, recarga: "", ph: false, valvula: "", manguera: "", manometro: "",
-    tobera: "", observaciones: "", servicioExtra: "", motivoBaja: "", evidencias: [],
+    tobera: "", observaciones: "", area: "", servicioExtra: "", motivoBaja: "", evidencias: [],
 });
 
 export const emptyExtintor = (): Partial<Extintor> => ({
     nSerie: "", nInterno: "", marca: "", fechaFabricacion: "",
     realizadoPH: "", mesRealizadoPH: "", vencimPH: "", estadoExtintor: "", agenteExtintor: "",
     peso: "", unidadPeso: "KG", ma: "", recarga: "", ph: "",
-    valvula: "", manguera: "", manometro: "", tobera: "", observaciones: "", servicioExtra: "", motivoBaja: "",
+    valvula: "", manguera: "", manometro: "", tobera: "", observaciones: "", area: "", servicioExtra: "", motivoBaja: "",
     evidencia: "[]"
 });
 

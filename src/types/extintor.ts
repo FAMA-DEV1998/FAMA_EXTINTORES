@@ -20,6 +20,7 @@ export type Extintor = {
   manometro: string;
   tobera: string;
   observaciones: string;
+  area?: string;
   servicioExtra: string;
   motivoBaja: string;
   evidencia?: string; 
@@ -49,6 +50,7 @@ export type ExtintorFormData = {
   manometro: string;
   tobera: string;
   observaciones: string;
+  area: string;
   servicioExtra: string;
   motivoBaja: string;
   evidencias: string[];

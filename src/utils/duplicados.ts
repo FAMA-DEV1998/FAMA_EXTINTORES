@@ -114,9 +114,9 @@ const LARGO_MINIMO_MATRIZ = 4;
 export const detectarPosiblesSedes = (empresas: (EmpresaComparable & { sedes?: { id: string; nombre: string }[] })[]): PosibleSede[] => {
   const palabras = empresas.map((e) => normalizarRazonSocial(e.razonSocial).split(" ").filter(Boolean));
   const resultado: PosibleSede[] = [];
-  empresas.forEach((hija, i) => {
+  empresas.forEach((_hija, i) => {
     let mejor: { j: number; largo: number } | null = null;
-    empresas.forEach((matriz, j) => {
+    empresas.forEach((_matriz, j) => {
       const m = palabras[j];
       const h = palabras[i];
       if (i === j || m.join("").length < LARGO_MINIMO_MATRIZ || h.length <= m.length) return;

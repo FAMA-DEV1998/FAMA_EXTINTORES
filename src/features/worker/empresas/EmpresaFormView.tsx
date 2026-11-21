@@ -1,10 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Building2, Check, LoaderCircle, Save, TriangleAlert, User } from "lucide-react";
+import { Building2, Check, LoaderCircle, MapPin, Save, TriangleAlert, User } from "lucide-react";
 import { DISTRITOS_LIMA } from "../../../constants";
 import type { EmpresaData } from "../../../types";
 import { validarRucPorTipo, detectarTipoClientePorRuc } from "../../../utils/empresas";
 import { Card, Field, inputCls } from "../components/FormularioUI";
-import { buscarEmpresasParecidas } from "../../../utils/duplicados";
+import { buscarEmpresasParecidas, detectarPosiblesSedes } from "../../../utils/duplicados";
 import AvisoEmpresasParecidas from "../../../components/ui/AvisoEmpresasParecidas";
 
 interface EmpresaFormViewProps {
@@ -13,10 +13,11 @@ interface EmpresaFormViewProps {
   handleEmpresaSave: () => void;
   saving: boolean;
   connected: boolean;
-  empresasExistentes?: { id: string; razonSocial: string; ruc?: string | null }[];
+  empresasExistentes?: { id: string; razonSocial: string; ruc?: string | null; sedes?: { id: string; nombre: string }[] }[];
+  onUsarEmpresa?: (id: string, sedeId: string | null) => void;
 }
 
-export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave, saving, connected, empresasExistentes = [] }: EmpresaFormViewProps) {
+export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave, saving, connected, empresasExistentes = [], onUsarEmpresa }: EmpresaFormViewProps) {
   const tipoCliente = empresa.tipoCliente || "";
   const esPersona = tipoCliente === "persona";
   const maxLen = esPersona ? 8 : 11;
@@ -24,6 +25,11 @@ export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave
   const parecidas = empresa.razonSocial.trim().length >= 3 || empresa.ruc
     ? buscarEmpresasParecidas({ id: empresa.id, razonSocial: empresa.razonSocial, ruc: empresa.ruc }, empresasExistentes)
     : [];
+  const NUEVA = "__empresa_nueva__";
+  const posibleSede = !empresa.id && empresa.razonSocial.trim().length >= 5
+    ? detectarPosiblesSedes([...empresasExistentes, { id: NUEVA, razonSocial: empresa.razonSocial }]).find((p) => p.origen === NUEVA) || null
+    : null;
+  const matriz = posibleSede ? empresasExistentes.find((e) => e.id === posibleSede.destino) : null;
   const motivoBloqueo = !connected
     ? "Sin conexión con el servidor"
     : !empresa.razonSocial
@@ -47,6 +53,20 @@ export default function EmpresaFormView({ empresa, setEmpresa, handleEmpresaSave
           <Field label="Razón Social" className="md:col-span-2">
             <input className={inputCls} value={empresa.razonSocial} onChange={(e) => setEmpresa((p) => ({ ...p, razonSocial: e.target.value }))} placeholder="Nombre oficial de la empresa" />
           </Field>
+          {posibleSede && matriz && (
+            <div className="col-span-2 flex flex-col gap-2.5 p-4 rounded-2xl bg-sky-50 border-2 border-sky-200">
+              <p className="flex items-start gap-2 text-sm font-bold text-sky-900">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-sky-600" />
+                <span>{posibleSede.sedeNombre ? <>Parece la sede <b>«{posibleSede.sedeNombre}»</b> de <b>{matriz.razonSocial}</b>.</> : <>Parece una sede o área de <b>{matriz.razonSocial}</b>, que ya está registrada.</>}</span>
+              </p>
+              {onUsarEmpresa && (
+                <button type="button" onClick={() => onUsarEmpresa(matriz.id, posibleSede.sedeId)} className="self-start px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-black">
+                  Usar {matriz.razonSocial}{posibleSede.sedeNombre ? ` → ${posibleSede.sedeNombre}` : ""}
+                </button>
+              )}
+              <p className="text-xs font-medium text-sky-800/80">Si es otra empresa, puedes guardarla igual.</p>
+            </div>
+          )}
           {parecidas.length > 0 && (
             <div className="col-span-2">
               <AvisoEmpresasParecidas parecidas={parecidas} tema="claro" />

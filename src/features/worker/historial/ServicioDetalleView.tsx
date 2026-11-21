@@ -139,6 +139,7 @@ export default function ServicioDetalleView({
         fPeso, setFPeso, fEstado, setFEstado, soloIncompletos, setSoloIncompletos,
         incompletosCount, marcasDisponibles, agentesDisponibles,
         pesosDisponibles, estadosDisponibles, extintoresOrdenados,
+        fArea, setFArea, areasDisponibles,
     } = filtros;
 
     const activeSedeInfo = servicio.sedeId ? { nombre: sedeNameById[servicio.sedeId] } : null;
@@ -224,6 +225,9 @@ export default function ServicioDetalleView({
                             agentesDisponibles={agentesDisponibles}
                             pesosDisponibles={pesosDisponibles}
                             estadosDisponibles={estadosDisponibles}
+                            fArea={fArea}
+                            setFArea={setFArea}
+                            areasDisponibles={areasDisponibles}
                         />
 
                         {extintoresOrdenados.length === 0 ? (
