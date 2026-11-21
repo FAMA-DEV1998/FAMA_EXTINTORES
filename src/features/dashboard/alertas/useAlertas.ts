@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
 
+export type EstadoSeguimiento = "pendiente" | "contactado" | "agendado";
+export type Seguimiento = { empresaId: string; estado: EstadoSeguimiento; fecha: string | null; nota: string; usuario: string; actualizadoEn: string };
+
 export function useAlertas(socket: Socket | null) {
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [totalVencidas, setTotalVencidas] = useState(0);
@@ -11,6 +14,14 @@ export function useAlertas(socket: Socket | null) {
   const [loadingSilenciadas, setLoadingSilenciadas] = useState(false);
   const [extintoresSilenciados, setExtintoresSilenciados] = useState<any[]>([]);
   const [loadingExtintoresSilenciados, setLoadingExtintoresSilenciados] = useState(false);
+  const [seguimientos, setSeguimientos] = useState<Record<string, Seguimiento>>({});
+
+  const cargarSeguimientos = () => {
+    if (!socket) return;
+    socket.emit("alertas:seguimiento", {}, (res: any) => {
+      if (res?.success) setSeguimientos(Object.fromEntries((res.seguimientos || []).map((s: Seguimiento) => [s.empresaId, s])));
+    });
+  };
 
   const cargarSilenciadas = () => {
     if (!socket) return;
@@ -48,10 +59,13 @@ export function useAlertas(socket: Socket | null) {
     cargar();
     cargarSilenciadas();
     cargarExtintoresSilenciados();
+    cargarSeguimientos();
+    socket.on("alertas:seguimientoChanged", cargarSeguimientos);
     socket.on("alertas:changed", cargar);
     socket.on("alertas:changed", cargarSilenciadas);
     socket.on("alertas:changed", cargarExtintoresSilenciados);
     return () => {
+      socket.off("alertas:seguimientoChanged", cargarSeguimientos);
       socket.off("alertas:changed", cargar);
       socket.off("alertas:changed", cargarSilenciadas);
       socket.off("alertas:changed", cargarExtintoresSilenciados);
@@ -102,7 +116,17 @@ export function useAlertas(socket: Socket | null) {
     });
   };
 
+  const guardarSeguimiento = (data: { empresaId: string; estado: EstadoSeguimiento; fecha?: string | null; nota?: string }, onDone?: (ok: boolean) => void) => {
+    if (!socket) return;
+    socket.emit("alertas:seguimiento:guardar", data, (res: any) => {
+      avisarResultado(res, "Seguimiento guardado");
+      onDone?.(!!res?.success);
+      if (res?.success) cargarSeguimientos();
+    });
+  };
+
   return {
+    seguimientos, guardarSeguimiento,
     empresas, totalVencidas, totalProximas, loading, recargar,
     descartarAlerta, reactivarAlerta, descartarAlertaEmpresa, reactivarAlertaEmpresa,
     empresasSilenciadas, loadingSilenciadas, extintoresSilenciados, loadingExtintoresSilenciados,

@@ -6,7 +6,7 @@ import { sincronizarCamposParrafo } from "../utils/parrafo";
 import { FAMILIA_LABEL_FIJA, formatearAgente, clasificarAgente, construirAgentesTexto, construirAgentesTextoCorto, presionPSIPorDefecto, tipoExtintorLabelCertificado } from "../utils/agentes";
 import { ESTADO_NUEVO_VENTA, construirTextoAccion } from "../utils/trabajo";
 import { marcaCertificado, formatCapacidad, tipoServicioItem, parseFecha, addMonths, formatMesAnio } from "../utils/items";
-import { metaPorDefecto, normalizarHojasGuardadas, serializarHojas } from "../utils/hojas";
+import { extintorEntraEnHoja, metaPorDefecto, normalizarHojasGuardadas, serializarHojas } from "../utils/hojas";
 import { MESES } from "../../../constants";
 import { formatVencimPH, formatRealizadoPH } from "../../../utils/pruebaHidrostatica";
 import toast from "react-hot-toast";
@@ -56,12 +56,7 @@ export function useCertificadoEditor(socket: Socket | null, empresa: any, active
   const hayPqs = familiasDisponibles.some((f) => f.key === "pqs");
 
   const filtrarExtintores = (tipoCertificado: TipoCertificado, filtro: string, filtroEstadoVal: string) =>
-    (extintoresDelServicio || []).filter((e) => {
-      if (tipoCertificado === "ph" && e.ph !== "SI") return false;
-      if (filtro !== "todos" && clasificarAgente(e.agenteExtintor) !== filtro) return false;
-      if (filtroEstadoVal !== "todos" && e.estadoExtintor !== filtroEstadoVal) return false;
-      return true;
-    });
+    (extintoresDelServicio || []).filter((e) => extintorEntraEnHoja(e, tipoCertificado, filtro, filtroEstadoVal));
 
   const construirItems = (tipoCertificado: TipoCertificado, filtro: string, filtroEstadoVal: string): CertificadoItem[] => {
     const fechaServicio = parseFecha(servicio?.fechaRetiro || "");

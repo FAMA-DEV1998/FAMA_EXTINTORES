@@ -1,4 +1,5 @@
-import type { CertificadoDatos, HojaMeta, HojaGuardada } from "../types";
+import type { CertificadoDatos, HojaMeta, HojaGuardada, TipoCertificado } from "../types";
+import { clasificarAgente } from "./agentes";
 
 export const metaPorDefecto = (): HojaMeta => ({
   filtroAgente: "todos",
@@ -24,6 +25,24 @@ export const normalizarHojasGuardadas = (raw: string): HojaGuardada[] => {
   } catch {
     return [];
   }
+};
+
+export const extintorEntraEnHoja = (e: any, tipoCertificado: TipoCertificado, filtro: string, filtroEstado: string): boolean => {
+  if (tipoCertificado === "ph" && e.ph !== "SI") return false;
+  if (filtro !== "todos" && clasificarAgente(e.agenteExtintor) !== filtro) return false;
+  if (filtroEstado !== "todos" && e.estadoExtintor !== filtroEstado) return false;
+  return true;
+};
+
+export const extintoresSinCertificar = (certificado: any, servicio: any, extintores: any[]): any[] => {
+  const hojas = normalizarHojasGuardadas(certificado?.datos || "");
+  if (!servicio || hojas.length === 0) return [];
+  const incluidos = new Set(hojas.flatMap((h) => (h.datos?.items || []).map((i) => i.uid)));
+  const porUid = new Map((extintores || []).map((e: any) => [e.uid, e]));
+  return (servicio.extintorUids || [])
+    .filter((uid: string) => !incluidos.has(uid) && porUid.has(uid))
+    .map((uid: string) => ({ ...porUid.get(uid), ...(servicio.extintorEstados?.[uid] || {}) }))
+    .filter((e: any) => hojas.some((h) => extintorEntraEnHoja(e, h.datos.tipoCertificado, h.meta.filtroAgente, h.meta.filtroEstado)));
 };
 
 export const serializarHojas = (hojas: HojaGuardada[]): string => JSON.stringify({ hojas });

@@ -5,6 +5,7 @@ import type { Extintor, Servicio, TrasladoSede } from "../../../types";
 import ExtintorCard from "./ExtintorCard";
 import ExtintorHistorialModal from "./ExtintorHistorialModal";
 import { useTeclaEscape } from "../../../hooks/useTeclaEscape";
+import { uidDesdeQR } from "../../../utils/qrExtintor";
 
 export type ResultadoScan = {
     extintor: Extintor;
@@ -95,7 +96,7 @@ export default function EscanearQRModal({
                 const { default: jsQR } = await import("jsqr");
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
                 if (code?.data) {
-                    buscarExtintor(code.data);
+                    buscarExtintor(uidDesdeQR(code.data));
                     return;
                 }
             }

@@ -5,10 +5,10 @@ import { confirmar } from "../../../components/ui/Notificaciones";
 import { useFusionEmpresas } from "./useFusionEmpresas";
 import { useSedes } from "../../../hooks/useSedes";
 import SedeModal from "../../../components/sedes/SedeModal";
-import { estadoColor } from "../../../utils/estadosExtintor";
 import { ordinalServicio } from "../../../utils/historial";
 import { mesAnioLabel } from "../../../utils/fechas";
 import { MESES } from "../../../constants";
+import ComparacionExtintores, { buscarCoincidencia, marcarRepetidas, type AccionExtintor, type AccionFusion, type Coincidencia } from "./ComparacionExtintores";
 
 interface Props {
   isOpen: boolean;
@@ -17,33 +17,22 @@ interface Props {
   empresas: { id: string; razonSocial: string; ruc?: string }[];
   origenInicial?: string;
   destinoInicial?: string;
+  sedeInicial?: string | null;
+  accionesIniciales?: Record<string, AccionFusion>;
 }
 
-type AccionExtintor = "mover" | "fusionar" | "omitir";
+export type { AccionExtintor };
 
 const PASOS = ["Empresas", "Sede", "Extintores", "Servicios", "Historial", "Confirmar"];
 
-const compararExtintores = (a: any, b: any): { uid: string; tipo: "igual" | "similar"; motivo: string; destino: any } | null => {
-  const serieA = (a.nSerie || "").trim().toUpperCase();
-  const serieB = (b.nSerie || "").trim().toUpperCase();
-  if (serieA && serieB && serieA === serieB) return { uid: b.uid, tipo: "igual", motivo: "N° de Serie", destino: b };
-  const internoA = (a.nInterno || "").trim().toUpperCase();
-  const internoB = (b.nInterno || "").trim().toUpperCase();
-  if (internoA && internoB && internoA === internoB) return { uid: b.uid, tipo: "similar", motivo: "N° Interno", destino: b };
-  if (a.marca && a.marca === b.marca && a.agenteExtintor === b.agenteExtintor && a.peso === b.peso) {
-    return { uid: b.uid, tipo: "similar", motivo: "Marca + Agente + Peso", destino: b };
-  }
-  return null;
-};
-
-export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas, origenInicial, destinoInicial }: Props) {
+export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas, origenInicial, destinoInicial, sedeInicial, accionesIniciales }: Props) {
   const { preview, cargandoPreview, cargarPreview, limpiarPreview, ejecutando, ejecutar, revertir, historial } = useFusionEmpresas(socket);
 
   const [paso, setPaso] = useState(0);
   const [empresaOrigenId, setEmpresaOrigenId] = useState("");
   const [empresaDestinoId, setEmpresaDestinoId] = useState("");
   const [sedeDestinoId, setSedeDestinoId] = useState<string>("");
-  const [acciones, setAcciones] = useState<Record<string, { accion: AccionExtintor; destinoUid?: string }>>({});
+  const [acciones, setAcciones] = useState<Record<string, AccionFusion>>({});
   const [servicioIds, setServicioIds] = useState<Set<string>>(new Set());
   const [posiciones, setPosiciones] = useState<Record<string, number>>({});
   const [resultado, setResultado] = useState<{ logId: string } | null>(null);
@@ -58,7 +47,7 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
     setEmpresaOrigenId(origenInicial || "");
     setEmpresaDestinoId(destinoInicial || "");
     setSedeDestinoId("");
-    setAcciones({});
+    setAcciones(accionesIniciales || {});
     setServicioIds(new Set());
     setPosiciones({});
     setResultado(null);
@@ -71,7 +60,7 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
   useEffect(() => {
     if (preview) {
       setServicioIds(new Set(preview.servicios.map((s: any) => s.id)));
-      if (preview.sedesDestino.length > 0) setSedeDestinoId(preview.sedesDestino[0].id);
+      if (preview.sedesDestino.length > 0) setSedeDestinoId(preview.sedesDestino.some((s: any) => s.id === sedeInicial) ? sedeInicial! : preview.sedesDestino[0].id);
     }
   }, [preview]);
 
@@ -86,22 +75,25 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
   const sedesDisponibles = sedesHook.sedes.length > 0 ? sedesHook.sedes : (preview?.sedesDestino || []);
   const sedeIdParaComparar = requiereSede ? (sedeDestinoId || null) : null;
 
-  const destinoDeLaSede = preview ? preview.extintoresDestino.filter((d: any) => d.sedeId === sedeIdParaComparar) : [];
-  const coincidenciaPorUid: Record<string, ReturnType<typeof compararExtintores>> = {};
+  const sedeEfectiva = (ext: any): string | null => {
+    if (!requiereSede) return null;
+    const elegida = acciones[ext.uid]?.sedeId;
+    if (elegida && sedesDisponibles.some((s: any) => s.id === elegida)) return elegida;
+    if (ext.sedeSugeridaId && sedesDisponibles.some((s: any) => s.id === ext.sedeSugeridaId)) return ext.sedeSugeridaId;
+    return sedeIdParaComparar;
+  };
+
+  const coincidenciaPorUid: Record<string, Coincidencia | null> = {};
   if (preview) {
     preview.extintoresOrigen.forEach((ext: any) => {
-      let mejor: ReturnType<typeof compararExtintores> = null;
-      for (const d of destinoDeLaSede) {
-        const r = compararExtintores(ext, d);
-        if (r?.tipo === "igual") { mejor = r; break; }
-        if (r?.tipo === "similar" && !mejor) mejor = r;
-      }
-      coincidenciaPorUid[ext.uid] = mejor;
+      coincidenciaPorUid[ext.uid] = buscarCoincidencia(ext, preview.extintoresDestino, sedeEfectiva(ext));
     });
+    marcarRepetidas(coincidenciaPorUid);
   }
 
-  const accionEfectiva = (ext: any): { accion: AccionExtintor; destinoUid?: string } => {
-    if (acciones[ext.uid]) return acciones[ext.uid];
+  const accionEfectiva = (ext: any): AccionFusion => {
+    const elegida = acciones[ext.uid];
+    if (elegida?.accion) return elegida;
     const c = coincidenciaPorUid[ext.uid];
     return c?.tipo === "igual" ? { accion: "fusionar", destinoUid: c.uid } : { accion: "mover" };
   };
@@ -133,8 +125,9 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
     });
   };
 
-  const cambiarAccion = (uid: string, accion: AccionExtintor, destinoUid?: string) => {
-    setAcciones((prev) => ({ ...prev, [uid]: { accion, destinoUid } }));
+  const cambiarAccion = (uid: string, cambio: Partial<AccionFusion>) => {
+    const ext = preview?.extintoresOrigen.find((e: any) => e.uid === uid);
+    setAcciones((prev) => ({ ...prev, [uid]: { ...(ext ? accionEfectiva(ext) : { accion: "mover" as AccionExtintor }), ...prev[uid], ...cambio } }));
   };
 
   const toggleServicio = (id: string) => {
@@ -152,6 +145,7 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
     omitir: preview.extintoresOrigen.filter((e: any) => accionEfectiva(e).accion === "omitir").length,
   } : { mover: 0, fusionar: 0, omitir: 0 };
 
+  const otraSede = preview ? preview.extintoresOrigen.filter((e: any) => accionEfectiva(e).accion === "mover" && sedeEfectiva(e) !== sedeIdParaComparar).length : 0;
   const serviciosOrdenados = preview ? preview.servicios : [];
   const uidsQueSeTransfieren = new Set(
     (preview?.extintoresOrigen || []).filter((e: any) => accionEfectiva(e).accion !== "omitir").map((e: any) => e.uid),
@@ -171,7 +165,10 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
   })();
 
   const handleConfirmar = () => {
-    const extintoresPayload = (preview?.extintoresOrigen || []).map((ext: any) => ({ uid: ext.uid, ...accionEfectiva(ext) }));
+    const extintoresPayload = (preview?.extintoresOrigen || []).map((ext: any) => {
+      const a = accionEfectiva(ext);
+      return { uid: ext.uid, accion: a.accion, destinoUid: a.destinoUid, sedeId: sedeEfectiva(ext) };
+    });
     const servicioPosiciones: Record<string, number> = {};
     Array.from(seleccionEfectiva).forEach((id) => {
       const s = serviciosOrdenados.find((x: any) => x.id === id);
@@ -195,7 +192,6 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
   const empresaDestino = empresas.find((e) => e.id === empresaDestinoId);
   const nombreSedeDestino = sedesDisponibles.find((s: any) => s.id === sedeDestinoId)?.nombre;
 
-  const campoResaltado = (motivo: string | undefined, campo: string) => !!motivo && motivo.includes(campo);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -330,7 +326,7 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
                       <button onClick={sedesHook.openCreateSede} className="self-start px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200">
                         + Crear nueva sede
                       </button>
-                      <p className="text-[11px] text-zinc-500">Los extintores de la sede origen solo se compararán contra los extintores ya registrados en esta sede destino.</p>
+                      <p className="text-[11px] text-zinc-500">Es la sede principal: aquí van los servicios y los extintores, salvo que en el paso siguiente elijas otra sede para algún extintor (por ejemplo, si su observación dice «Cajamarquilla»).</p>
                     </>
                   )}
                 </div>
@@ -339,71 +335,22 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
               {paso === 2 && preview && (
                 <div className="flex flex-col gap-4">
                   <p className="text-[11px] text-zinc-500">
-                    Comparando contra los extintores de {requiereSede ? `la sede "${nombreSedeDestino || "—"}"` : `${empresaDestino?.razonSocial}`}. Los campos resaltados son los que generan la coincidencia.
+                    Se compara con todos los extintores de {empresaDestino?.razonSocial}. Solo se propone fusionar cuando coinciden la serie y no hay diferencias en marca, agente, peso o fabricación; si la serie se repite con otros datos se trata como otro extintor. {requiereSede ? "Cada extintor puede ir a una sede distinta; si su observación menciona una sede, se elige esa." : ""}
                   </p>
-                  <div className="overflow-x-auto rounded-xl border border-zinc-800/60">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-zinc-900/60 border-b border-zinc-800/60 text-left">
-                          <th className="px-3 py-2.5 font-black text-zinc-500 uppercase text-[10px]" colSpan={2}>Extintor origen</th>
-                          <th className="px-3 py-2.5 font-black text-emerald-500 uppercase text-[10px]" colSpan={2}>Coincide con (destino)</th>
-                          <th className="px-3 py-2.5 font-black text-zinc-500 uppercase text-[10px]">Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.extintoresOrigen.map((ext: any) => {
-                          const actual = accionEfectiva(ext);
-                          const coincidencia = coincidenciaPorUid[ext.uid];
-                          const destino = coincidencia?.destino;
-                          return (
-                            <tr key={ext.uid} className="border-b border-zinc-800/40 last:border-0 align-top">
-                              <td className="px-3 py-2.5 whitespace-nowrap">
-                                <p className={`font-bold ${campoResaltado(coincidencia?.motivo, "Serie") ? "text-amber-300" : "text-zinc-200"}`}>{ext.nSerie || "—"}</p>
-                                <p className="text-zinc-500">{ext.nInterno || "—"}</p>
-                              </td>
-                              <td className="px-3 py-2.5 whitespace-nowrap">
-                                <p className={`${campoResaltado(coincidencia?.motivo, "Marca") || campoResaltado(coincidencia?.motivo, "Agente") ? "text-amber-300 font-bold" : "text-zinc-400"}`}>{ext.marca || "—"} · {ext.agenteExtintor || "—"}</p>
-                                <p className={`${campoResaltado(coincidencia?.motivo, "Peso") ? "text-amber-300 font-bold" : "text-zinc-500"}`}>{ext.peso ? `${ext.peso} ${ext.unidadPeso}` : "—"}</p>
-                                <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${estadoColor[ext.estadoExtintor] || "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>{ext.estadoExtintor || "—"}</span>
-                              </td>
-                              {destino ? (
-                                <>
-                                  <td className="px-3 py-2.5 whitespace-nowrap">
-                                    <p className={`font-bold ${campoResaltado(coincidencia?.motivo, "Serie") ? "text-amber-300" : "text-zinc-200"}`}>{destino.nSerie || "—"}</p>
-                                    <p className="text-zinc-500">{destino.nInterno || "—"}</p>
-                                  </td>
-                                  <td className="px-3 py-2.5 whitespace-nowrap">
-                                    <p className={`${campoResaltado(coincidencia?.motivo, "Marca") || campoResaltado(coincidencia?.motivo, "Agente") ? "text-amber-300 font-bold" : "text-zinc-400"}`}>{destino.marca || "—"} · {destino.agenteExtintor || "—"}</p>
-                                    <p className={`${campoResaltado(coincidencia?.motivo, "Peso") ? "text-amber-300 font-bold" : "text-zinc-500"}`}>{destino.peso ? `${destino.peso} ${destino.unidadPeso}` : "—"}</p>
-                                    <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${coincidencia.tipo === "igual" ? "bg-emerald-950/40 text-emerald-300 border-emerald-900/50" : "bg-amber-950/40 text-amber-300 border-amber-900/50"}`}>
-                                      {coincidencia.tipo === "igual" ? <Check className="w-3 h-3 inline -mt-0.5 mr-0.5" strokeWidth={3} /> : "≈ "}{coincidencia.tipo === "igual" ? "Igual" : "Similar"} · {coincidencia.motivo}
-                                    </span>
-                                  </td>
-                                </>
-                              ) : (
-                                <td className="px-3 py-2.5 text-zinc-600" colSpan={2}>Sin coincidencia en esta sede</td>
-                              )}
-                              <td className="px-3 py-2.5">
-                                <select
-                                  value={actual.accion}
-                                  onChange={(e) => cambiarAccion(ext.uid, e.target.value as AccionExtintor, coincidencia?.uid)}
-                                  className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200"
-                                >
-                                  <option value="mover">Mover como nuevo</option>
-                                  {coincidencia && <option value="fusionar">Fusionar con destino</option>}
-                                  <option value="omitir">Omitir (dejar en origen)</option>
-                                </select>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ComparacionExtintores
+                    origen={preview.extintoresOrigen}
+                    coincidencias={coincidenciaPorUid}
+                    requiereSede={requiereSede}
+                    sedes={sedesDisponibles}
+                    accionDe={accionEfectiva}
+                    sedeDe={sedeEfectiva}
+                    onCambiar={cambiarAccion}
+                  />
                   <div className="flex gap-2 flex-wrap">
                     <span className="px-2.5 py-1 rounded-md bg-zinc-800 text-[11px] font-bold text-zinc-300">Mover: {conteo.mover}</span>
                     <span className="px-2.5 py-1 rounded-md bg-emerald-950/40 text-[11px] font-bold text-emerald-300">Fusionar: {conteo.fusionar}</span>
                     <span className="px-2.5 py-1 rounded-md bg-zinc-800 text-[11px] font-bold text-zinc-400">Omitir: {conteo.omitir}</span>
+                    {requiereSede && otraSede > 0 && <span className="px-2.5 py-1 rounded-md bg-sky-950/40 text-[11px] font-bold text-sky-300">A otra sede: {otraSede}</span>}
                   </div>
                 </div>
               )}
@@ -490,7 +437,7 @@ export default function FusionEmpresasModal({ isOpen, onClose, socket, empresas,
                   <p className="text-sm font-bold text-zinc-200">Resumen de la fusión</p>
                   <div className="flex flex-col gap-1.5 text-xs text-zinc-400 bg-zinc-950/40 border border-zinc-800/60 rounded-xl p-4">
                     <p><span className="text-zinc-200 font-bold">{empresaOrigen?.razonSocial}</span> se unificará dentro de <span className="text-zinc-200 font-bold">{empresaDestino?.razonSocial}</span>{requiereSede && sedeDestinoId ? ` (sede: ${nombreSedeDestino || "—"})` : ""}.</p>
-                    <p>{conteo.mover} extintor{conteo.mover === 1 ? "" : "es"} se moverán como nuevos, {conteo.fusionar} se fusionarán con su equivalente, {conteo.omitir} se omiten.</p>
+                    <p>{conteo.mover} extintor{conteo.mover === 1 ? "" : "es"} se moverán como nuevos, {conteo.fusionar} se fusionarán con su equivalente, {conteo.omitir} se omiten.{requiereSede && otraSede > 0 ? ` ${otraSede} irán a otra sede según lo elegido.` : ""}</p>
                     <p>{seleccionEfectiva.size} servicio{seleccionEfectiva.size === 1 ? "" : "s"} de historial se transferirán, conservando fechas, extintores y evidencias.</p>
                     <p><span className="text-zinc-200 font-bold">{empresaOrigen?.razonSocial}</span> quedará archivada al terminar{conteo.omitir > 0 ? `, junto con los ${conteo.omitir} extintor${conteo.omitir === 1 ? "" : "es"} omitido${conteo.omitir === 1 ? "" : "s"}` : ""}. Podrás restaurarla desde Archivados.</p>
                     <p>Los datos generales (nombre, RUC, dirección) de {empresaDestino?.razonSocial} no se modifican.</p>

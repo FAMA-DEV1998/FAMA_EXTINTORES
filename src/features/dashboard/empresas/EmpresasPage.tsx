@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { confirmar } from "../../../components/ui/Notificaciones";
 import { useNavigate } from "react-router-dom";
-import { ArrowDownUp, ArrowRight, Building2, Clock, Copy, FireExtinguisher, GitMerge, MapPin, Plus, Search, TriangleAlert, X } from "lucide-react";
+import { ArrowDownUp, Building2, Clock, FireExtinguisher, GitMerge, LayoutGrid, List, MapPin, Plus, Search, X } from "lucide-react";
 import type { Socket } from "socket.io-client";
 import { useFiltrosDashboard } from "../hooks/useFiltrosDashboard";
 import { useEmpresaForm } from "./useEmpresaForm";
@@ -9,14 +11,20 @@ import { useEmpresaSeleccionada } from "./useEmpresaSeleccionada";
 import EmpresaModal from "./EmpresaModal";
 import FusionEmpresasModal from "./FusionEmpresasModal";
 import ScrollableRow from "../../../components/ui/ScrollableRow";
-import { TIPO_CLIENTE_LABELS, esMultisede, CLASIFICACION_FILTROS, filtrarPorClasificacion, type ClasificacionFiltro } from "../../../utils/empresas";
-import { EtiquetaClasificacion, IconoEmpresa } from "../../../components/ui/IconosEmpresa";
+import { CLASIFICACION_FILTROS, filtrarPorClasificacion, type ClasificacionFiltro } from "../../../utils/empresas";
+import { EtiquetaClasificacion } from "../../../components/ui/IconosEmpresa";
 import { ordinalServicio } from "../../../utils/historial";
 import { MESES } from "../../../constants";
 import type { Catalogs } from "../../../hooks/useSocket";
 import { usePreferenciaLocal } from "../../../hooks/usePreferenciaLocal";
-import { detectarDuplicados, ordenarEmpresas, OPCIONES_ORDEN_EMPRESAS, TEXTO_MOTIVO_DUPLICADO, type OrdenEmpresas } from "../../../utils/duplicados";
+import { detectarDuplicados, detectarPosiblesSedes, ordenarEmpresas, OPCIONES_ORDEN_EMPRESAS, TEXTO_MOTIVO_DUPLICADO, type OrdenEmpresas } from "../../../utils/duplicados";
 import ResumenPanel from "../resumen/ResumenPanel";
+import ListaEmpresas, { type Parecida, type VistaEmpresas } from "./ListaEmpresas";
+import RevisionDatosPanel, { type ParDuplicado } from "./RevisionDatosPanel";
+import PlanDatosModal, { type DatosUnificar } from "./PlanDatosModal";
+import { useResumenEmpresas, type SedePorObservacion } from "./useResumenEmpresas";
+
+const OPCIONES_ORDEN: { value: OrdenEmpresas; label: string }[] = [{ value: "servicio", label: "Último servicio primero" }, ...OPCIONES_ORDEN_EMPRESAS];
 
 const rutaServicioReciente = (s: any): string => {
   const [anio, mesNum] = (s.fechaRetiro || "").split("-");
@@ -50,21 +58,70 @@ export default function EmpresasPage({ socket, role }: { socket: Socket | null; 
   const { search, setSearch, filtered } = filters;
 
   const [fTipo, setFTipo] = useState<ClasificacionFiltro>("");
-  const [orden, setOrden] = usePreferenciaLocal<OrdenEmpresas>("fama_orden_empresas", "recientes");
-  const [soloDuplicados, setSoloDuplicados] = useState(false);
-  const duplicados = useMemo(() => detectarDuplicados(empresas), [empresas]);
-  const filteredFinal = ordenarEmpresas(
-    filtrarPorClasificacion(filtered, fTipo).filter((e) => !soloDuplicados || duplicados.has(e.id)),
-    orden,
-  );
+  const [orden, setOrden] = usePreferenciaLocal<OrdenEmpresas>("fama_orden_empresas", "servicio");
+  const [vista, setVista] = usePreferenciaLocal<VistaEmpresas>("fama_vista_empresas", "lista");
+  const [paresOcultos, setParesOcultos] = usePreferenciaLocal<string[]>("fama_duplicados_ocultos", []);
+  const resumen = useResumenEmpresas(socket);
+  const porEmpresa = resumen?.porEmpresa || null;
+  const filteredFinal = ordenarEmpresas(filtrarPorClasificacion(filtered, fTipo), orden, (e) => porEmpresa?.[e.id]?.ultimoServicio || "");
+
+  const pares = useMemo<ParDuplicado[]>(() => {
+    const porId = new Map(empresas.map((e) => [e.id, e]));
+    const mapa = new Map<string, ParDuplicado>();
+    const agregar = (x: string, y: string, motivo: string, sugerencia?: ParDuplicado["sugerencia"]) => {
+      const a = porId.get(x), b = porId.get(y);
+      if (!a || !b) return;
+      const clave = [x, y].sort().join("|");
+      if (paresOcultos.includes(clave)) return;
+      const previo = mapa.get(clave);
+      mapa.set(clave, previo ? { ...previo, motivo: `${previo.motivo} · ${motivo}`, sugerencia: previo.sugerencia || sugerencia } : { clave, a: { id: a.id, razonSocial: a.razonSocial }, b: { id: b.id, razonSocial: b.razonSocial }, motivo, sugerencia });
+    };
+    detectarDuplicados(empresas).forEach((lista, id) => lista.forEach((d) => { if (id < d.id) agregar(id, d.id, TEXTO_MOTIVO_DUPLICADO[d.motivo]); }));
+    detectarPosiblesSedes(empresas).forEach((s) => agregar(s.origen, s.destino, s.sedeNombre ? `Parece la sede «${s.sedeNombre}» de ${porId.get(s.destino)?.razonSocial}` : `Parece una sede nueva «${s.parte}» de ${porId.get(s.destino)?.razonSocial}`, { origen: s.origen, destino: s.destino, sedeDestinoId: s.sedeId }));
+    (resumen?.duplicadosPorExtintores || []).forEach((d) => agregar(d.a, d.b, `${d.compartidos} extintor${d.compartidos === 1 ? "" : "es"} con la misma serie (${d.series.slice(0, 3).join(", ")})`));
+    return [...mapa.values()];
+  }, [empresas, resumen, paresOcultos]);
+
+  const parecidas = useMemo(() => {
+    const m = new Map<string, Parecida[]>();
+    for (const p of pares) {
+      const rol = (id: string) => (p.sugerencia ? { esSedeDe: p.sugerencia.origen === id, tieneSede: p.sugerencia.destino === id } : {});
+      m.set(p.a.id, [...(m.get(p.a.id) || []), { clave: p.clave, id: p.b.id, razonSocial: p.b.razonSocial, motivo: p.motivo, ...rol(p.a.id) }]);
+      m.set(p.b.id, [...(m.get(p.b.id) || []), { clave: p.clave, id: p.a.id, razonSocial: p.a.razonSocial, motivo: p.motivo, ...rol(p.b.id) }]);
+    }
+    return m;
+  }, [pares]);
+
   const [fusionModal, setFusionModal] = useState(false);
-  const [fusionPar, setFusionPar] = useState<{ origen: string; destino: string } | null>(null);
+  const [fusionPar, setFusionPar] = useState<DatosUnificar | null>(null);
+  const [planModal, setPlanModal] = useState(false);
   const puedeFusionar = role === "admin" || role === "boss";
-  const hayFiltros = !!(search || fTipo || soloDuplicados);
-  const limpiarFiltros = () => { setSearch(""); setFTipo(""); setSoloDuplicados(false); };
-  const abrirFusion = (par: { origen: string; destino: string } | null) => {
+  const hayFiltros = !!(search || fTipo);
+  const limpiarFiltros = () => { setSearch(""); setFTipo(""); };
+  const abrirFusion = (par: DatosUnificar | null) => {
     setFusionPar(par);
     setFusionModal(true);
+  };
+  const reasignarPorObservacion = async (items: SedePorObservacion[]) => {
+    if (!socket || !items.length) return;
+    const ok = await confirmar({ titulo: items.length === 1 ? "¿Reasignar este extintor?" : `¿Reasignar ${items.length} extintores?`, mensaje: "Cada uno pasará a la sede que indica su observación y quedará registrado como traslado.", textoConfirmar: "Reasignar" });
+    if (!ok) return;
+    const fecha = new Date().toISOString().slice(0, 10);
+    let fallidos = 0;
+    for (const x of items) {
+      const res: any = await new Promise((r) => socket.emit("traslado:create", { extintorUid: x.uid, rowIndex: x.rowIndex, empresaId: x.empresaId, sedeOrigenId: x.sedeActualId, sedeDestinoId: x.sedeSugeridaId, fecha, motivo: `Según observación: ${x.observaciones}`.slice(0, 200) }, r));
+      if (!res?.success) fallidos++;
+    }
+    if (fallidos) toast.error(`${fallidos} extintor(es) no se pudieron reasignar`);
+    else toast.success(items.length === 1 ? "Extintor reasignado" : `${items.length} extintores reasignados`);
+  };
+
+  const unificarPar = (p: ParDuplicado) => {
+    if (p.sugerencia) { abrirFusion({ ...p.sugerencia, acciones: {} }); return; }
+    const extA = porEmpresa?.[p.a.id]?.extintores || 0;
+    const extB = porEmpresa?.[p.b.id]?.extintores || 0;
+    const [origen, destino] = extA <= extB ? [p.a.id, p.b.id] : [p.b.id, p.a.id];
+    abrirFusion({ origen, destino, sedeDestinoId: null, acciones: {} });
   };
 
   return (
@@ -131,7 +188,7 @@ export default function EmpresasPage({ socket, role }: { socket: Socket | null; 
           <ArrowDownUp className="w-3.5 h-3.5 shrink-0" />
           <span className="sr-only">Ordenar empresas</span>
           <select value={orden} onChange={(e) => setOrden(e.target.value as OrdenEmpresas)} className="bg-transparent py-1.5 pr-2 text-zinc-200 focus:outline-none cursor-pointer">
-            {OPCIONES_ORDEN_EMPRESAS.map((o) => <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}</option>)}
+            {OPCIONES_ORDEN.map((o) => <option key={o.value} value={o.value} className="bg-zinc-900">{o.label}</option>)}
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-2">
@@ -142,6 +199,14 @@ export default function EmpresasPage({ socket, role }: { socket: Socket | null; 
               className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${fTipo === f.value ? "bg-red-600 border-red-600 text-white" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-600"}`}
             >
               <EtiquetaClasificacion value={f.value} label={f.label} />
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-1" role="group" aria-label="Vista">
+          {([["lista", List, "Lista"], ["tarjetas", LayoutGrid, "Tarjetas"]] as const).map(([v, Icono, texto]) => (
+            <button key={v} onClick={() => setVista(v)} aria-pressed={vista === v} title={texto} className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${vista === v ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
+              <Icono className="w-3.5 h-3.5" /><span className="hidden xl:inline">{texto}</span>
             </button>
           ))}
         </div>
@@ -172,22 +237,20 @@ export default function EmpresasPage({ socket, role }: { socket: Socket | null; 
       )}
     </div>
 
-    {empresasCargadas && duplicados.size > 0 && (
-      <div className={`mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3.5 rounded-2xl border ${soloDuplicados ? "bg-amber-950/40 border-amber-700/60" : "bg-amber-950/20 border-amber-900/40"}`}>
-        <div className="flex items-start gap-3">
-          <Copy className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-black text-amber-200">{duplicados.size} empresas podrían estar registradas dos veces</p>
-            <p className="text-xs text-amber-400/80 mt-0.5">Tienen el mismo RUC/DNI o un nombre igual o muy parecido.{puedeFusionar ? " Revísalas y unifícalas para no partir su historial." : ""}</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setSoloDuplicados(!soloDuplicados)}
-          className="shrink-0 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black transition-colors"
-        >
-          {soloDuplicados ? "Ver todas las empresas" : "Revisar posibles duplicados"}
-        </button>
-      </div>
+    {puedeFusionar && empresasCargadas && (
+      <RevisionDatosPanel
+        socket={socket}
+        sinClasificar={empresas.filter((e) => !e.tipoCliente).length}
+        filtrandoSinClasificar={fTipo === "sin_clasificar"}
+        onVerSinClasificar={() => setFTipo(fTipo === "sin_clasificar" ? "" : "sin_clasificar")}
+        pares={pares}
+        onUnificar={unificarPar}
+        onOcultarPar={(clave) => setParesOcultos([...paresOcultos, clave])}
+        onImportar={() => setPlanModal(true)}
+        sedesObservacion={resumen?.sedesPorObservacion || []}
+        nombreEmpresa={(id) => empresas.find((e) => e.id === id)?.razonSocial || ""}
+        onReasignar={reasignarPorObservacion}
+      />
     )}
 
     {/* Empresas */}
@@ -216,65 +279,16 @@ export default function EmpresasPage({ socket, role }: { socket: Socket | null; 
     ) : (
       <>
         <p className="text-sm font-bold text-zinc-500 mb-4 px-1">{filteredFinal.length} {filteredFinal.length === 1 ? "empresa encontrada" : "empresas encontradas"}</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-          {filteredFinal.map((emp) => {
-            const parecidas = duplicados.get(emp.id) || [];
-            return (
-            <div
-              key={emp.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate(`/dashboard/${emp.slug}/extintores`)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/dashboard/${emp.slug}/extintores`); } }}
-              className="group cursor-pointer flex flex-col text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 bg-zinc-900/40 hover:bg-zinc-900/80 border border-zinc-800/60 hover:border-zinc-600 rounded-2xl p-5 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
-            >
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 text-zinc-400 group-hover:bg-red-950/50 group-hover:text-red-400 flex items-center justify-center shrink-0 transition-colors">
-                    <IconoEmpresa empresa={emp} className="w-5 h-5" />
-                  </div>
-                  <p className="font-black text-zinc-200 text-base truncate group-hover:text-white transition-colors">
-                    {emp.razonSocial}
-                  </p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-zinc-600 group-hover:text-red-400 transition-all transform group-hover:translate-x-1 shrink-0" />
-              </div>
-
-              {!emp.tipoCliente && (
-                <p className="flex items-center gap-1 text-[11px] font-bold text-amber-500 mb-3 -mt-2"><TriangleAlert className="w-3.5 h-3.5" />Falta definir clasificación de cliente</p>
-              )}
-
-              {parecidas.length > 0 && (
-                <div className="mb-3 -mt-1 flex flex-col gap-2 px-3 py-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50">
-                  <p className="flex items-start gap-1.5 text-[11px] font-bold text-amber-300">
-                    <Copy className="w-3.5 h-3.5 shrink-0 mt-px" />
-                    <span className="min-w-0">Posible duplicado de <span className="text-amber-100">{parecidas[0].razonSocial}</span> ({TEXTO_MOTIVO_DUPLICADO[parecidas[0].motivo]}){parecidas.length > 1 ? ` y ${parecidas.length - 1} más` : ""}</span>
-                  </p>
-                  {puedeFusionar && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); abrirFusion({ origen: emp.id, destino: parecidas[0].id }); }}
-                      className="self-start flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/90 hover:bg-amber-400 text-zinc-950 text-[11px] font-black"
-                    >
-                      <GitMerge className="w-3.5 h-3.5" />Unificar
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs w-full bg-zinc-950/30 p-3 rounded-xl border border-zinc-800/30">
-                <span className="text-zinc-500 font-medium">RUC</span>
-                <span className="text-zinc-300 font-semibold text-right truncate">{emp.ruc || "—"}</span>
-                <span className="text-zinc-500 font-medium">Tipo</span>
-                <span className="text-zinc-300 font-semibold text-right truncate">{esMultisede(emp) ? "Multisede" : emp.tipoCliente ? TIPO_CLIENTE_LABELS[emp.tipoCliente] : "—"}</span>
-                <span className="text-zinc-500 font-medium">Distrito</span>
-                <span className="text-zinc-300 font-semibold text-right truncate">{emp.distrito || "—"}</span>
-                <span className="text-zinc-500 font-medium">Solicitante</span>
-                <span className="text-zinc-300 font-semibold text-right truncate">{emp.nombresApellidos || "—"}</span>
-              </div>
-            </div>
-            );
-          })}
-        </div>
+        <ListaEmpresas
+          empresas={filteredFinal}
+          resumen={porEmpresa}
+          diasProximos={resumen?.diasProximos || 90}
+          vista={vista}
+          parecidas={parecidas}
+          puedeFusionar={puedeFusionar}
+          onAbrir={(emp) => navigate(`/dashboard/${emp.slug}/extintores`)}
+          onUnificar={(clave) => { const p = pares.find((x) => x.clave === clave); if (p) unificarPar(p); }}
+        />
       </>
     )}
   </div>
@@ -283,7 +297,10 @@ export default function EmpresasPage({ socket, role }: { socket: Socket | null; 
         <EmpresaModal title="Nueva Empresa" icon={Building2} form={empresaForm} setForm={setEmpresaForm} onClose={() => setCreateEmpresaModal(false)} onSave={saveNewEmpresa} saving={saving} empresasExistentes={empresas} />
       )}
       {puedeFusionar && (
-        <FusionEmpresasModal isOpen={fusionModal} onClose={() => setFusionModal(false)} socket={socket} empresas={empresas} origenInicial={fusionPar?.origen} destinoInicial={fusionPar?.destino} />
+        <>
+          <FusionEmpresasModal isOpen={fusionModal} onClose={() => setFusionModal(false)} socket={socket} empresas={empresas} origenInicial={fusionPar?.origen} destinoInicial={fusionPar?.destino} sedeInicial={fusionPar?.sedeDestinoId} accionesIniciales={fusionPar?.acciones} />
+          <PlanDatosModal isOpen={planModal} visible={!fusionModal} onClose={() => setPlanModal(false)} socket={socket} onUnificar={abrirFusion} />
+        </>
       )}
     </>
   );

@@ -1,3 +1,5 @@
+import { enlaceExtintor } from "./qrExtintor";
+
 export const STICKER_TEMPLATE_URL = "/templates/sticker-extintor-v2.svg";
 
 export type StickerData = {
@@ -70,7 +72,7 @@ export const generarStickerPng = async (data: StickerData): Promise<Blob> => {
     const width = placeholder.getAttribute("width") || "135";
     const height = placeholder.getAttribute("height") || "135";
 
-    const qrDataUrl = await QRCode.toDataURL(data.uid, { margin: 0, width: 512 });
+    const qrDataUrl = await QRCode.toDataURL(enlaceExtintor(data.uid), { margin: 0, width: 512 });
 
     const image = doc.createElementNS("http://www.w3.org/2000/svg", "image");
     image.setAttribute("x", x);

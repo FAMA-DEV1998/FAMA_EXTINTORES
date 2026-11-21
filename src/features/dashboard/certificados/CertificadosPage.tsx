@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { CalendarDays, ChevronDown, Eye, FileText, Globe, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronDown, Eye, FileText, Globe, Pencil, Trash2 } from "lucide-react";
 import { confirmar } from "../../../components/ui/Notificaciones";
 import { useEmpresaScope } from "../empresas/EmpresaScopeContext";
 import { useCertificadosGuardados } from "../../certificados/hooks/useCertificadosGuardados";
@@ -8,8 +8,9 @@ import { useCertificadoEditor } from "../../certificados/hooks/useCertificadoEdi
 import { useServicios } from "../../../hooks/useServicios";
 import CertificadoGuardadoModal from "../../certificados/components/CertificadoGuardadoModal";
 import CertificadoEditorModal from "../../certificados/components/CertificadoEditorModal";
+import PublicarPendientes from "../../certificados/components/PublicarPendientes";
 import { MESES } from "../../../constants";
-import { normalizarHojasGuardadas } from "../../certificados/utils/hojas";
+import { extintoresSinCertificar, normalizarHojasGuardadas } from "../../certificados/utils/hojas";
 
 const labelMes = (mesEtiqueta: string): string => {
   if (!mesEtiqueta) return "Sin fecha";
@@ -31,18 +32,24 @@ export default function CertificadosPage() {
   const [certificadoParaCargar, setCertificadoParaCargar] = useState<any | null>(null);
   const [mesAbierto, setMesAbierto] = useState<string | null>(null);
   const [codigosWeb, setCodigosWeb] = useState<Record<string, string>>({});
+  const [enWeb, setEnWeb] = useState<Set<string> | null>(null);
   useEffect(() => {
     if (!socket || !selectedEmpresa?.id) return;
     const cargar = () => socket.emit("web:certificados:list", { empresaId: selectedEmpresa.id }, (res: any) => {
       if (!res?.success) return;
       const m: Record<string, string> = {};
-      for (const c of res.certificados || []) if (c.certificadoId && c.activo) m[c.certificadoId] = c.codigo;
+      const todos = new Set<string>();
+      for (const c of res.certificados || []) {
+        if (c.certificadoId && !c.desactualizado) todos.add(c.certificadoId);
+        if (c.certificadoId && c.activo) m[c.certificadoId] = c.codigo;
+      }
       setCodigosWeb(m);
+      setEnWeb(todos);
     });
     cargar();
     socket.on("web:certificados:changed", cargar);
     return () => { socket.off("web:certificados:changed", cargar); };
-  }, [socket, selectedEmpresa?.id]);
+  }, [socket, selectedEmpresa?.id, certificados]);
 
   const extintoresDelServicio = useMemo(() => {
     if (!editandoServicio) return [];
@@ -85,6 +92,18 @@ export default function CertificadosPage() {
       setMesAbierto(gruposPorMes[gruposPorMes.length - 1].clave);
     }
   }, [gruposPorMes, mesAbierto]);
+
+  const sinCertificar = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of certificados) {
+      const n = extintoresSinCertificar(c, servicios.find((s: any) => s.id === c.servicioId), extintores).length;
+      if (n) m[c.id] = n;
+    }
+    return m;
+  }, [certificados, servicios, extintores]);
+  const totalSinCertificar = Object.keys(sinCertificar).length;
+
+  const pendientesWeb = useMemo(() => (enWeb ? certificados.filter((c: any) => !enWeb.has(c.id)) : []), [certificados, enWeb]);
 
   const handleEliminar = async (id: string) => {
     const ok = await confirmar({
@@ -135,7 +154,15 @@ export default function CertificadosPage() {
             {hasSedes && !activeSede && " · Historial previo a sedes / sin sede asignada"}
           </p>
         </div>
+        <PublicarPendientes socket={socket} pendientes={pendientesWeb} />
       </div>
+
+      {totalSinCertificar > 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl border border-amber-800/50 bg-amber-950/30 text-sm text-amber-200">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400" />
+          <p><span className="font-black">{totalSinCertificar === 1 ? "1 certificado pendiente" : `${totalSinCertificar} certificados pendientes`} de actualización.</span> Su servicio tiene extintores que no figuran en el certificado (por ejemplo, tras unificar servicios). Edítalo, guárdalo y vuelve a publicarlo.</p>
+        </div>
+      )}
 
       {loading && certificados.length === 0 ? (
         <div className="flex items-center justify-center py-20">
@@ -159,6 +186,7 @@ export default function CertificadosPage() {
                 >
                   <span className="flex items-center gap-2 text-sm font-black text-zinc-100"><CalendarDays className="w-4 h-4 text-zinc-400" />{grupo.etiqueta}</span>
                   <span className="flex items-center gap-3">
+                    {grupo.certificados.some((c: any) => sinCertificar[c.id]) && <AlertTriangle className="w-4 h-4 text-amber-400" aria-label="Certificado pendiente de actualización" />}
                     <span className="text-[11px] font-bold text-zinc-500">{grupo.certificados.length} certificado{grupo.certificados.length === 1 ? "" : "s"}</span>
                     <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${abierto ? "rotate-180" : ""}`} />
                   </span>
@@ -178,7 +206,10 @@ export default function CertificadosPage() {
                       <tbody>
                         {grupo.certificados.map((c: any) => (
                           <tr key={c.id} className="border-b border-zinc-800/40 last:border-0 hover:bg-zinc-900/30">
-                            <td className="px-4 py-3 text-xs text-zinc-300">{c.nombre || "—"}</td>
+                            <td className="px-4 py-3 text-xs text-zinc-300">
+                              {c.nombre || "—"}
+                              {sinCertificar[c.id] && <span className="mt-1 flex w-fit items-center gap-1 rounded-md bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 text-[10px] font-bold text-amber-300"><AlertTriangle className="w-3 h-3" />Certificado pendiente de actualización · {sinCertificar[c.id]} extintor{sinCertificar[c.id] === 1 ? "" : "es"} nuevo{sinCertificar[c.id] === 1 ? "" : "s"}</span>}
+                            </td>
                             <td className="px-4 py-3 text-xs text-zinc-400">{c.tipoCertificado === "ph" ? "Prueba Hidrostática" : "Garantía y Operatividad"}</td>
                             <td className="px-4 py-3 text-xs text-zinc-500 whitespace-nowrap">{c.createdAt ? new Date(c.createdAt).toLocaleDateString("es-PE") : "—"}</td>
                             <td className="px-4 py-3 text-xs whitespace-nowrap">{codigosWeb[c.id] ? <span className="inline-flex items-center gap-1 font-bold text-emerald-400"><Globe className="w-3.5 h-3.5" />{codigosWeb[c.id]}</span> : <span className="text-zinc-600">—</span>}</td>

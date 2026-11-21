@@ -90,7 +90,7 @@ export const TEXTO_MOTIVO_DUPLICADO: Record<MotivoDuplicado, string> = {
   parecido: "nombre muy parecido",
 };
 
-export type OrdenEmpresas = "recientes" | "antiguas" | "az" | "za";
+export type OrdenEmpresas = "servicio" | "recientes" | "antiguas" | "az" | "za";
 
 export const OPCIONES_ORDEN_EMPRESAS: { value: OrdenEmpresas; label: string }[] = [
   { value: "recientes", label: "Más recientes primero" },
@@ -99,9 +99,36 @@ export const OPCIONES_ORDEN_EMPRESAS: { value: OrdenEmpresas; label: string }[] 
   { value: "za", label: "Nombre Z → A" },
 ];
 
-export const ordenarEmpresas = <T extends { razonSocial: string }>(lista: T[], orden: OrdenEmpresas): T[] => {
-  if (orden === "recientes") return lista;
+export const ordenarEmpresas = <T extends { id?: string; razonSocial: string }>(lista: T[], orden: OrdenEmpresas, ultimoServicio?: (e: T) => string): T[] => {
+  if (orden === "servicio" && ultimoServicio) return [...lista].sort((a, b) => ultimoServicio(b).localeCompare(ultimoServicio(a)));
+  if (orden === "recientes" || orden === "servicio") return lista;
   if (orden === "antiguas") return [...lista].reverse();
   const porNombre = [...lista].sort((a, b) => (a.razonSocial || "").localeCompare(b.razonSocial || "", "es", { sensitivity: "base" }));
   return orden === "az" ? porNombre : porNombre.reverse();
+};
+
+export type PosibleSede = { origen: string; destino: string; sedeId: string | null; sedeNombre: string | null; parte: string };
+
+const LARGO_MINIMO_MATRIZ = 4;
+
+export const detectarPosiblesSedes = (empresas: (EmpresaComparable & { sedes?: { id: string; nombre: string }[] })[]): PosibleSede[] => {
+  const palabras = empresas.map((e) => normalizarRazonSocial(e.razonSocial).split(" ").filter(Boolean));
+  const resultado: PosibleSede[] = [];
+  empresas.forEach((hija, i) => {
+    let mejor: { j: number; largo: number } | null = null;
+    empresas.forEach((matriz, j) => {
+      const m = palabras[j];
+      const h = palabras[i];
+      if (i === j || m.join("").length < LARGO_MINIMO_MATRIZ || h.length <= m.length) return;
+      if (!m.every((p, k) => h[k] === p)) return;
+      if (!mejor || m.length > mejor.largo) mejor = { j, largo: m.length };
+    });
+    if (!mejor) return;
+    const { j, largo } = mejor as { j: number; largo: number };
+    const parte = palabras[i].slice(largo).join(" ");
+    const sedes = (empresas[j].sedes || []).map((s) => ({ ...s, n: normalizarRazonSocial(s.nombre) }));
+    const sede = sedes.find((s) => s.n === parte) || sedes.find((s) => s.n && (parte.includes(s.n) || s.n.includes(parte))) || null;
+    resultado.push({ origen: empresas[i].id, destino: empresas[j].id, sedeId: sede?.id ?? null, sedeNombre: sede?.nombre ?? null, parte: parte.toUpperCase() });
+  });
+  return resultado;
 };
