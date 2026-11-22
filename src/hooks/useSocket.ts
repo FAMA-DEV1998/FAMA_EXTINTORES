@@ -15,6 +15,8 @@ export type Catalogs = {
     etiquetasCertificado: { id: number; type: string; value: string }[];
 };
 
+const AVISO_DESCONEXION_MS = 5000;
+
 export function useSocket(userId: string, onLogout: () => void, modoSinSenal = false) {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [url, setUrl] = useState(BACKEND_URL);
@@ -26,6 +28,7 @@ export function useSocket(userId: string, onLogout: () => void, modoSinSenal = f
         setSocket(s);
 
         let seDesconecto = false;
+        let avisoDesconexion: ReturnType<typeof setTimeout> | null = null;
 
         let ultimaConsulta = 0;
         s.on("connect_error", () => {
@@ -36,10 +39,13 @@ export function useSocket(userId: string, onLogout: () => void, modoSinSenal = f
 
         s.on("connect", () => {
             setConnected(true);
-            if (seDesconecto) {
+            if (avisoDesconexion) {
+                clearTimeout(avisoDesconexion);
+                avisoDesconexion = null;
+            } else if (seDesconecto) {
                 toast.success("Conexión restablecida", { id: "estado-conexion" });
-                seDesconecto = false;
             }
+            seDesconecto = false;
             s.emit("empresa:list");
             s.emit("catalog:list", {}, (res: any) => {
                 if (res?.success) setCatalogs({ marcas: res.marcas, agentes: res.agentes, recargas: res.recargas, motivosBaja: res.motivosBaja, serviciosExtra: res.serviciosExtra, categoriasInventario: res.categoriasInventario, capacidades: res.capacidades, etiquetasCertificado: res.etiquetasCertificado });
@@ -53,11 +59,18 @@ export function useSocket(userId: string, onLogout: () => void, modoSinSenal = f
         });
 
         s.on("disconnect", (motivo) => {
-            setConnected(false);
-            if (motivo === "io client disconnect") return;
+            if (motivo === "io client disconnect") {
+                setConnected(false);
+                return;
+            }
             seDesconecto = true;
-            if (modoSinSenal) toast("Sin señal. Puedes seguir trabajando: los cambios se enviarán al volver la conexión.", { id: "estado-conexion", duration: 6000 });
-            else toast.loading("Sin conexión. Reintentando…", { id: "estado-conexion" });
+            if (avisoDesconexion) clearTimeout(avisoDesconexion);
+            avisoDesconexion = setTimeout(() => {
+                avisoDesconexion = null;
+                setConnected(false);
+                if (modoSinSenal) toast("Sin señal. Puedes seguir trabajando: los cambios se enviarán al volver la conexión.", { id: "estado-conexion", duration: 6000 });
+                else toast.loading("Sin conexión. Reintentando…", { id: "estado-conexion" });
+            }, AVISO_DESCONEXION_MS);
         });
 
         s.on("auth:force_logout", (data: { userId: string }) => {
@@ -74,6 +87,7 @@ export function useSocket(userId: string, onLogout: () => void, modoSinSenal = f
         });
 
         return () => {
+            if (avisoDesconexion) clearTimeout(avisoDesconexion);
             toast.dismiss("estado-conexion");
             s.disconnect();
         };

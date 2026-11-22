@@ -74,3 +74,18 @@ export const getRecargasPermitidas = (agenteExtintor: string, recargasDisponible
         return esPQS ? tienePorcentaje : !tienePorcentaje;
     });
 };
+
+const SIN_INTERNO = /^(S\s*[/\-.]?\s*N\.?|SIN|SIN\s*TAG)?$/;
+
+export const esInternoVacio = (valor?: string | null) => SIN_INTERNO.test((valor || "").trim().toUpperCase());
+
+export const normalizarInterno = (valor?: string | null) => (esInternoVacio(valor) ? "S/TAG" : (valor || "").trim().toUpperCase());
+
+export const nuevoUid = (): string => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    const b = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = b.map((x) => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+};

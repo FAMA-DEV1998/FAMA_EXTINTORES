@@ -1,4 +1,5 @@
 import type { Socket } from "socket.io-client";
+import { nuevoUid } from "../../../utils/extintores";
 import { guardarLocal, leerLocal } from "./almacenLocal";
 
 type Oyente = (...args: any[]) => void;
@@ -61,15 +62,10 @@ const LISTAS_DEL_SERVIDOR = new Set([
 
 const SIN_CONEXION = "Esta acción necesita conexión a internet. Inténtalo cuando vuelva la señal.";
 const ESPERA_RESPUESTA_MS = 30000;
+const ESPERA_ESCRITURA_MS = 15000;
+const AVISO_DESCONEXION_MS = 5000;
 
-const nuevoId = (): string => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const b = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = b.map((x) => x.toString(16).padStart(2, "0")).join("");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-};
+const nuevoId = nuevoUid;
 
 const claveSede = (sedeId?: string | null): string =>
   sedeId === undefined ? "__todas__" : sedeId === null ? "__sin_sede__" : sedeId;
@@ -118,7 +114,26 @@ export class SocketSinSenal {
     this.clave = `estado-${usuarioId}`;
     this.real.onAny(this.recibirDelServidor);
     this.real.on("connect", this.alConectar);
-    this.real.on("disconnect", this.notificar);
+    this.real.on("disconnect", this.alDesconectar);
+    if (!this.real.connected) this.alDesconectar();
+  }
+
+  private desconexionVisible = false;
+  private temporizadorDesconexion: ReturnType<typeof setTimeout> | null = null;
+
+  private alDesconectar = () => {
+    if (this.temporizadorDesconexion) clearTimeout(this.temporizadorDesconexion);
+    this.temporizadorDesconexion = setTimeout(() => {
+      this.temporizadorDesconexion = null;
+      this.desconexionVisible = true;
+      this.notificar();
+    }, AVISO_DESCONEXION_MS);
+  };
+
+  private marcarConectado() {
+    if (this.temporizadorDesconexion) clearTimeout(this.temporizadorDesconexion);
+    this.temporizadorDesconexion = null;
+    this.desconexionVisible = false;
   }
 
   async iniciar() {
@@ -138,7 +153,8 @@ export class SocketSinSenal {
   destruir() {
     this.real.offAny(this.recibirDelServidor);
     this.real.off("connect", this.alConectar);
-    this.real.off("disconnect", this.notificar);
+    this.real.off("disconnect", this.alDesconectar);
+    if (this.temporizadorDesconexion) clearTimeout(this.temporizadorDesconexion);
     this.oyentes.forEach((conjunto, evento) => {
       if (EVENTOS_RESERVADOS.has(evento)) conjunto.forEach((fn) => this.real.off(evento, fn));
     });
@@ -179,7 +195,7 @@ export class SocketSinSenal {
     if (!this.resumenCache) {
       this.resumenCache = {
         listo: this.listo,
-        conectado: this.real.connected,
+        conectado: this.real.connected || !this.desconexionVisible,
         sincronizando: this.sincronizando,
         pendientes: this.estado.cola.length,
         fallidas: this.estado.fallidas,
@@ -238,9 +254,18 @@ export class SocketSinSenal {
     const enLinea = this.real.connected && this.listo;
     const alDia = enLinea && !this.sincronizando && this.estado.cola.length === 0;
 
+    if (ESCRITURAS_SIN_SENAL.has(evento)) {
+      if (evento === "extintor:add" && !datos.uid) datos.uid = nuevoId();
+      if (evento === "servicio:save" && !datos.id) datos.id = nuevoId();
+    }
+
     if (alDia) {
       if (evento === "extintor:list" && datos.sedeId) {
         this.real.emit(evento, { id: datos.id }, ...args.slice(1));
+        return this;
+      }
+      if (ESCRITURAS_SIN_SENAL.has(evento) && ack) {
+        this.escribirConRespaldo(evento, datos, ack);
         return this;
       }
       this.real.emit(evento, ...args);
@@ -265,6 +290,37 @@ export class SocketSinSenal {
 
     setTimeout(() => ack?.({ success: false, error: SIN_CONEXION }), 0);
     return this;
+  }
+
+  private reintento: ReturnType<typeof setInterval> | null = null;
+
+  private programarReintento() {
+    if (this.reintento) return;
+    this.reintento = setInterval(() => {
+      if (this.estado.cola.length === 0) {
+        if (this.reintento) clearInterval(this.reintento);
+        this.reintento = null;
+        return;
+      }
+      if (this.real.connected) void this.sincronizar();
+    }, 20000);
+  }
+
+  private escribirConRespaldo(evento: string, datos: Record<string, any>, ack: Oyente) {
+    let resuelto = false;
+    const respaldo = setTimeout(() => {
+      if (resuelto) return;
+      resuelto = true;
+      const respuesta = this.aplicarEscritura(evento, { ...datos, confirmarDuplicado: true });
+      this.programarReintento();
+      ack(respuesta);
+    }, ESPERA_ESCRITURA_MS);
+    this.real.emit(evento, datos, (res: any) => {
+      if (resuelto) return;
+      resuelto = true;
+      clearTimeout(respaldo);
+      ack(res);
+    });
   }
 
   private notificar = () => {
@@ -303,6 +359,7 @@ export class SocketSinSenal {
   }
 
   private alConectar = () => {
+    this.marcarConectado();
     this.notificar();
     if (!this.listo) return;
     this.pedirCatalogos();
@@ -453,7 +510,8 @@ export class SocketSinSenal {
             };
           }
         }
-        const uid = nuevoId();
+        const uid = typeof d.uid === "string" && d.uid ? d.uid : nuevoId();
+        if (filas.some((f) => f.uid === uid)) return { success: true, sinSenal: true, uid, rowIndex: filas.find((f) => f.uid === uid)!.rowIndex };
         this.contadorFilas += 1;
         const rowIndex = -(Date.now() * 10 + (this.contadorFilas % 10));
         const fotos = contarFotos(d.evidencia);
@@ -506,7 +564,8 @@ export class SocketSinSenal {
       }
       case "servicio:save": {
         const lista = this.serviciosDe(d.empresaId);
-        const id = nuevoId();
+        const id = typeof d.id === "string" && d.id ? d.id : nuevoId();
+        if (lista.some((s) => s.id === id)) return { success: true, sinSenal: true, id };
         lista.push({
           id, empresaId: d.empresaId, sedeId: d.sedeId ?? null, fechaRetiro: d.fechaRetiro || "", fechaEntrega: d.fechaEntrega || "",
           extintorUids: d.extintorUids || [], extintorEstados: {}, notas: d.notas || "",
@@ -694,7 +753,10 @@ export class SocketSinSenal {
         continue;
       }
       const { respondio, res } = await this.enviar(op.evento, datos);
-      if (!respondio || res?.sesionInvalida) break;
+      if (!respondio || res?.sesionInvalida) {
+        if (!respondio) this.programarReintento();
+        break;
+      }
       this.estado.cola.shift();
       if (res?.success === false) {
         this.estado.fallidas.push({ ...op, error: res.error || "El servidor rechazó el cambio" });

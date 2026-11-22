@@ -3,7 +3,7 @@ import type { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
 import { confirmar } from "../../../components/ui/Notificaciones";
 import type { EmpresaData, Extintor } from "../../../types";
-import { emptyExtintor } from "../../../utils/extintores";
+import { emptyExtintor, normalizarInterno } from "../../../utils/extintores";
 import { estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes } from "../../../utils/estadosExtintor";
 
 export function useExtintorModalForm(
@@ -44,7 +44,7 @@ export function useExtintorModalForm(
       ...formSinFlags,
       id: selectedEmpresa?.id,
       nSerie: !extintorForm.nSerie || extintorForm.nSerie.trim() === "" ? "S/N" : extintorForm.nSerie.trim().toUpperCase(),
-      nInterno: !extintorForm.nInterno || extintorForm.nInterno.trim() === "" ? "S/TAG" : extintorForm.nInterno.trim().toUpperCase(),
+      nInterno: normalizarInterno(extintorForm.nInterno),
       area: (extintorForm.area || "").trim().toUpperCase(),
       ma: bloqueado ? "" : extintorForm.ma,
       ph: bloqueado ? "" : extintorForm.ph,

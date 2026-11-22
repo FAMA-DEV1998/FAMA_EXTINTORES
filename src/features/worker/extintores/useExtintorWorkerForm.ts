@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { Extintor, ExtintorFormData, WorkerView as View } from "../../../types";
-import { emptyExtintorForm, getCamposFaltantes } from "../../../utils/extintores";
+import { emptyExtintorForm, getCamposFaltantes, normalizarInterno, nuevoUid } from "../../../utils/extintores";
 import { confirmar, toastAviso } from "../../../components/ui/Notificaciones";
 import { estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes, estadoSoloPermiteRecarga } from "../../../utils/estadosExtintor";
 import { calcularVencimientoPH } from "../../../utils/pruebaHidrostatica";
@@ -42,7 +42,9 @@ export function useExtintorWorkerForm(
     const ejecutarGuardado = (confirmarDuplicado: boolean) => {
         if (!socket || !activeId) return;
         setSaving(true);
-        const { evidencias, ...formWithoutEvidencias } = form;
+        const uidNuevo = editingRow === null ? (form.uid || nuevoUid()) : form.uid;
+        if (editingRow === null && !form.uid) setForm((p) => ({ ...p, uid: uidNuevo }));
+        const { evidencias, ...formWithoutEvidencias } = { ...form, uid: uidNuevo };
         const soloRecargaGuardado = estadoSoloPermiteRecarga(form.estadoExtintor);
         const bloqueado = estadoBloqueaServicio(form.estadoExtintor) && !soloRecargaGuardado;
         const componentesBloqueados = estadoBloqueaComponentes(form.estadoExtintor);
@@ -50,7 +52,7 @@ export function useExtintorWorkerForm(
             ...formWithoutEvidencias, id: activeId,
             sedeId: editingRow !== null ? form.sedeId : (form.sedeId ?? activeSedeId ?? null),
             nSerie: form.nSerie.trim() === "" ? "S/N" : form.nSerie.trim().toUpperCase(),
-            nInterno: form.nInterno.trim().toUpperCase(),
+            nInterno: normalizarInterno(form.nInterno),
             area: (form.area || "").trim().toUpperCase(),
             ma: (bloqueado || soloRecargaGuardado) ? "" : (form.ma ? "SI" : ""),
             ph: (bloqueado || soloRecargaGuardado) ? "" : (form.ph ? "SI" : ""),
