@@ -127,7 +127,7 @@ export default function LimpiezaDatosModal({ modo, socket, onClose, onCambio }: 
           ) : grupos.map(([empresaId, g]) => {
             const todos = g.lista.every((x) => marcados.has(clave(x)));
             return (
-              <section key={empresaId} className="rounded-xl border border-zinc-800/70 overflow-hidden">
+              <section key={empresaId} className="shrink-0 rounded-xl border border-zinc-800/70 overflow-hidden">
                 <label className="flex items-center gap-3 px-4 py-2.5 bg-zinc-900/70 border-b border-zinc-800/70 cursor-pointer">
                   <input type="checkbox" checked={todos} onChange={() => alternarGrupo(g.lista)} className="w-4 h-4 accent-red-600" />
                   <span className="text-sm font-black text-zinc-100 flex-1 truncate">{g.empresa}</span>

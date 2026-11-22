@@ -54,6 +54,14 @@ const servicioTexto = (d: CertificadoDatos) => {
   return partes.length ? `${partes.join(", ").replace(/, ([^,]*)$/, " y $1")} de extintores` : "Garantía y operatividad";
 };
 
+async function esperarRecursos(containerId: string) {
+  const imagenes = Array.from(document.getElementById(containerId)?.querySelectorAll("img") || []);
+  await Promise.all([
+    document.fonts?.ready,
+    ...imagenes.map((img) => (img.complete ? Promise.resolve() : img.decode().catch(() => undefined))),
+  ]);
+}
+
 export async function publicarCertificadoWeb(opts: {
   socket: Socket;
   certificadoId: string;
@@ -65,6 +73,7 @@ export async function publicarCertificadoWeb(opts: {
   const codigo = await obtenerCodigoWeb(socket, certificadoId);
   aplicarCodigo(codigo);
   await dosFrames();
+  await esperarRecursos(containerId);
   const pdfBase64 = await hojasPdfBase64(containerId);
   if (pdfBase64.length > 18 * 1024 * 1024) throw new Error("El PDF es demasiado grande para publicarlo");
   const d = hojas[0];

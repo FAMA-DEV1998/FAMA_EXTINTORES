@@ -141,6 +141,9 @@ export class SocketSinSenal {
     if (guardado) this.estado = { ...estadoVacio(), ...guardado };
     this.listo = true;
     this.notificar();
+    document.addEventListener("visibilitychange", this.alOcultar);
+    window.addEventListener("pagehide", this.guardarAhora);
+    void navigator.storage?.persist?.().catch(() => false);
     if (this.real.connected) {
       this.pedirCatalogos();
       if (this.estado.cola.length > 0) this.sincronizar();
@@ -154,6 +157,8 @@ export class SocketSinSenal {
     this.real.offAny(this.recibirDelServidor);
     this.real.off("connect", this.alConectar);
     this.real.off("disconnect", this.alDesconectar);
+    document.removeEventListener("visibilitychange", this.alOcultar);
+    window.removeEventListener("pagehide", this.guardarAhora);
     if (this.temporizadorDesconexion) clearTimeout(this.temporizadorDesconexion);
     this.oyentes.forEach((conjunto, evento) => {
       if (EVENTOS_RESERVADOS.has(evento)) conjunto.forEach((fn) => this.real.off(evento, fn));
@@ -460,7 +465,18 @@ export class SocketSinSenal {
 
   private encolar(evento: string, datos: Record<string, any>, descripcion: string) {
     this.estado.cola.push({ id: nuevoId(), evento, datos, creadaEn: Date.now(), descripcion });
+    queueMicrotask(() => this.guardarAhora());
   }
+
+  private guardarAhora = () => {
+    if (this.guardadoPendiente) clearTimeout(this.guardadoPendiente);
+    this.guardadoPendiente = null;
+    void guardarLocal(this.clave, this.estado);
+  };
+
+  private alOcultar = () => {
+    if (document.visibilityState === "hidden" && this.guardadoPendiente) this.guardarAhora();
+  };
 
   private addPendiente(uid: string) {
     return this.estado.cola.find((o) => o.evento === "extintor:add" && o.datos.uid === uid);
