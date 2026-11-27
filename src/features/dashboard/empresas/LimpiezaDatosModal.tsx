@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
-import { ArrowRight, CalendarX2, LoaderCircle, Tag, X } from "lucide-react";
+import { ArrowRight, CalendarX2, FileQuestion, LoaderCircle, Tag, X } from "lucide-react";
 import { confirmar } from "../../../components/ui/Notificaciones";
 import { useTeclaEscape } from "../../../hooks/useTeclaEscape";
 
-export type ModoLimpieza = "servicios" | "internos";
+export type ModoLimpieza = "servicios" | "internos" | "sinServicio";
 
 type ServicioVacio = { id: string; empresaId: string; empresa: string; sedeId: string | null; sede: string; fechaRetiro: string; fechaEntrega: string; notas: string; secuencia: number; creadoEn: string };
+type ServicioOpcion = { id: string; fechaRetiro: string; secuencia: number; extintores: number; notas: string };
+type SinServicio = { uid: string; empresaId: string; empresa: string; sedeId: string | null; sede: string; nSerie: string; nInterno: string; marca: string; agente: string; capacidad: string; estado: string; creadoEn: string; servicios: ServicioOpcion[]; sugerido: string | null };
 type InternoSinCodigo = { uid: string; empresaId: string; empresa: string; sede: string; nSerie: string; nInterno: string; marca: string; agente: string; capacidad: string; estado: string };
 
 const emitir = (socket: Socket, evento: string, data: any) => new Promise<any>((r) => socket.emit(evento, data, r));
@@ -20,6 +22,13 @@ const TEXTOS: Record<ModoLimpieza, { titulo: string; detalle: string; vacio: str
     vacio: "No hay servicios vacíos.",
     accion: "Eliminar",
     icono: CalendarX2,
+  },
+  sinServicio: {
+    titulo: "Extintores sin servicio",
+    detalle: "Extintores registrados que no figuran en ningún servicio, por lo que no tienen historial. Se propone el servicio de su sede creado justo antes que el extintor; puedes cambiarlo.",
+    vacio: "Todos los extintores están en algún servicio.",
+    accion: "Agregar al servicio",
+    icono: FileQuestion,
   },
   internos: {
     titulo: "N° interno sin código",
@@ -38,7 +47,8 @@ interface Props {
 }
 
 export default function LimpiezaDatosModal({ modo, socket, onClose, onCambio }: Props) {
-  const [items, setItems] = useState<(ServicioVacio | InternoSinCodigo)[] | null>(null);
+  const [items, setItems] = useState<(ServicioVacio | InternoSinCodigo | SinServicio)[] | null>(null);
+  const [destinos, setDestinos] = useState<Record<string, string>>({});
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [aplicando, setAplicando] = useState(false);
 
@@ -49,11 +59,15 @@ export default function LimpiezaDatosModal({ modo, socket, onClose, onCambio }: 
   useEffect(() => {
     if (!modo || !socket) return;
     setItems(null);
-    emitir(socket, modo === "servicios" ? "datos:serviciosVacios" : "datos:internosSinCodigo", {}).then((res) => {
+    const evento = modo === "servicios" ? "datos:serviciosVacios" : modo === "sinServicio" ? "datos:sinServicio" : "datos:internosSinCodigo";
+    emitir(socket, evento, {}).then((res) => {
       if (!res?.success) { toast.error(res?.error || "No se pudo cargar la lista"); setItems([]); return; }
       const lista = modo === "servicios" ? res.servicios : res.extintores;
       setItems(lista);
-      setMarcados(new Set(lista.map((x: any) => (modo === "servicios" ? x.id : x.uid))));
+      if (modo === "sinServicio") {
+        setDestinos(Object.fromEntries(lista.filter((x: SinServicio) => x.sugerido).map((x: SinServicio) => [x.uid, x.sugerido!])));
+        setMarcados(new Set(lista.filter((x: SinServicio) => x.sugerido).map((x: SinServicio) => x.uid)));
+      } else setMarcados(new Set(lista.map((x: any) => (modo === "servicios" ? x.id : x.uid))));
     });
   }, [modo, socket]);
 
@@ -81,10 +95,11 @@ export default function LimpiezaDatosModal({ modo, socket, onClose, onCambio }: 
 
   const aplicar = async () => {
     if (!socket || !items || marcados.size === 0) return;
-    const elegidos = items.filter((x) => marcados.has(clave(x)));
+    const elegidos = items.filter((x) => marcados.has(clave(x)) && (modo !== "sinServicio" || destinos[(x as SinServicio).uid]));
+    if (elegidos.length === 0) return;
     const ok = await confirmar({
-      titulo: modo === "servicios" ? `¿Eliminar ${elegidos.length} servicio${elegidos.length === 1 ? "" : "s"} vacío${elegidos.length === 1 ? "" : "s"}?` : `¿Cambiar ${elegidos.length} N° interno a S/TAG?`,
-      mensaje: modo === "servicios" ? "Solo se eliminan servicios sin extintores ni certificado." : "El N° de serie y los demás datos no cambian.",
+      titulo: modo === "servicios" ? `¿Eliminar ${elegidos.length} servicio${elegidos.length === 1 ? "" : "s"} vacío${elegidos.length === 1 ? "" : "s"}?` : modo === "sinServicio" ? `¿Agregar ${elegidos.length} extintor${elegidos.length === 1 ? "" : "es"} a su servicio?` : `¿Cambiar ${elegidos.length} N° interno a S/TAG?`,
+      mensaje: modo === "servicios" ? "Solo se eliminan servicios sin extintores ni certificado." : modo === "sinServicio" ? "Cada extintor quedará en el servicio elegido, con sus datos actuales, y aparecerá en su historial." : "El N° de serie y los demás datos no cambian.",
       textoConfirmar: t.accion,
       peligro: modo === "servicios",
     });
@@ -98,6 +113,10 @@ export default function LimpiezaDatosModal({ modo, socket, onClose, onCambio }: 
       }
       if (fallidos) toast.error(`${fallidos} servicio(s) no se pudieron eliminar`);
       else toast.success(`${elegidos.length} servicio${elegidos.length === 1 ? "" : "s"} eliminado${elegidos.length === 1 ? "" : "s"}`);
+    } else if (modo === "sinServicio") {
+      const res = await emitir(socket, "datos:sinServicio:asignar", { asignaciones: (elegidos as SinServicio[]).map((x) => ({ uid: x.uid, servicioId: destinos[x.uid] })) });
+      if (res?.asignados) toast.success(`${res.asignados} extintor${res.asignados === 1 ? "" : "es"} agregado${res.asignados === 1 ? "" : "s"} a su servicio`);
+      if (res?.errores?.length) toast.error(`${res.errores.length} no se pudieron agregar: ${res.errores[0].error}`, { duration: 8000 });
     } else {
       const res = await emitir(socket, "datos:internosSinCodigo:convertir", { uids: elegidos.map((x: any) => x.uid) });
       if (res?.success) toast.success(`${res.convertidos} N° interno cambiado${res.convertidos === 1 ? "" : "s"} a S/TAG`);
@@ -143,6 +162,25 @@ export default function LimpiezaDatosModal({ modo, socket, onClose, onCambio }: 
                             <span className="font-bold text-zinc-200">Servicio {x.secuencia || ""} · Retiro {fecha(x.fechaRetiro)}{x.fechaEntrega ? ` · Entrega ${fecha(x.fechaEntrega)}` : ""}</span>
                             <span className="block text-zinc-500">{[x.sede && `Sede ${x.sede}`, `Creado ${fecha(x.creadoEn)}`].filter(Boolean).join(" · ")}</span>
                             {x.notas && <span className="block text-sky-300/90 italic truncate">«{x.notas}»</span>}
+                          </span>
+                        ) : modo === "sinServicio" ? (
+                          <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                            <span className="min-w-0 flex-1">
+                              <span className="font-bold text-zinc-200">Serie {x.nSerie || "—"} <span className="font-medium text-zinc-500">· {x.nInterno || "s/interno"}</span></span>
+                              <span className="block text-zinc-500 truncate">{[x.marca, x.agente, x.capacidad, x.estado, x.sede && `Sede ${x.sede}`, `Registrado ${fecha(x.creadoEn)}`].filter(Boolean).join(" · ")}</span>
+                            </span>
+                            {x.servicios.length ? (
+                              <select
+                                value={destinos[x.uid] || ""}
+                                onChange={(e) => setDestinos((p) => ({ ...p, [x.uid]: e.target.value }))}
+                                aria-label="Servicio destino"
+                                className="sm:w-64 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200"
+                              >
+                                {x.servicios.map((s: ServicioOpcion) => (
+                                  <option key={s.id} value={s.id}>Servicio {s.secuencia || ""} · {fecha(s.fechaRetiro)} · {s.extintores} ext.{s.id === x.sugerido ? " (sugerido)" : ""}</option>
+                                ))}
+                              </select>
+                            ) : <span className="text-amber-400 font-bold">Su sede no tiene servicios</span>}
                           </span>
                         ) : (
                           <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">

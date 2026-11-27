@@ -20,7 +20,7 @@ export function useExtintorWorkerForm(
     const [editingRow, setEditingRow] = useState<number | null>(null);
     const [returnView, setReturnView] = useState<View>("todos");
     const [coincidencias, setCoincidencias] = useState<{ uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; mesRealizadoPH: string; realizadoPH: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "sospechosa"; camposCoincidentes: string[] }[] | null>(null);
-    const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any> } | null>(null);
+    const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any>; enServicio?: boolean } | null>(null);
     const clearLastSavedExtintor = () => setLastSavedExtintor(null);
 
     const handleRealizadoPH = (val: string) => {
@@ -88,7 +88,8 @@ export function useExtintorWorkerForm(
             else showToast(mensaje);
         };
         if (editingRow !== null) {
-            socket.emit("extintor:update", { ...payload, rowIndex: editingRow }, (res: any) => {
+            const { servicioId: _servicioId, ...payloadEdicion } = payload as typeof payload & { servicioId?: string };
+            socket.emit("extintor:update", { ...payloadEdicion, rowIndex: editingRow }, (res: any) => {
                 setSaving(false);
                 if (res?.success) {
                     notificarGuardado("Extintor actualizado");
@@ -101,12 +102,13 @@ export function useExtintorWorkerForm(
             }
             );
         } else {
-            socket.emit("extintor:add", { ...payload, confirmarDuplicado }, (res: any) => {
+            socket.emit("extintor:add", { ...payload, confirmarDuplicado, ...(form.servicioId ? { servicioId: form.servicioId, estadoServicio: estadoSnapshot } : {}) }, (res: any) => {
                 setSaving(false);
                 if (res?.success) {
                     notificarGuardado("Extintor guardado");
                     clearFormBackup();
-                    if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot });
+                    if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot, enServicio: !!res.enServicio });
+                    if (res.aviso) showToast(`Guardado, pero no se agregó al servicio: ${res.aviso}`, "err");
                     setCoincidencias(null);
                     setView(returnView);
                     setForm(emptyExtintorForm());
@@ -158,9 +160,9 @@ export function useExtintorWorkerForm(
         loadForm();
     };
 
-    const openCrearExtintor = (from: View) => {
+    const openCrearExtintor = (from: View, servicioId?: string) => {
         setReturnView(from);
-        setForm(emptyExtintorForm());
+        setForm({ ...emptyExtintorForm(), ...(servicioId ? { servicioId } : {}) });
         setEditingRow(null);
         setCoincidencias(null);
         setView("form");

@@ -31,6 +31,7 @@ export type Extintor = {
 };
 
 export type ExtintorFormData = {
+  servicioId?: string;
   nSerie: string;
   nInterno: string;
   marca: string;

@@ -43,9 +43,16 @@ export default function ServicioDetallePage() {
   };
 
   useEffect(() => {
+    if (!servicio?.id) return;
+    extintorForm?.setServicioDestino(servicio.id);
+    return () => extintorForm?.setServicioDestino(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicio?.id]);
+
+  useEffect(() => {
     const saved = extintorForm?.lastSavedExtintor;
     if (!saved || !servicio) return;
-    if (saved.isNew && !servicio.extintorUids.includes(saved.uid)) {
+    if (saved.isNew && !saved.enServicio && !servicio.extintorUids.includes(saved.uid)) {
       addExtintorToServicio(servicio.id, saved.uid);
     }
     const snapPrevio = servicio.extintorEstados?.[saved.uid];

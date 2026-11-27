@@ -18,7 +18,8 @@ export function useExtintorModalForm(
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
   const [coincidencias, setCoincidencias] = useState<{ uid: string; rowIndex: number; nSerie: string; nInterno: string; marca: string; agenteExtintor: string; peso: string; unidadPeso: string; fechaFabricacion: string; mesRealizadoPH: string; realizadoPH: string; sedeId: string | null; estadoExtintor: string; nivel: "fuerte" | "sospechosa"; camposCoincidentes: string[] }[] | null>(null);
 
-  const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any> } | null>(null);
+  const [lastSavedExtintor, setLastSavedExtintor] = useState<{ uid: string; isNew: boolean; estado: Record<string, any>; enServicio?: boolean } | null>(null);
+  const [servicioDestino, setServicioDestino] = useState<string | null>(null);
   const clearLastSavedExtintor = () => setLastSavedExtintor(null);
 
   const openAddExtintor = () => {
@@ -91,13 +92,14 @@ export function useExtintorModalForm(
         else toast.error(res?.error || "No se pudo actualizar el extintor");
       });
     } else {
-      socket.emit("extintor:add", { ...payload, confirmarDuplicado }, (res: any) => {
+      socket.emit("extintor:add", { ...payload, confirmarDuplicado, ...(servicioDestino ? { servicioId: servicioDestino, estadoServicio: estadoSnapshot } : {}) }, (res: any) => {
         setSaving(false);
         if (res?.success) {
           setExtintorModal(false);
           setCoincidencias(null);
           toast.success("Extintor registrado");
-          if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot });
+          if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot, enServicio: !!res.enServicio });
+          if (res.aviso) toast.error(`Extintor registrado, pero no se pudo agregar al servicio: ${res.aviso}`);
         }
         else if (res?.coincidencias) setCoincidencias(res.coincidencias);
         else toast.error(res?.error || "No se pudo guardar el extintor");
@@ -136,6 +138,7 @@ export function useExtintorModalForm(
   };
 
   return {
+    setServicioDestino,
     extintorModal,
     setExtintorModal,
     extintorForm,

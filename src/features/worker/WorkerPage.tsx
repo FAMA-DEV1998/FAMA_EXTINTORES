@@ -142,6 +142,10 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
 
   useEffect(() => {
     const saved = lastSavedExtintor;
+    if (saved?.enServicio) {
+      clearLastSavedExtintor();
+      return;
+    }
     if (!saved || !activeServicio || returnView !== "servicio") return;
     if (saved.isNew && !activeServicio.extintorUids.includes(saved.uid)) {
       addExtintorToServicio(activeServicio.id, saved.uid);
@@ -423,7 +427,7 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
             addExtintorToServicio={addExtintorToServicio}
             removeExtintorDeServicio={removeExtintorDeServicio}
             setExtintorEstado={setExtintorEstado}
-            onNuevoExtintor={() => openCrearExtintor("servicio")}
+            onNuevoExtintor={() => openCrearExtintor("servicio", activeServicio?.id)}
             onEditarExtintor={(ext) => handleEdit(ext, "servicio")}
             deleteExtintorSilent={deleteExtintorSilent}
             autoAsociarUid={scanUidParaAsociar}

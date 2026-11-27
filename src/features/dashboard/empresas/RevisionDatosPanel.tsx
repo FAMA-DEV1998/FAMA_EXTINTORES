@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
-import { ArrowRight, CalendarX2, ChevronDown, ClipboardCheck, Copy, Download, EyeOff, GitMerge, LoaderCircle, MapPin, Tag, TriangleAlert, Upload } from "lucide-react";
+import { ArrowRight, CalendarX2, ChevronDown, FileQuestion, ClipboardCheck, Copy, Download, EyeOff, GitMerge, LoaderCircle, MapPin, Tag, TriangleAlert, Upload } from "lucide-react";
 import LimpiezaDatosModal, { type ModoLimpieza } from "./LimpiezaDatosModal";
 import type { SedePorObservacion } from "./useResumenEmpresas";
 import { usePreferenciaLocal } from "../../../hooks/usePreferenciaLocal";
@@ -31,14 +31,15 @@ export default function RevisionDatosPanel({ socket, sinClasificar, filtrandoSin
   const [verPares, setVerPares] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [limpieza, setLimpieza] = useState<ModoLimpieza | null>(null);
-  const [conteos, setConteos] = useState<{ servicios: number | null; internos: number | null }>({ servicios: null, internos: null });
+  const [conteos, setConteos] = useState<{ servicios: number | null; internos: number | null; sinServicio: number | null }>({ servicios: null, internos: null, sinServicio: null });
   const contar = useCallback(() => {
     if (!socket) return;
     socket.emit("datos:serviciosVacios", {}, (res: any) => { if (res?.success) setConteos((p) => ({ ...p, servicios: res.servicios.length })); });
     socket.emit("datos:internosSinCodigo", {}, (res: any) => { if (res?.success) setConteos((p) => ({ ...p, internos: res.extintores.length })); });
+    socket.emit("datos:sinServicio", {}, (res: any) => { if (res?.success) setConteos((p) => ({ ...p, sinServicio: res.extintores.length })); });
   }, [socket]);
   useEffect(() => { contar(); }, [contar]);
-  const pendientes = (sinClasificar > 0 ? 1 : 0) + (pares.length > 0 ? 1 : 0) + (sedesObservacion.length > 0 ? 1 : 0) + (conteos.servicios ? 1 : 0) + (conteos.internos ? 1 : 0);
+  const pendientes = (sinClasificar > 0 ? 1 : 0) + (pares.length > 0 ? 1 : 0) + (sedesObservacion.length > 0 ? 1 : 0) + (conteos.servicios ? 1 : 0) + (conteos.internos ? 1 : 0) + (conteos.sinServicio ? 1 : 0);
 
   const exportar = () => {
     if (!socket) return;
@@ -97,6 +98,17 @@ export default function RevisionDatosPanel({ socket, sinClasificar, filtrandoSin
               {sedesObservacion.length > 0 && (
                 <button onClick={() => setVerObs(!verObs)} className="self-start mt-auto px-3 py-1.5 rounded-lg text-[11px] font-black border bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-zinc-500">
                   {verObs ? "Ocultar lista" : "Revisar"}
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 p-4 rounded-xl border border-zinc-800/60 bg-zinc-950/40">
+              <p className="flex items-center gap-2 text-xs font-black text-zinc-200"><FileQuestion className={`w-4 h-4 ${conteos.sinServicio ? "text-amber-400" : "text-zinc-600"}`} />Extintores sin servicio</p>
+              <p className="text-2xl font-black tabular-nums text-white leading-none">{conteos.sinServicio ?? "…"}</p>
+              <p className="text-[11px] text-zinc-500">Registrados pero fuera de todo servicio (sin historial), para agregarlos al que corresponde.</p>
+              {!!conteos.sinServicio && (
+                <button onClick={() => setLimpieza("sinServicio")} className="self-start mt-auto px-3 py-1.5 rounded-lg text-[11px] font-black border bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-zinc-500">
+                  Revisar
                 </button>
               )}
             </div>

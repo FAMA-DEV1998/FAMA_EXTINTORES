@@ -463,6 +463,13 @@ export class SocketSinSenal {
     });
   }
 
+  private estadoAnterior(empresaId: string, uid: string, servicio: any): string | null {
+    const previo = this.serviciosDe(empresaId)
+      .filter((s) => s.id !== servicio.id && (s.extintorUids || []).includes(uid) && s.extintorEstados?.[uid]?.estadoExtintor !== undefined && (s.fechaRetiro || "") <= (servicio.fechaRetiro || ""))
+      .sort((a, b) => (b.fechaRetiro || "").localeCompare(a.fechaRetiro || ""))[0];
+    return previo ? previo.extintorEstados[uid].estadoExtintor : null;
+  }
+
   private encolar(evento: string, datos: Record<string, any>, descripcion: string) {
     this.estado.cola.push({ id: nuevoId(), evento, datos, creadaEn: Date.now(), descripcion });
     queueMicrotask(() => this.guardarAhora());
@@ -538,7 +545,13 @@ export class SocketSinSenal {
         });
         this.encolar(evento, { ...d, uid, confirmarDuplicado: true }, `Nuevo extintor ${d.nSerie || d.nInterno || "S/N"}`);
         this.difundirExtintores(empresaId);
-        respuesta = { success: true, sinSenal: true, uid, rowIndex };
+        const servicioDestino = d.servicioId ? this.serviciosDe(empresaId).find((s) => s.id === d.servicioId) : null;
+        if (servicioDestino) {
+          servicioDestino.extintorUids = Array.from(new Set([...(servicioDestino.extintorUids || []), uid]));
+          if (d.estadoServicio) servicioDestino.extintorEstados = { ...(servicioDestino.extintorEstados || {}), [uid]: d.estadoServicio };
+          this.difundirServicios(empresaId);
+        }
+        respuesta = { success: true, sinSenal: true, uid, rowIndex, enServicio: !!servicioDestino };
         break;
       }
       case "extintor:update": {
@@ -601,7 +614,7 @@ export class SocketSinSenal {
         const fila = d.uid ? this.buscarPorUid(d.uid)?.fila : null;
         let descripcion = "";
         if (evento === "servicio:addExtintor") {
-          if (fila?.estadoExtintor === "De Baja") return { success: false, error: "No se puede asociar un extintor De Baja a un servicio" };
+          if (this.estadoAnterior(d.empresaId, d.uid, servicio) === "De Baja") return { success: false, error: "No se puede asociar un extintor De Baja a un servicio" };
           servicio.extintorUids = Array.from(new Set([...(servicio.extintorUids || []), d.uid]));
           descripcion = `Asociar ${this.nombreExtintor(fila)} al servicio`;
         } else if (evento === "servicio:removeExtintor") {
