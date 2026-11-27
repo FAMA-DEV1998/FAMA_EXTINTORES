@@ -39,7 +39,7 @@ export default function UbicacionFormulario({ socket, uid }: { socket: Socket | 
     if (!archivo) return;
     setProcesandoFoto(true);
     try {
-      rastreoUbicacion.setFoto(await compressImage(archivo, 1024, 0.55));
+      rastreoUbicacion.setFoto(`data:image/jpeg;base64,${await compressImage(archivo, 1024, 0.55)}`);
     } catch { }
     setProcesandoFoto(false);
   };

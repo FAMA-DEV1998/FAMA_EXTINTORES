@@ -67,7 +67,7 @@ export default function FormularioInspeccion({ socket, campana, extintor, regist
     const tipo = tipoFoto.current;
     setProcesando(tipo);
     try {
-      const data = await compressImage(archivo, 1280, 0.6);
+      const data = `data:image/jpeg;base64,${await compressImage(archivo, 1280, 0.6)}`;
       setFotos((p) => ({ ...p, [tipo]: data }));
     } catch {
       onGuardado("No se pudo procesar la foto", true);
