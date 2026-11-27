@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Building, Building2, ChevronLeft, ChevronRight, FireExtinguisher, FolderClock, History, LayoutDashboard, LogOut, type LucideIcon } from "lucide-react";
+import { Building, Building2, ChevronLeft, ChevronRight, ClipboardCheck, FireExtinguisher, FolderClock, History, LayoutDashboard, LogOut, type LucideIcon } from "lucide-react";
 import { MESES } from "../../constants";
-import type { Extintor, Servicio, WorkerView as View, Usuario } from "../../types";
+import type { CampanaInspeccion, Extintor, Servicio, WorkerView as View, Usuario } from "../../types";
 import { anioFromFecha, mesFromFecha } from "../../utils/fechas";
 import { emptyEmpresa } from "../../utils/empresas";
 import { useSocket } from "../../hooks/useSocket";
@@ -32,6 +32,7 @@ import Notificaciones, { confirmar } from "../../components/ui/Notificaciones";
 import { useSocketSinSenal } from "./sinSenal/useSocketSinSenal";
 import EstadoSincronizacion from "./sinSenal/EstadoSincronizacion";
 import { rastreoUbicacion } from "./ubicacion/rastreoUbicacion";
+import InspeccionesView from "./inspecciones/InspeccionesView";
 
 export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout: () => void }) {
   const { socket: socketReal, connected, catalogs: catalogosServidor } = useSocket(user.id, onLogout, true);
@@ -55,6 +56,19 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
 
   useEffect(() => {
     rastreoUbicacion.conectar(socket);
+  }, [socket]);
+
+  const [inspecciones, setInspecciones] = useState<CampanaInspeccion[]>([]);
+  useEffect(() => {
+    if (!socket) return;
+    const cargar = () => socket.emit("insp:disponibles", {}, (res: any) => { if (res?.success) setInspecciones(res.lista || []); });
+    cargar();
+    socket.on("insp:cambio", cargar);
+    socket.on("connect", cargar);
+    return () => {
+      socket.off("insp:cambio", cargar);
+      socket.off("connect", cargar);
+    };
   }, [socket]);
 
   const [view, setView] = useState<View>("home");
@@ -215,6 +229,7 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
   };
 
   const goBack = () => {
+    if (view === "inspecciones") { setView("home"); return; }
     if (view === "form") { setView(returnView); return; }
     if (view === "servicio") { setView("historialMes"); return; }
     if (view === "historialMes") { setView("historial"); return; }
@@ -251,7 +266,7 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
 
   const mesActivoLabel = MESES.find((m) => parseInt(m.value) === activeMes)?.label || "";
 
-  const mostrarTabs = activeId && view !== "home" && !["historialMes", "servicio", "form"].includes(view);
+  const mostrarTabs = activeId && view !== "home" && !["historialMes", "servicio", "form", "inspecciones"].includes(view);
 
   return (
     <div className="app-workers flex flex-col h-dvh w-full bg-zinc-50/50 shadow-2xl relative" style={{ fontFamily: "'Instrument Sans', 'SF Pro Display', system-ui, sans-serif" }}>
@@ -298,7 +313,7 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
         </div>
       </header>
 
-      {activeId && view !== "home" && (
+      {activeId && view !== "home" && view !== "inspecciones" && (
         <div className="px-4 md:px-8 pt-3 flex items-center gap-1.5 text-xs font-bold text-zinc-500 flex-wrap">
           <button onClick={() => { changeActiveSede(null); setView("todos"); }} className="text-zinc-700 hover:text-red-600 transition-colors">
             {empresa.razonSocial || activeId}
@@ -360,16 +375,33 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
 
       <main className="flex-1 overflow-hidden relative bg-zinc-50/50">
 
+        {view === "inspecciones" && (
+          <InspeccionesView socket={socket} campanas={inspecciones} onAviso={(m, err) => showToast(m, err ? "err" : "ok")} />
+        )}
+
         {view === "home" && (
-          <EmpresasInicioView
-            empresas={empresas}
-            connected={connected || estadoSinSenal.listo}
-            disponiblesSinSenal={connected ? null : estadoSinSenal.empresasDisponibles}
-            directorio={directorio}
-            selectEmpresa={abrirEmpresa}
-            onCreateNew={() => { setEmpresa(emptyEmpresa()); changeActiveId(""); setView("empresa"); }}
-            onEscanearQR={() => setQrModal(true)}
-          />
+          <div className="h-full flex flex-col">
+            {inspecciones.length > 0 && (
+              <div className="shrink-0 px-4 md:px-8 pt-3">
+                <button onClick={() => setView("inspecciones")} className="w-full max-w-3xl mx-auto flex items-center gap-3 px-4 py-3 rounded-2xl bg-zinc-900 text-white shadow-lg active:scale-[0.99]">
+                  <ClipboardCheck className="w-5 h-5 text-red-400 shrink-0" />
+                  <span className="flex-1 text-left text-sm font-black">Inspecciones activas ({inspecciones.length})</span>
+                  <ChevronRight className="w-4 h-4 shrink-0" />
+                </button>
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
+              <EmpresasInicioView
+                empresas={empresas}
+                connected={connected || estadoSinSenal.listo}
+                disponiblesSinSenal={connected ? null : estadoSinSenal.empresasDisponibles}
+                directorio={directorio}
+                selectEmpresa={abrirEmpresa}
+                onCreateNew={() => { setEmpresa(emptyEmpresa()); changeActiveId(""); setView("empresa"); }}
+                onEscanearQR={() => setQrModal(true)}
+              />
+            </div>
+          </div>
         )}
 
         {view === "empresa" && (

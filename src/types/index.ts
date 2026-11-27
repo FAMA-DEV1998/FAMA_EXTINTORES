@@ -6,3 +6,4 @@ export * from "./inventario";
 export * from "./cotizacion";
 export * from "./navegacion";
 export * from "./ubicacion";
+export * from "./inspeccion";

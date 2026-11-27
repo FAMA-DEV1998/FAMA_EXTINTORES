@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { Building, History, Link2, MapPin, Plus, ScanQrCode, TriangleAlert, X } from "lucide-react";
 import type { Extintor, Servicio, TrasladoSede } from "../../../types";
 import ExtintorCard from "./ExtintorCard";
 import ExtintorHistorialModal from "./ExtintorHistorialModal";
 import { useTeclaEscape } from "../../../hooks/useTeclaEscape";
-import { uidDesdeQR } from "../../../utils/qrExtintor";
+import { useLectorQR } from "./useLectorQR";
 import { rastreoUbicacion } from "../ubicacion/rastreoUbicacion";
 import { useRastreoUbicacion } from "../ubicacion/useUbicacion";
 import { formatearPrecision } from "../../../utils/geo";
@@ -34,12 +34,6 @@ export default function EscanearQRModal({
     isOpen, socket, onClose, onAsociar, onCrearServicio, onIrAlServicio,
     scopeEmpresaId, scopeSedeId, onAsociarDirecto,
 }: Props) {
-    const videoRef = useRef<HTMLVideoElement | null>(null);
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
-    const rafRef = useRef<number | null>(null);
-    const escaneandoRef = useRef(false);
-
     const [error, setError] = useState<string | null>(null);
     const [buscando, setBuscando] = useState(false);
     const [resultado, setResultado] = useState<ResultadoScan | null>(null);
@@ -48,17 +42,9 @@ export default function EscanearQRModal({
     const escaneoAcotado = scopeEmpresaId !== undefined;
     const rastreo = useRastreoUbicacion();
 
-    const detenerCamara = () => {
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-    };
-
     const buscarExtintor = (uid: string) => {
         if (!socket) return;
-        escaneandoRef.current = false;
-        detenerCamara();
+        lector.detener();
         setBuscando(true);
         socket.emit("extintor:scan", { uid }, (res: any) => {
             setBuscando(false);
@@ -87,43 +73,13 @@ export default function EscanearQRModal({
         });
     };
 
-    const loop = async () => {
-        if (!escaneandoRef.current || !videoRef.current || !canvasRef.current) return;
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const { default: jsQR } = await import("jsqr");
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                if (code?.data) {
-                    buscarExtintor(uidDesdeQR(code.data));
-                    return;
-                }
-            }
-        }
-        rafRef.current = requestAnimationFrame(loop);
-    };
+    const lector = useLectorQR((uid) => buscarExtintor(uid));
+    const detenerCamara = lector.detener;
 
-    const iniciarCamara = async () => {
+    const iniciarCamara = () => {
         setError(null);
         setResultado(null);
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            streamRef.current = stream;
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                await videoRef.current.play();
-            }
-            escaneandoRef.current = true;
-            rafRef.current = requestAnimationFrame(loop);
-        } catch {
-            setError("No se pudo acceder a la cámara. Revisa los permisos.");
-        }
+        void lector.iniciar();
     };
 
     useEffect(() => {
@@ -160,18 +116,18 @@ export default function EscanearQRModal({
                     {!resultado ? (
                         <div className="flex flex-col gap-3 p-5">
                             <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-zinc-900">
-                                <video ref={videoRef} muted playsInline className="w-full h-full object-cover" />
-                                <canvas ref={canvasRef} className="hidden" />
+                                <video ref={lector.videoRef} muted playsInline className="w-full h-full object-cover" />
+                                <canvas ref={lector.canvasRef} className="hidden" />
                                 <div className="absolute inset-8 border-4 border-white/70 rounded-2xl pointer-events-none" />
                             </div>
                             {buscando && <p className="text-sm font-bold text-zinc-500 text-center">Buscando extintor...</p>}
-                            {error && (
+                            {(error || lector.errorCamara) && (
                                 <div className="flex flex-col gap-2 items-center">
-                                    <p className="text-sm font-bold text-red-600 text-center">{error}</p>
+                                    <p className="text-sm font-bold text-red-600 text-center">{error || lector.errorCamara}</p>
                                     <button onClick={iniciarCamara} className="text-xs font-bold text-red-600 underline">Reintentar</button>
                                 </div>
                             )}
-                            {!error && !buscando && <p className="text-xs text-zinc-400 text-center">Apunta la cámara al código QR del extintor</p>}
+                            {!error && !lector.errorCamara && !buscando && <p className="text-xs text-zinc-400 text-center">Apunta la cámara al código QR del extintor</p>}
                         </div>
                     ) : (
                         <div className="flex flex-col gap-4 p-5">

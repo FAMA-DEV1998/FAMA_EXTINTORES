@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, Bell, BookOpen, ChevronLeft, DatabaseBackup, FlaskConical, Globe, Store, GraduationCap, LoaderCircle, FireExtinguisher, LogOut, MapPin, Mic, Package, PanelLeftClose, PanelLeftOpen, Receipt, Smartphone, Users, type LucideIcon } from "lucide-react";
+import { Archive, Bell, BookOpen, ChevronLeft, ClipboardCheck, DatabaseBackup, FlaskConical, Globe, Store, GraduationCap, LoaderCircle, FireExtinguisher, LogOut, MapPin, Mic, Package, PanelLeftClose, PanelLeftOpen, Receipt, Smartphone, Users, type LucideIcon } from "lucide-react";
 import Notificaciones from "../../components/ui/Notificaciones";
 import type { Usuario } from "../../types";
 import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
@@ -24,6 +24,7 @@ import SolicitudesWebPage from "./web/SolicitudesWebPage";
 import ProductosWebPage from "./web/productos/ProductosWebPage";
 import CapacitacionPage from "./capacitacion/CapacitacionPage";
 import UbicacionesPage from "./ubicaciones/UbicacionesPage";
+import InspeccionesPage from "./inspecciones/InspeccionesPage";
 import { useSolicitudesWebBadge } from "./web/useSolicitudesWeb";
 import AlertasPage from "./alertas/AlertasPage";
 import VozAprendizajePage from "./voz/VozAprendizajePage";
@@ -62,7 +63,7 @@ export default function DashboardPage({ user, onLogout }: { user: Usuario; onLog
     openUsersModal, saveUser, deleteUser,
   } = usersManagement;
 
-  const enSeccionAlterna = location.pathname.startsWith("/dashboard/inventario") || location.pathname.startsWith("/dashboard/cotizaciones") || location.pathname.startsWith("/dashboard/web") || location.pathname.startsWith("/dashboard/productos-web") || location.pathname.startsWith("/dashboard/capacitacion") || location.pathname.startsWith("/dashboard/ubicaciones") || location.pathname.startsWith("/dashboard/alertas") || location.pathname.startsWith("/dashboard/voz");
+  const enSeccionAlterna = location.pathname.startsWith("/dashboard/inventario") || location.pathname.startsWith("/dashboard/cotizaciones") || location.pathname.startsWith("/dashboard/web") || location.pathname.startsWith("/dashboard/productos-web") || location.pathname.startsWith("/dashboard/capacitacion") || location.pathname.startsWith("/dashboard/ubicaciones") || location.pathname.startsWith("/dashboard/inspecciones") || location.pathname.startsWith("/dashboard/alertas") || location.pathname.startsWith("/dashboard/voz");
 
   const totalAlertas = useAlertasBadge(socket);
   const solicitudesWeb = useSolicitudesWebBadge(socket);
@@ -76,6 +77,7 @@ export default function DashboardPage({ user, onLogout }: { user: Usuario; onLog
     { to: "/dashboard/web", label: "Solicitudes Web", icono: Globe, activo: enRuta("/dashboard/web"), badge: solicitudesWeb },
     ...(user.role === "boss" || user.role === "admin" ? [
       { to: "/dashboard/productos-web", label: "Productos Web", icono: Store, activo: enRuta("/dashboard/productos-web") },
+      { to: "/dashboard/inspecciones", label: "Inspecciones", icono: ClipboardCheck, activo: enRuta("/dashboard/inspecciones") },
     ] : []),
     { to: "/dashboard/alertas", label: "Alertas", icono: Bell, activo: enRuta("/dashboard/alertas"), badge: totalAlertas },
     ...(user.role === "boss" ? [{ to: "/dashboard/voz", label: "Dictado por Voz", icono: Mic, activo: enRuta("/dashboard/voz") }] : []),
@@ -220,6 +222,7 @@ export default function DashboardPage({ user, onLogout }: { user: Usuario; onLog
           {(user.role === "boss" || user.role === "admin") && <Route path="productos-web" element={<ProductosWebPage socket={socket} />} />}
           {(user.role === "boss" || user.role === "admin") && <Route path="capacitacion" element={<CapacitacionPage socket={socket} />} />}
           {(user.role === "boss" || user.role === "admin") && <Route path="ubicaciones" element={<UbicacionesPage socket={socket} />} />}
+          {(user.role === "boss" || user.role === "admin") && <Route path="inspecciones" element={<InspeccionesPage socket={socket} />} />}
           <Route path="alertas" element={<AlertasPage socket={socket} />} />
           {user.role === "boss" && <Route path="voz" element={<VozAprendizajePage socket={socket} catalogs={catalogs} role={user.role} />} />}
           <Route path=":empresaSlug" element={<EmpresaLayout socket={socket} catalogs={catalogs} user={user} />}>

@@ -28,6 +28,8 @@ type EstadoLocal = {
   filasReales: Record<string, number>;
   ubicaciones: Record<string, any>;
   enVuelo: Operacion[];
+  inspecciones: Record<string, any>;
+  inspDisponibles: any[];
 };
 
 export type ResumenSinSenal = {
@@ -44,7 +46,7 @@ export type ResumenSinSenal = {
 
 const estadoVacio = (): EstadoLocal => ({
   empresas: [], empresa: {}, sedes: {}, extintores: {}, servicios: {}, traslados: {},
-  evidencias: {}, catalogos: null, cola: [], fallidas: [], filasReales: {}, ubicaciones: {}, enVuelo: [],
+  evidencias: {}, catalogos: null, cola: [], fallidas: [], filasReales: {}, ubicaciones: {}, enVuelo: [], inspecciones: {}, inspDisponibles: [],
 });
 
 const ESCRITURAS_SIN_SENAL = new Set([
@@ -52,12 +54,14 @@ const ESCRITURAS_SIN_SENAL = new Set([
   "servicio:save", "servicio:addExtintor", "servicio:removeExtintor", "servicio:setExtintorEstado", "servicio:updateDatos", "servicio:delete",
   "empresa:save", "sede:save",
   "ubicacion:registrar", "ubicacion:foto", "ubicacion:anular",
+  "insp:registrar",
 ]);
 
 const LECTURAS_SIN_SENAL = new Set([
   "empresa:list", "empresa:get", "sede:list", "extintor:list", "extintor:listGlobal", "servicio:list", "servicio:listByExtintor",
   "extintor:scan", "extintor:evidencia:get", "traslado:list", "catalog:list", "voz:correcciones:list", "auth:verify",
   "ubicacion:sede", "ubicacion:extintor", "ubicacion:foto:get",
+  "insp:disponibles", "insp:detalle", "insp:foto:get",
 ]);
 
 const DIFERIBLES = new Set(["ubicacion:foto"]);
@@ -322,7 +326,7 @@ export class SocketSinSenal {
         });
         return this;
       }
-      if ((evento === "ubicacion:sede" || evento === "ubicacion:extintor") && ack) {
+      if ((evento === "ubicacion:sede" || evento === "ubicacion:extintor" || evento === "insp:disponibles" || evento === "insp:detalle") && ack) {
         this.real.timeout(ESPERA_ESCANEO_MS).emit(evento, datos, (err: Error | null, res: any) => {
           if (err) {
             this.responderLectura(evento, datos, ack);
@@ -448,6 +452,17 @@ export class SocketSinSenal {
 
   private cachearUbicaciones(evento: string, res: any) {
     if (!res?.success) return;
+    if (evento === "insp:disponibles" && Array.isArray(res.lista)) {
+      this.estado.inspDisponibles = res.lista;
+      this.persistir();
+      return;
+    }
+    if (evento === "insp:detalle" && res.campana?.id) {
+      const { success: _s, ...detalle } = res;
+      this.estado.inspecciones[res.campana.id] = detalle;
+      this.persistir();
+      return;
+    }
     if (evento === "ubicacion:sede" && Array.isArray(res.extintores)) {
       res.extintores.forEach((x: any) => {
         if (x?.uid && x.ubicacion) this.estado.ubicaciones[x.uid] = x.ubicacion;
@@ -805,6 +820,44 @@ export class SocketSinSenal {
         respuesta = { success: true, sinSenal: true, actual: e.ubicaciones[d.extintorUid] };
         break;
       }
+      case "insp:registrar": {
+        const detalle = e.inspecciones[d.campanaId];
+        if (!d.id || !d.extintorUid) return { success: false, error: "Inspección incompleta" };
+        const pendiente = e.cola.find((o) => o.evento === evento && o.datos.id === d.id);
+        const fotos = { ...(pendiente?.datos.fotos || {}), ...(d.fotos || {}) };
+        const completar = { ...(pendiente?.datos.completar || {}), ...(d.completar || {}) };
+        const anteriores: string[] = detalle?.registros?.find((r: any) => r.id === d.id)?.fotos || [];
+        if (d.estado === "inspeccionado" && ["panoramica", "frontal", "posterior"].some((t) => !fotos[t] && !anteriores.includes(t))) {
+          return { success: false, error: "Faltan fotos obligatorias" };
+        }
+        const datos = { ...SIN_CAMPOS_TECNICOS(d), id: d.id, fotos, completar };
+        if (detalle) {
+          const { fotos: _f, completar: _c, ...registro } = datos;
+          const resto = (detalle.registros || []).filter((r: any) => r.id !== d.id);
+          detalle.registros = [...resto, { ...registro, hallazgos: d.hallazgos || [], usuarioNombre: "Tú", levantado: false, fotos: Array.from(new Set([...anteriores, ...Object.keys(fotos)])), pendiente: true }];
+          const ext = (detalle.extintores || []).find((x: any) => x.uid === d.extintorUid);
+          if (ext) Object.entries(completar).forEach(([k, v]) => { if (v) ext[k] = v; });
+          const disp = e.inspDisponibles.find((c: any) => c.id === d.campanaId);
+          if (disp) {
+            disp.inspeccionados = detalle.registros.filter((r: any) => r.estado === "inspeccionado").length;
+            disp.noEncontrados = detalle.registros.filter((r: any) => r.estado === "no_encontrado").length;
+          }
+        }
+        const encontrado = this.buscarPorUid(d.extintorUid);
+        if (encontrado && Object.keys(completar).length) {
+          Object.entries(completar).forEach(([k, v]) => { if (v) encontrado.fila[k] = v; });
+          this.difundirExtintores(encontrado.empresaId);
+        }
+        if (pendiente) {
+          pendiente.datos = datos;
+          queueMicrotask(() => this.guardarAhora());
+        } else {
+          const ext = detalle?.extintores?.find((x: any) => x.uid === d.extintorUid);
+          this.encolar(evento, datos, `Inspección de ${ext?.nInterno || ext?.nSerie || "extintor"}`);
+        }
+        this.despachar("insp:cambio", { campanaId: d.campanaId, local: true });
+        break;
+      }
       case "ubicacion:anular": {
         const pendiente = e.cola.find((o) => o.evento === "ubicacion:registrar" && o.datos.id === d.id);
         Object.entries(e.ubicaciones).forEach(([uid, u]) => { if (u?.id === d.id) delete e.ubicaciones[uid]; });
@@ -921,6 +974,17 @@ export class SocketSinSenal {
         return;
       case "ubicacion:foto:get":
         ack?.({ success: false, error: "La foto del lugar se verá cuando vuelva la señal" });
+        return;
+      case "insp:disponibles":
+        ack?.({ success: true, sinSenal: true, lista: e.inspDisponibles });
+        return;
+      case "insp:detalle": {
+        const detalle = e.inspecciones[d.id];
+        ack?.(detalle ? { success: true, sinSenal: true, ...detalle } : { success: false, error: "Abre esta inspección una vez con señal para poder usarla sin señal." });
+        return;
+      }
+      case "insp:foto:get":
+        ack?.({ success: false, error: "Las fotos se verán cuando vuelva la señal" });
         return;
       default:
         return;
