@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { Building, History, Link2, Plus, ScanQrCode, TriangleAlert, X } from "lucide-react";
+import { Building, History, Link2, MapPin, Plus, ScanQrCode, TriangleAlert, X } from "lucide-react";
 import type { Extintor, Servicio, TrasladoSede } from "../../../types";
 import ExtintorCard from "./ExtintorCard";
 import ExtintorHistorialModal from "./ExtintorHistorialModal";
 import { useTeclaEscape } from "../../../hooks/useTeclaEscape";
 import { uidDesdeQR } from "../../../utils/qrExtintor";
+import { rastreoUbicacion } from "../ubicacion/rastreoUbicacion";
+import { useRastreoUbicacion } from "../ubicacion/useUbicacion";
+import { formatearPrecision } from "../../../utils/geo";
 
 export type ResultadoScan = {
     extintor: Extintor;
@@ -43,6 +46,7 @@ export default function EscanearQRModal({
     const [historialAbierto, setHistorialAbierto] = useState(false);
 
     const escaneoAcotado = scopeEmpresaId !== undefined;
+    const rastreo = useRastreoUbicacion();
 
     const detenerCamara = () => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -63,6 +67,7 @@ export default function EscanearQRModal({
                 return;
             }
             setResultado(res);
+            if (res.extintor?.uid) rastreoUbicacion.alEscanear(res.extintor.uid);
             if (escaneoAcotado) {
                 if (res.empresa.id !== scopeEmpresaId) {
                     setError("Este extintor pertenece a otra Empresa. No puede asociarse desde aquí.");
@@ -179,6 +184,16 @@ export default function EscanearQRModal({
                             </div>
 
                             <ExtintorCard ext={resultado.extintor} index={0} context="historial" hasSedes={!!resultado.sede} sedeNameById={sedeNameById} />
+
+                            {rastreo.activa && rastreo.uid === resultado.extintor.uid && rastreo.captura.estado !== "sin-permiso" && rastreo.captura.estado !== "no-disponible" && (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-600">
+                                    <MapPin className={`w-4 h-4 shrink-0 ${rastreo.guardar ? "text-red-600" : "text-zinc-400"}`} />
+                                    <span className="flex-1">
+                                        {!rastreo.guardar ? "No se guardará la ubicación" : rastreo.captura.lectura ? `Guardando ubicación ${formatearPrecision(rastreo.captura.lectura.precision)}` : "Buscando ubicación…"}
+                                    </span>
+                                    <button onClick={() => rastreoUbicacion.setGuardar(!rastreo.guardar)} className="text-red-600 underline shrink-0">{rastreo.guardar ? "No estoy junto a él" : "Guardar"}</button>
+                                </div>
+                            )}
 
                             {error && (
                                 <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, Bell, BookOpen, ChevronLeft, DatabaseBackup, Globe, Store, GraduationCap, LoaderCircle, FireExtinguisher, LogOut, Mic, Package, PanelLeftClose, PanelLeftOpen, Receipt, Smartphone, Users, type LucideIcon } from "lucide-react";
+import { Archive, Bell, BookOpen, ChevronLeft, DatabaseBackup, FlaskConical, Globe, Store, GraduationCap, LoaderCircle, FireExtinguisher, LogOut, MapPin, Mic, Package, PanelLeftClose, PanelLeftOpen, Receipt, Smartphone, Users, type LucideIcon } from "lucide-react";
 import Notificaciones from "../../components/ui/Notificaciones";
 import type { Usuario } from "../../types";
 import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
@@ -23,6 +23,7 @@ import CotizacionesPage from "./cotizaciones/CotizacionesPage";
 import SolicitudesWebPage from "./web/SolicitudesWebPage";
 import ProductosWebPage from "./web/productos/ProductosWebPage";
 import CapacitacionPage from "./capacitacion/CapacitacionPage";
+import UbicacionesPage from "./ubicaciones/UbicacionesPage";
 import { useSolicitudesWebBadge } from "./web/useSolicitudesWeb";
 import AlertasPage from "./alertas/AlertasPage";
 import VozAprendizajePage from "./voz/VozAprendizajePage";
@@ -61,24 +62,45 @@ export default function DashboardPage({ user, onLogout }: { user: Usuario; onLog
     openUsersModal, saveUser, deleteUser,
   } = usersManagement;
 
-  const enSeccionAlterna = location.pathname.startsWith("/dashboard/inventario") || location.pathname.startsWith("/dashboard/cotizaciones") || location.pathname.startsWith("/dashboard/web") || location.pathname.startsWith("/dashboard/productos-web") || location.pathname.startsWith("/dashboard/capacitacion") || location.pathname.startsWith("/dashboard/alertas") || location.pathname.startsWith("/dashboard/voz");
+  const enSeccionAlterna = location.pathname.startsWith("/dashboard/inventario") || location.pathname.startsWith("/dashboard/cotizaciones") || location.pathname.startsWith("/dashboard/web") || location.pathname.startsWith("/dashboard/productos-web") || location.pathname.startsWith("/dashboard/capacitacion") || location.pathname.startsWith("/dashboard/ubicaciones") || location.pathname.startsWith("/dashboard/alertas") || location.pathname.startsWith("/dashboard/voz");
 
   const totalAlertas = useAlertasBadge(socket);
   const solicitudesWeb = useSolicitudesWebBadge(socket);
 
   const enRuta = (ruta: string) => location.pathname.startsWith(ruta);
-  const itemsMenu: { to: string; label: string; icono: LucideIcon; activo: boolean; badge?: number }[] = [
+  type ItemMenu = { to: string; label: string; icono: LucideIcon; activo: boolean; badge?: number };
+  const itemsMenu: ItemMenu[] = [
     { to: "/dashboard", label: "Registro Extintores", icono: FireExtinguisher, activo: !enSeccionAlterna },
     { to: "/dashboard/inventario", label: "Inventario", icono: Package, activo: enRuta("/dashboard/inventario") },
     { to: "/dashboard/cotizaciones", label: "Cotizaciones", icono: Receipt, activo: enRuta("/dashboard/cotizaciones") },
     { to: "/dashboard/web", label: "Solicitudes Web", icono: Globe, activo: enRuta("/dashboard/web"), badge: solicitudesWeb },
     ...(user.role === "boss" || user.role === "admin" ? [
       { to: "/dashboard/productos-web", label: "Productos Web", icono: Store, activo: enRuta("/dashboard/productos-web") },
-      { to: "/dashboard/capacitacion", label: "Capacitación", icono: GraduationCap, activo: enRuta("/dashboard/capacitacion") },
     ] : []),
     { to: "/dashboard/alertas", label: "Alertas", icono: Bell, activo: enRuta("/dashboard/alertas"), badge: totalAlertas },
     ...(user.role === "boss" ? [{ to: "/dashboard/voz", label: "Dictado por Voz", icono: Mic, activo: enRuta("/dashboard/voz") }] : []),
   ];
+  const itemsExperimentales: ItemMenu[] = user.role === "boss" || user.role === "admin" ? [
+    { to: "/dashboard/ubicaciones", label: "Ubicación de extintores", icono: MapPin, activo: enRuta("/dashboard/ubicaciones") },
+    { to: "/dashboard/capacitacion", label: "Capacitaciones virtuales", icono: GraduationCap, activo: enRuta("/dashboard/capacitacion") },
+  ] : [];
+
+  const enlaceMenu = ({ to, label, icono: Icono, activo, badge }: ItemMenu) => (
+    <Link
+      key={to}
+      to={to}
+      title={label}
+      className={`flex-1 md:flex-none whitespace-nowrap px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${activo ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
+    >
+      <Icono className="w-4 h-4 shrink-0" />
+      {sidebarOpen && <span className="hidden sm:inline md:inline">{label}</span>}
+      {!!badge && (
+        <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
+    </Link>
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-red-500/30 pb-10"
@@ -177,22 +199,17 @@ export default function DashboardPage({ user, onLogout }: { user: Usuario; onLog
             {sidebarOpen ? <PanelLeftClose className="w-4 h-4 shrink-0" /> : <PanelLeftOpen className="w-4 h-4 shrink-0" />}
             {sidebarOpen && "Ocultar"}
           </button>
-          {itemsMenu.map(({ to, label, icono: Icono, activo, badge }) => (
-            <Link
-              key={to}
-              to={to}
-              title={label}
-              className={`flex-1 md:flex-none whitespace-nowrap px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${activo ? "bg-red-950/30 text-red-400 border border-red-900/50" : "text-zinc-400 hover:text-white hover:bg-zinc-900/50 border border-transparent"}`}
-            >
-              <Icono className="w-4 h-4 shrink-0" />
-              {sidebarOpen && <span className="hidden sm:inline md:inline">{label}</span>}
-              {!!badge && (
-                <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center">
-                  {badge > 99 ? "99+" : badge}
-                </span>
-              )}
-            </Link>
-          ))}
+          {itemsMenu.map(enlaceMenu)}
+          {itemsExperimentales.length > 0 && (
+            <>
+              <div className="hidden md:flex items-center gap-2 px-4 pt-4 pb-1 text-[10px] font-black uppercase tracking-widest text-amber-500/80" title="Experimental">
+                <FlaskConical className="w-3.5 h-3.5 shrink-0" />
+                {sidebarOpen && "Experimental"}
+              </div>
+              <div className="md:hidden w-px bg-zinc-800 shrink-0 mx-1" />
+              {itemsExperimentales.map(enlaceMenu)}
+            </>
+          )}
         </aside>
         <div className="flex-1 min-w-0">
         <Routes>
@@ -202,6 +219,7 @@ export default function DashboardPage({ user, onLogout }: { user: Usuario; onLog
           <Route path="web" element={<SolicitudesWebPage socket={socket} />} />
           {(user.role === "boss" || user.role === "admin") && <Route path="productos-web" element={<ProductosWebPage socket={socket} />} />}
           {(user.role === "boss" || user.role === "admin") && <Route path="capacitacion" element={<CapacitacionPage socket={socket} />} />}
+          {(user.role === "boss" || user.role === "admin") && <Route path="ubicaciones" element={<UbicacionesPage socket={socket} />} />}
           <Route path="alertas" element={<AlertasPage socket={socket} />} />
           {user.role === "boss" && <Route path="voz" element={<VozAprendizajePage socket={socket} catalogs={catalogs} role={user.role} />} />}
           <Route path=":empresaSlug" element={<EmpresaLayout socket={socket} catalogs={catalogs} user={user} />}>

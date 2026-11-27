@@ -13,6 +13,8 @@ import DictadoVozModal from "../voz/DictadoVozModal";
 import { SECCION_DE_PASO } from "../voz/seccionesVoz";
 import DuplicadoComparacionModal from "../../../components/extintores/DuplicadoComparacionModal";
 import CampoArea from "../../../components/extintores/CampoArea";
+import UbicacionFormulario from "../ubicacion/UbicacionFormulario";
+import { rastreoUbicacion } from "../ubicacion/rastreoUbicacion";
 
 const PASOS = [
     { titulo: "Datos", icono: FireExtinguisher, ayuda: "Copia los datos de la etiqueta del extintor. Si no los ves, déjalos en blanco." },
@@ -155,6 +157,11 @@ export default function ExtintorFormView({
             return;
         }
     }, [paso]);
+
+    useEffect(() => {
+        rastreoUbicacion.alAbrirFormulario(form.uid || null, editingRow === null, form.servicioId ?? null);
+        return () => rastreoUbicacion.alCancelarFormulario();
+    }, [editingRow]);
 
     useEffect(() => () => {
         try {
@@ -585,6 +592,7 @@ export default function ExtintorFormView({
                                 )}
                             </div>
                         </Card>
+                        <UbicacionFormulario socket={socket} uid={form.uid} />
                         {faltantes.length > 0 && (
                             <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 text-amber-900">
                                 <TriangleAlert className="w-6 h-6 shrink-0 text-amber-600" />

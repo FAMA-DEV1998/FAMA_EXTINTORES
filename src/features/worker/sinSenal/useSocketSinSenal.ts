@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import { SocketSinSenal, type ResumenSinSenal } from "./SocketSinSenal";
 
 const RESUMEN_INICIAL: ResumenSinSenal = {
-  listo: false, conectado: false, sincronizando: false, pendientes: 0, fallidas: [], empresasDisponibles: new Set(), catalogos: null,
+  listo: false, conectado: false, sincronizando: false, pendientes: 0, fallidas: [], empresasDisponibles: new Set(), catalogos: null, senalDebil: false, progreso: null,
 };
 
 const sinSuscripcion = () => () => {};

@@ -11,6 +11,7 @@ export type Operacion = {
   creadaEn: number;
   descripcion: string;
   error?: string;
+  envio?: { id: string; firma: string; enviadas: number };
 };
 
 type EstadoLocal = {
@@ -25,6 +26,8 @@ type EstadoLocal = {
   cola: Operacion[];
   fallidas: Operacion[];
   filasReales: Record<string, number>;
+  ubicaciones: Record<string, any>;
+  enVuelo: Operacion[];
 };
 
 export type ResumenSinSenal = {
@@ -35,23 +38,45 @@ export type ResumenSinSenal = {
   fallidas: Operacion[];
   empresasDisponibles: Set<string>;
   catalogos: any | null;
+  senalDebil: boolean;
+  progreso: { descripcion: string; enviadas: number; total: number } | null;
 };
 
 const estadoVacio = (): EstadoLocal => ({
   empresas: [], empresa: {}, sedes: {}, extintores: {}, servicios: {}, traslados: {},
-  evidencias: {}, catalogos: null, cola: [], fallidas: [], filasReales: {},
+  evidencias: {}, catalogos: null, cola: [], fallidas: [], filasReales: {}, ubicaciones: {}, enVuelo: [],
 });
 
 const ESCRITURAS_SIN_SENAL = new Set([
   "extintor:add", "extintor:update", "extintor:delete",
   "servicio:save", "servicio:addExtintor", "servicio:removeExtintor", "servicio:setExtintorEstado", "servicio:updateDatos", "servicio:delete",
   "empresa:save", "sede:save",
+  "ubicacion:registrar", "ubicacion:foto", "ubicacion:anular",
 ]);
 
 const LECTURAS_SIN_SENAL = new Set([
   "empresa:list", "empresa:get", "sede:list", "extintor:list", "extintor:listGlobal", "servicio:list", "servicio:listByExtintor",
   "extintor:scan", "extintor:evidencia:get", "traslado:list", "catalog:list", "voz:correcciones:list", "auth:verify",
+  "ubicacion:sede", "ubicacion:extintor", "ubicacion:foto:get",
 ]);
+
+const DIFERIBLES = new Set(["ubicacion:foto"]);
+const LIMITE_DIRECTO = 48 * 1024;
+const TAM_TROZO = 24 * 1024;
+const ESPERA_TROZO_MS = 45000;
+const ESPERA_ESCANEO_MS = 12000;
+const INTERVALO_SENAL_MS = 15000;
+const SENAL_LENTA_MS = 2500;
+const SENAL_BUENA_MS = 1200;
+
+const firmaDe = (texto: string) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i += 1) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${texto.length}-${(h >>> 0).toString(36)}`;
+};
 
 const EVENTOS_RESERVADOS = new Set(["disconnect", "connect_error"]);
 
@@ -108,6 +133,11 @@ export class SocketSinSenal {
   private readonly real: Socket;
   private resumenCache: ResumenSinSenal | null = null;
   private alTerminarSincronizacion: ((enviados: number, fallidos: number) => void) | null = null;
+  private senalDebil = false;
+  private soportaPartes = false;
+  private buenasSeguidas = 0;
+  private medidorSenal: ReturnType<typeof setInterval> | null = null;
+  private progreso: ResumenSinSenal["progreso"] = null;
 
   constructor(real: Socket, usuarioId: string) {
     this.real = real;
@@ -139,7 +169,10 @@ export class SocketSinSenal {
   async iniciar() {
     const guardado = await leerLocal<EstadoLocal>(this.clave);
     if (guardado) this.estado = { ...estadoVacio(), ...guardado };
+    this.recuperarEnVuelo();
     this.listo = true;
+    this.medirSenal();
+    this.medidorSenal = setInterval(this.medirSenal, INTERVALO_SENAL_MS);
     this.notificar();
     document.addEventListener("visibilitychange", this.alOcultar);
     window.addEventListener("pagehide", this.guardarAhora);
@@ -160,6 +193,7 @@ export class SocketSinSenal {
     document.removeEventListener("visibilitychange", this.alOcultar);
     window.removeEventListener("pagehide", this.guardarAhora);
     if (this.temporizadorDesconexion) clearTimeout(this.temporizadorDesconexion);
+    if (this.medidorSenal) clearInterval(this.medidorSenal);
     this.oyentes.forEach((conjunto, evento) => {
       if (EVENTOS_RESERVADOS.has(evento)) conjunto.forEach((fn) => this.real.off(evento, fn));
     });
@@ -206,6 +240,8 @@ export class SocketSinSenal {
         fallidas: this.estado.fallidas,
         empresasDisponibles: new Set(Object.keys(this.estado.extintores)),
         catalogos: this.estado.catalogos,
+        senalDebil: this.real.connected && this.senalDebil,
+        progreso: this.progreso,
       };
     }
     return this.resumenCache;
@@ -270,7 +306,31 @@ export class SocketSinSenal {
         return this;
       }
       if (ESCRITURAS_SIN_SENAL.has(evento) && ack) {
-        this.escribirConRespaldo(evento, datos, ack);
+        if (this.soportaPartes && (this.senalDebil || JSON.stringify(datos).length > LIMITE_DIRECTO)) {
+          const respuesta = this.aplicarEscritura(evento, datos);
+          setTimeout(() => ack(respuesta), 0);
+          void this.sincronizar();
+          return this;
+        }
+        this.escribirConRespaldo(evento, this.prepararEnvio({ datos }), ack);
+        return this;
+      }
+      if (evento === "extintor:scan" && ack) {
+        this.real.timeout(ESPERA_ESCANEO_MS).emit(evento, datos, (err: Error | null, res: any) => {
+          if (err) this.responderLectura(evento, datos, ack);
+          else ack(res);
+        });
+        return this;
+      }
+      if ((evento === "ubicacion:sede" || evento === "ubicacion:extintor") && ack) {
+        this.real.timeout(ESPERA_ESCANEO_MS).emit(evento, datos, (err: Error | null, res: any) => {
+          if (err) {
+            this.responderLectura(evento, datos, ack);
+            return;
+          }
+          this.cachearUbicaciones(evento, res);
+          ack(res);
+        });
         return this;
       }
       this.real.emit(evento, ...args);
@@ -313,9 +373,18 @@ export class SocketSinSenal {
 
   private escribirConRespaldo(evento: string, datos: Record<string, any>, ack: Oyente) {
     let resuelto = false;
+    const diario: Operacion = { id: nuevoId(), evento, datos, creadaEn: Date.now(), descripcion: "" };
+    this.estado.enVuelo.push(diario);
+    this.guardarAhora();
+    const cerrarDiario = () => {
+      this.estado.enVuelo = this.estado.enVuelo.filter((o) => o.id !== diario.id);
+      this.persistir();
+    };
     const respaldo = setTimeout(() => {
       if (resuelto) return;
       resuelto = true;
+      this.marcarSenal(false);
+      cerrarDiario();
       const respuesta = this.aplicarEscritura(evento, { ...datos, confirmarDuplicado: true });
       this.programarReintento();
       ack(respuesta);
@@ -324,8 +393,70 @@ export class SocketSinSenal {
       if (resuelto) return;
       resuelto = true;
       clearTimeout(respaldo);
+      cerrarDiario();
+      if (res?.success && evento === "ubicacion:registrar" && res.actual) this.guardarUbicacionLocal(datos.extintorUid, res.actual);
       ack(res);
     });
+  }
+
+  private recuperarEnVuelo() {
+    const pendientes = this.estado.enVuelo;
+    this.estado.enVuelo = [];
+    pendientes.forEach((op) => {
+      try {
+        this.aplicarEscritura(op.evento, { ...op.datos, confirmarDuplicado: true });
+      } catch (err) {
+        console.error(err);
+      }
+    });
+    if (pendientes.length > 0) this.guardarAhora();
+  }
+
+  private medirSenal = () => {
+    if (!this.real.connected || !this.listo) return;
+    const inicio = Date.now();
+    this.real.timeout(8000).emit("senal:ping", {}, (err: Error | null, res: any) => {
+      if (err || !res?.ok) {
+        if (this.soportaPartes) this.marcarSenal(false);
+        return;
+      }
+      this.soportaPartes = true;
+      const demora = Date.now() - inicio;
+      if (demora > SENAL_LENTA_MS) this.marcarSenal(false);
+      else if (demora < SENAL_BUENA_MS) this.marcarSenal(true);
+    });
+  };
+
+  private marcarSenal(buena: boolean) {
+    const antes = this.senalDebil;
+    if (buena) {
+      this.buenasSeguidas += 1;
+      if (this.buenasSeguidas >= 2) this.senalDebil = false;
+    } else {
+      this.buenasSeguidas = 0;
+      this.senalDebil = true;
+    }
+    if (antes !== this.senalDebil) this.notificar();
+  }
+
+  private guardarUbicacionLocal(uid: string, actual: any) {
+    if (!uid) return;
+    if (actual) this.estado.ubicaciones[uid] = actual;
+    else if (!this.estado.cola.some((o) => o.evento === "ubicacion:registrar" && o.datos.extintorUid === uid)) delete this.estado.ubicaciones[uid];
+    this.persistir();
+  }
+
+  private cachearUbicaciones(evento: string, res: any) {
+    if (!res?.success) return;
+    if (evento === "ubicacion:sede" && Array.isArray(res.extintores)) {
+      res.extintores.forEach((x: any) => {
+        if (x?.uid && x.ubicacion) this.estado.ubicaciones[x.uid] = x.ubicacion;
+        else if (x?.uid && !this.estado.cola.some((o) => o.evento === "ubicacion:registrar" && o.datos.extintorUid === x.uid)) delete this.estado.ubicaciones[x.uid];
+      });
+      this.persistir();
+    } else if (evento === "ubicacion:extintor" && res.uid) {
+      this.guardarUbicacionLocal(res.uid, res.actual);
+    }
   }
 
   private notificar = () => {
@@ -555,7 +686,7 @@ export class SocketSinSenal {
         break;
       }
       case "extintor:update": {
-        const encontrado = this.buscarFila(d.rowIndex);
+        const encontrado = this.buscarFila(d.rowIndex) ?? (typeof d.uid === "string" && d.uid ? this.buscarPorUid(d.uid) : null);
         if (!encontrado) return { success: false, error: "No se encontró el extintor en este teléfono" };
         const { empresaId, fila } = encontrado;
         const fotos = contarFotos(d.evidencia);
@@ -579,7 +710,7 @@ export class SocketSinSenal {
         const { empresaId, fila } = encontrado;
         e.extintores[empresaId] = this.filasDe(empresaId).filter((f) => f.uid !== fila.uid);
         if (this.addPendiente(fila.uid)) {
-          e.cola = e.cola.filter((o) => o.datos.uid !== fila.uid);
+          e.cola = e.cola.filter((o) => o.datos.uid !== fila.uid && o.datos.extintorUid !== fila.uid);
           Object.values(e.servicios).forEach((lista) => lista.forEach((s) => {
             s.extintorUids = (s.extintorUids || []).filter((u: string) => u !== fila.uid);
             if (s.extintorEstados) delete s.extintorEstados[fila.uid];
@@ -653,6 +784,38 @@ export class SocketSinSenal {
         this.despachar("empresa:list", e.empresas);
         this.despachar("empresa:data:updated", e.empresa[id]);
         respuesta = { success: true, sinSenal: true, id, slug: slugify(d.razonSocial) };
+        break;
+      }
+      case "ubicacion:registrar": {
+        if (!d.id || !d.extintorUid) return { success: false, error: "Ubicación incompleta" };
+        const previa = e.ubicaciones[d.extintorUid];
+        e.ubicaciones[d.extintorUid] = {
+          id: d.id, lat: d.lat, lng: d.lng, precision: d.precision, altitud: d.altitud ?? null,
+          referencia: d.referencia || previa?.referencia || "", fotoId: previa?.fotoId ?? null, origen: d.origen || "escaneo",
+          usuarioNombre: "Tú", capturadaEn: d.capturadaEn || new Date().toISOString(), lecturas: 1, movido: null, pendiente: true,
+        };
+        const enCola = e.cola.find((o) => o.evento === evento && o.datos.id === d.id);
+        if (enCola) {
+          enCola.datos = { ...SIN_CAMPOS_TECNICOS(d), id: d.id };
+          queueMicrotask(() => this.guardarAhora());
+        } else {
+          const fila = this.buscarPorUid(d.extintorUid)?.fila;
+          this.encolar(evento, { ...SIN_CAMPOS_TECNICOS(d), id: d.id }, `Ubicación de ${this.nombreExtintor(fila)}`);
+        }
+        respuesta = { success: true, sinSenal: true, actual: e.ubicaciones[d.extintorUid] };
+        break;
+      }
+      case "ubicacion:anular": {
+        const pendiente = e.cola.find((o) => o.evento === "ubicacion:registrar" && o.datos.id === d.id);
+        Object.entries(e.ubicaciones).forEach(([uid, u]) => { if (u?.id === d.id) delete e.ubicaciones[uid]; });
+        if (pendiente) e.cola = e.cola.filter((o) => o.datos.id !== d.id);
+        else this.encolar(evento, { id: d.id }, "Anular ubicación");
+        break;
+      }
+      case "ubicacion:foto": {
+        if (!d.id || typeof d.foto !== "string") return { success: false, error: "Foto incompleta" };
+        e.cola = e.cola.filter((o) => !(o.evento === evento && o.datos.id === d.id));
+        this.encolar(evento, { id: d.id, foto: d.foto }, "Foto del lugar de un extintor");
         break;
       }
       case "sede:save": {
@@ -742,12 +905,29 @@ export class SocketSinSenal {
       case "voz:correcciones:list":
         ack?.({ success: true, correcciones: {} });
         return;
+      case "ubicacion:sede": {
+        const filas = (e.extintores[d.empresaId] || []).filter((f) => d.sedeId === undefined || (d.sedeId === null ? !f.sedeId : f.sedeId === d.sedeId));
+        ack?.({
+          success: true, sinSenal: true, empresaId: d.empresaId, sedeId: d.sedeId,
+          extintores: filas.map((f) => ({
+            uid: f.uid, rowIndex: f.rowIndex, nSerie: f.nSerie, nInterno: f.nInterno, marca: f.marca, area: f.area, estadoExtintor: f.estadoExtintor,
+            agenteExtintor: f.agenteExtintor, peso: f.peso, unidadPeso: f.unidadPeso, sedeId: f.sedeId ?? null, ubicacion: e.ubicaciones[f.uid] ?? null,
+          })),
+        });
+        return;
+      }
+      case "ubicacion:extintor":
+        ack?.({ success: true, sinSenal: true, uid: d.uid, actual: e.ubicaciones[d.uid] ?? null, historial: [] });
+        return;
+      case "ubicacion:foto:get":
+        ack?.({ success: false, error: "La foto del lugar se verá cuando vuelva la señal" });
+        return;
       default:
         return;
     }
   }
 
-  private prepararEnvio(op: Operacion) {
+  private prepararEnvio(op: Pick<Operacion, "datos">) {
     const datos = { ...op.datos };
     if (typeof datos.rowIndex === "number" && datos.rowIndex < 0 && datos.uid) {
       const real = this.estado.filasReales[datos.uid] ?? this.buscarPorUid(datos.uid)?.fila?.rowIndex;
@@ -764,6 +944,57 @@ export class SocketSinSenal {
     });
   }
 
+  private quitarDeCola(op: Operacion) {
+    this.estado.cola = this.estado.cola.filter((o) => o !== op);
+  }
+
+  private async enviarPorPartes(op: Operacion, datos: Record<string, any>) {
+    const texto = JSON.stringify(datos);
+    const firma = firmaDe(texto);
+    if (!op.envio || op.envio.firma !== firma) op.envio = { id: nuevoId(), firma, enviadas: 0 };
+    const envio = op.envio;
+    const total = Math.ceil(texto.length / TAM_TROZO);
+    let reinicios = 0;
+    let ultimoGuardado = Date.now();
+    while (envio.enviadas < total) {
+      if (!this.real.connected) return { respondio: false };
+      this.progreso = { descripcion: op.descripcion, enviadas: envio.enviadas, total };
+      this.notificar();
+      const inicio = Date.now();
+      const parte = texto.slice(envio.enviadas * TAM_TROZO, (envio.enviadas + 1) * TAM_TROZO);
+      const r = await new Promise<{ respondio: boolean; res?: any }>((resolver) => {
+        this.real.timeout(ESPERA_TROZO_MS).emit("envio:trozo", { envioId: envio.id, evento: op.evento, indice: envio.enviadas, total, parte }, (err: Error | null, res: any) => {
+          resolver(err ? { respondio: false } : { respondio: true, res });
+        });
+      });
+      if (!r.respondio) {
+        this.marcarSenal(false);
+        return { respondio: false };
+      }
+      const res = r.res;
+      if (res?.reiniciar) {
+        reinicios += 1;
+        if (reinicios > 3) return { respondio: false };
+        envio.enviadas = 0;
+        continue;
+      }
+      if (res?.success === false) return { respondio: true, res };
+      if (res?.completo) return { respondio: true, res: res.respuesta };
+      envio.enviadas += 1;
+      this.marcarSenal(Date.now() - inicio < SENAL_BUENA_MS * 2);
+      if (Date.now() - ultimoGuardado > 3000) {
+        ultimoGuardado = Date.now();
+        this.guardarAhora();
+      }
+    }
+    return { respondio: false };
+  }
+
+  private enviarOperacion(op: Operacion, datos: Record<string, any>) {
+    if (this.soportaPartes && JSON.stringify(datos).length > TAM_TROZO * 2) return this.enviarPorPartes(op, datos);
+    return this.enviar(op.evento, datos);
+  }
+
   private async sincronizar() {
     if (this.sincronizando || !this.real.connected) return;
     this.sincronizando = true;
@@ -772,21 +1003,40 @@ export class SocketSinSenal {
     let fallidos = 0;
 
     while (this.estado.cola.length > 0 && this.real.connected) {
-      const op = this.estado.cola[0];
+      const op = this.estado.cola.find((o) => !DIFERIBLES.has(o.evento)) || this.estado.cola[0];
       const datos = this.prepararEnvio(op);
       if (typeof datos.rowIndex === "number" && datos.rowIndex < 0) {
-        this.estado.cola.shift();
+        this.quitarDeCola(op);
         this.estado.fallidas.push({ ...op, error: "El extintor original no llegó al servidor" });
         fallidos += 1;
         this.persistir();
         continue;
       }
-      const { respondio, res } = await this.enviar(op.evento, datos);
+      const firmaAntes = firmaDe(JSON.stringify(op.datos));
+      const { respondio, res } = await this.enviarOperacion(op, datos);
+      this.progreso = null;
       if (!respondio || res?.sesionInvalida) {
         if (!respondio) this.programarReintento();
+        this.persistir();
         break;
       }
-      this.estado.cola.shift();
+      const cambioMientrasSeEnviaba = res?.success !== false && firmaDe(JSON.stringify(op.datos)) !== firmaAntes;
+      if (cambioMientrasSeEnviaba && op.evento === "extintor:add" && typeof res?.rowIndex === "number") {
+        const { servicioId: _s, estadoServicio: _e, confirmarDuplicado: _c, ...resto } = op.datos;
+        this.estado.filasReales[op.datos.uid] = res.rowIndex;
+        op.evento = "extintor:update";
+        op.datos = { ...resto, rowIndex: res.rowIndex };
+        op.envio = undefined;
+        enviados += 1;
+        this.persistir();
+        continue;
+      }
+      if (cambioMientrasSeEnviaba && op.evento !== "extintor:add") {
+        op.envio = undefined;
+        this.persistir();
+        continue;
+      }
+      this.quitarDeCola(op);
       if (res?.success === false) {
         this.estado.fallidas.push({ ...op, error: res.error || "El servidor rechazó el cambio" });
         fallidos += 1;
@@ -795,13 +1045,14 @@ export class SocketSinSenal {
         if (op.evento === "extintor:add" && typeof res?.rowIndex === "number") {
           this.estado.filasReales[op.datos.uid] = res.rowIndex;
         }
+        if (op.evento === "ubicacion:registrar" && res?.actual) this.estado.ubicaciones[op.datos.extintorUid] = res.actual;
       }
       this.persistir();
     }
 
     this.sincronizando = false;
     if (this.estado.cola.length === 0) {
-      this.estado.filasReales = {};
+      if (Object.keys(this.estado.filasReales).length > 300) this.estado.filasReales = {};
       this.persistir();
       this.real.emit("empresa:list");
       this.despachar("connect");

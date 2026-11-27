@@ -1,12 +1,13 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import type { Socket } from "socket.io-client";
 import type { EmpresaData, Extintor, Servicio, WorkerView as View } from "../../../types";
-import { Building, Building2, FireExtinguisher, SearchX } from "lucide-react";
+import { Building, Building2, FireExtinguisher, Map as MapaIcono, SearchX } from "lucide-react";
 import { useTraslados } from "../../../hooks/useTraslados";
 import AvisoIncompletos from "./AvisoIncompletos";
 import ExtintorFiltrosBar from "./ExtintorFiltrosBar";
 import ExtintorCard from "./ExtintorCard";
 import ExtintorHistorialModal from "./ExtintorHistorialModal";
+import BuscarExtintoresModal from "../ubicacion/BuscarExtintoresModal";
 
 interface ExtintoresListaViewProps {
     empresa: EmpresaData;
@@ -78,6 +79,7 @@ export default function ExtintoresListaView({
 }: ExtintoresListaViewProps) {
     const [historialExt, setHistorialExt] = useState<Extintor | null>(null);
     const [fSede, setFSede] = useState("");
+    const [mapa, setMapa] = useState<{ uid: string | null } | null>(null);
     const { traslados } = useTraslados(socket, historialExt?.uid);
 
     const agruparPorSede = hasSedes && !activeSedeId;
@@ -127,6 +129,11 @@ export default function ExtintoresListaView({
                         <p className="text-[11px] font-bold text-zinc-400 truncate mt-0.5">{empresa.razonSocial || activeId}</p>
                     )}
                 </div>
+                {extintores.length > 0 && (
+                    <button onClick={() => setMapa({ uid: null })} className="flex items-center gap-1.5 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 px-3.5 py-2 rounded-xl active:scale-95 shrink-0">
+                        <MapaIcono className="w-4 h-4" />Mapa
+                    </button>
+                )}
                 <button onClick={() => setView("home")} className="hidden sm:block text-xs font-bold text-zinc-500 hover:text-red-600 transition-colors bg-zinc-100 px-4 py-2 rounded-xl">
                     Cambiar
                 </button>
@@ -187,6 +194,7 @@ export default function ExtintoresListaView({
                                                 onVerHistorial={setHistorialExt}
                                                 onEliminar={(ext) => handleDelete(ext.rowIndex)}
                                                 onTrasladar={hasSedes ? onTrasladar : undefined}
+                                                onUbicar={(e) => setMapa({ uid: e.uid })}
                                             />
                                         ))}
                                     </div>
@@ -205,6 +213,7 @@ export default function ExtintoresListaView({
                                     onVerHistorial={setHistorialExt}
                                     onEliminar={(ext) => handleDelete(ext.rowIndex)}
                                     onTrasladar={(hasSedes && !activeSedeId) ? onTrasladar : undefined}
+                                    onUbicar={(e) => setMapa({ uid: e.uid })}
                                 />
                             ))}
                         </div>
@@ -221,6 +230,17 @@ export default function ExtintoresListaView({
                 onClose={() => setHistorialExt(null)}
                 onIrAlServicio={(s) => { setHistorialExt(null); onIrAlServicio(s); }}
             />
+
+            {mapa && (
+                <BuscarExtintoresModal
+                    socket={socket}
+                    empresaId={activeId}
+                    sedeId={activeSedeId ?? undefined}
+                    nombre={activeSedeId ? (sedeNameById[activeSedeId] || "Sede") : (empresa.razonSocial || "Empresa")}
+                    uidInicial={mapa.uid}
+                    onClose={() => setMapa(null)}
+                />
+            )}
         </div>
     );
 }

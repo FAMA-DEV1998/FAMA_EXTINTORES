@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleAlert, CloudOff, CloudUpload, LoaderCircle, RotateCcw, Trash2, Wifi, X } from "lucide-react";
+import { CircleAlert, CloudOff, CloudUpload, LoaderCircle, RotateCcw, SignalLow, Trash2, Wifi, X } from "lucide-react";
 import type { ResumenSinSenal, SocketSinSenal } from "./SocketSinSenal";
 import { useTeclaEscape } from "../../../hooks/useTeclaEscape";
 import { confirmar } from "../../../components/ui/Notificaciones";
@@ -8,13 +8,16 @@ export default function EstadoSincronizacion({ resumen, sinSenal }: { resumen: R
   const [abierto, setAbierto] = useState(false);
   useTeclaEscape(abierto, () => setAbierto(false));
 
-  const { conectado, sincronizando, pendientes, fallidas } = resumen;
+  const { conectado, sincronizando, pendientes, fallidas, senalDebil, progreso } = resumen;
+  const porcentaje = progreso ? Math.round((progreso.enviadas / Math.max(1, progreso.total)) * 100) : null;
   const etiqueta = sincronizando
-    ? `Enviando ${pendientes}…`
+    ? porcentaje !== null ? `Enviando ${porcentaje}%` : `Enviando ${pendientes}…`
     : !conectado
       ? pendientes > 0 ? `Sin señal · ${pendientes}` : "Sin señal"
-      : "En línea";
-  const Icono = sincronizando ? LoaderCircle : !conectado ? CloudOff : Wifi;
+      : senalDebil
+        ? pendientes > 0 ? `Señal débil · ${pendientes}` : "Señal débil"
+        : "En línea";
+  const Icono = sincronizando ? LoaderCircle : !conectado ? CloudOff : senalDebil ? SignalLow : Wifi;
 
   const descartar = async (id: string, descripcion: string) => {
     const ok = await confirmar({ titulo: "¿Descartar este cambio?", mensaje: `"${descripcion}" no se enviará al servidor.`, textoConfirmar: "Descartar", peligro: true });
@@ -25,10 +28,10 @@ export default function EstadoSincronizacion({ resumen, sinSenal }: { resumen: R
     <>
       <button
         onClick={() => setAbierto(true)}
-        className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full border text-white transition-colors ${!conectado ? "bg-amber-500/90 border-amber-300/60" : "bg-red-950/30 border-red-900/30 hover:bg-red-950/50"}`}
+        className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full border text-white transition-colors ${!conectado || senalDebil ? "bg-amber-500/90 border-amber-300/60" : "bg-red-950/30 border-red-900/30 hover:bg-red-950/50"}`}
         aria-label={`Estado de conexión: ${etiqueta}`}
       >
-        {conectado && !sincronizando
+        {conectado && !sincronizando && !senalDebil
           ? <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-400 dot-pulse" />
           : <Icono className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />}
         <span className="text-[10px] md:text-xs font-bold tracking-wide whitespace-nowrap">{etiqueta}</span>
@@ -52,7 +55,9 @@ export default function EstadoSincronizacion({ resumen, sinSenal }: { resumen: R
 
             <div className="px-5 py-4 overflow-y-auto flex flex-col gap-4">
               <p className="text-sm text-zinc-600 leading-relaxed">
-                {conectado
+                {conectado && senalDebil
+                  ? "La señal es muy débil. Lo que guardes queda primero en este teléfono y se envía por partes en segundo plano: si la señal se corta, continúa desde donde se quedó y no se pierde nada."
+                  : conectado
                   ? "Todo lo que hagas se guarda directamente en el sistema."
                   : "Puedes seguir registrando extintores y servicios. Se guardan en este teléfono y se enviarán solos cuando vuelva la señal. No cierres sesión mientras tengas cambios pendientes."}
               </p>
@@ -61,9 +66,12 @@ export default function EstadoSincronizacion({ resumen, sinSenal }: { resumen: R
                 <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${pendientes > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
                   {sincronizando ? <LoaderCircle className="w-5 h-5 animate-spin" /> : <CloudUpload className="w-5 h-5" />}
                 </span>
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-black">{pendientes === 0 ? "No hay cambios pendientes" : `${pendientes} cambio${pendientes === 1 ? "" : "s"} por enviar`}</p>
-                  <p className="text-xs text-zinc-500">{sincronizando ? "Enviando al servidor…" : pendientes > 0 ? "Se enviarán cuando haya señal." : "Todo está al día."}</p>
+                  <p className="text-xs text-zinc-500">{sincronizando ? (progreso ? `${progreso.descripcion}: parte ${progreso.enviadas + 1} de ${progreso.total}` : "Enviando al servidor…") : pendientes > 0 ? "Se enviarán cuando haya señal." : "Todo está al día."}</p>
+                  {progreso && (
+                    <div className="mt-1.5 h-1.5 rounded-full bg-zinc-200 overflow-hidden"><div className="h-full bg-amber-500 transition-all" style={{ width: `${porcentaje}%` }} /></div>
+                  )}
                 </div>
               </div>
 

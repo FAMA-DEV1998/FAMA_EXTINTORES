@@ -31,6 +31,7 @@ import { useDirectorioEmpresas } from "./hooks/useDirectorioEmpresas";
 import Notificaciones, { confirmar } from "../../components/ui/Notificaciones";
 import { useSocketSinSenal } from "./sinSenal/useSocketSinSenal";
 import EstadoSincronizacion from "./sinSenal/EstadoSincronizacion";
+import { rastreoUbicacion } from "./ubicacion/rastreoUbicacion";
 
 export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout: () => void }) {
   const { socket: socketReal, connected, catalogs: catalogosServidor } = useSocket(user.id, onLogout, true);
@@ -51,6 +52,10 @@ export default function WorkerPage({ user, onLogout }: { user: Usuario; onLogout
     }
     onLogout();
   };
+
+  useEffect(() => {
+    rastreoUbicacion.conectar(socket);
+  }, [socket]);
 
   const [view, setView] = useState<View>("home");
   const [saving, setSaving] = useState(false);

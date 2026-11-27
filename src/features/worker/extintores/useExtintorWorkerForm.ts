@@ -5,6 +5,7 @@ import { emptyExtintorForm, getCamposFaltantes, normalizarInterno, nuevoUid } fr
 import { confirmar, toastAviso } from "../../../components/ui/Notificaciones";
 import { estadoBloqueaServicio, estadoBloqueaServicioExtra, estadoBloqueaComponentes, estadoSoloPermiteRecarga } from "../../../utils/estadosExtintor";
 import { calcularVencimientoPH } from "../../../utils/pruebaHidrostatica";
+import { rastreoUbicacion } from "../ubicacion/rastreoUbicacion";
 
 export function useExtintorWorkerForm(
     socket: Socket | null,
@@ -92,6 +93,7 @@ export function useExtintorWorkerForm(
             socket.emit("extintor:update", { ...payloadEdicion, rowIndex: editingRow }, (res: any) => {
                 setSaving(false);
                 if (res?.success) {
+                    if (form.uid) rastreoUbicacion.alGuardarExtintor(form.uid);
                     notificarGuardado("Extintor actualizado");
                     clearFormBackup();
                     if (form.uid) setLastSavedExtintor({ uid: form.uid, isNew: false, estado: estadoSnapshot });
@@ -105,6 +107,7 @@ export function useExtintorWorkerForm(
             socket.emit("extintor:add", { ...payload, confirmarDuplicado, ...(form.servicioId ? { servicioId: form.servicioId, estadoServicio: estadoSnapshot } : {}) }, (res: any) => {
                 setSaving(false);
                 if (res?.success) {
+                    rastreoUbicacion.alGuardarExtintor(res.uid || uidNuevo);
                     notificarGuardado("Extintor guardado");
                     clearFormBackup();
                     if (res.uid) setLastSavedExtintor({ uid: res.uid, isNew: true, estado: estadoSnapshot, enServicio: !!res.enServicio });

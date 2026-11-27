@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Camera, CircleAlert, Cog, History, Pencil, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRightLeft, Camera, CircleAlert, Cog, History, MapPin, Pencil, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import { COMP_KEYS, COMP_LABELS, ESTADO_BADGE } from "../../../constants";
 import type { Extintor } from "../../../types";
 import { esExtintorIncompleto, getCamposFaltantes } from "../../../utils/extintores";
@@ -15,6 +15,7 @@ interface ExtintorCardProps {
     onEditar?: (ext: Extintor) => void;
     onEliminar?: (ext: Extintor) => void;
     onTrasladar?: (ext: Extintor) => void;
+    onUbicar?: (ext: Extintor) => void;
 }
 
 export default function ExtintorCard({
@@ -27,6 +28,7 @@ export default function ExtintorCard({
     onEditar,
     onEliminar,
     onTrasladar,
+    onUbicar,
 }: ExtintorCardProps) {
     const esHistorial = context === "historial";
     const componentesInstalados = COMP_KEYS.filter((k) => ext[k] === "SI");
@@ -67,6 +69,11 @@ export default function ExtintorCard({
                                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">{ext.evidenciaCount}</span>
                             )}
                         </span>
+                    )}
+                    {onUbicar && (
+                        <button onClick={() => onUbicar(ext)} className="w-9 h-9 rounded-xl bg-white border border-zinc-200 text-zinc-500 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center shadow-sm active:scale-95" title="Ubicar en el mapa" aria-label="Ubicar en el mapa">
+                            <MapPin className="w-4 h-4" />
+                        </button>
                     )}
                     {onTrasladar && (
                         <button onClick={() => onTrasladar(ext)} className="w-9 h-9 rounded-xl bg-white border border-zinc-200 text-zinc-500 hover:bg-amber-50 hover:text-amber-600 transition-colors flex items-center justify-center shadow-sm active:scale-95" title="Trasladar de Sede" aria-label="Trasladar de Sede">
